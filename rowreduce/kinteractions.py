@@ -15,8 +15,9 @@ import random
 from math import factorial
 from itertools import combinations
 from keras.models import Sequential
-from keras.layers import Conv2D, Reshape, Lambda, GlobalAveragePooling1D, Dense
+from keras.layers import InputLayer, Conv2D, Reshape, Lambda, GlobalAveragePooling1D
 import keras.backend as K
+from statistics import mean, median
 
 
 class RowChoiceEnvironment:
@@ -147,8 +148,12 @@ class KInteractionsAgent:
         self.model = self._build_model()
 
     def remember(self, state, action, reward, next_state, done):
-        """Add a state transition to memory."""
-        self.memory.push(state, action, reward, next_state, done)
+        """Add a state transition to memory. Store the state tensor, not the
+        matrix."""
+        self.memory.push(state_tensor(state, self.k),
+                         action, reward,
+                         state_tensor(next_state, self.k),
+                         done)
 
     def act(self, state):
         """Choose an action (row) for the given state."""
@@ -164,8 +169,8 @@ class KInteractionsAgent:
 
         minibatch = self.memory.sample(batch_size)
         states, actions, rewards, next_states, dones = zip(*minibatch)
-        states = np.array([state_tensor(m, self.k) for m in states])
-        next_states = np.array([state_tensor(m, self.k) for m in next_states])
+        states = np.array(states)
+        next_states = np.array(next_states)
         dones = np.array(dones)
 
         targets = np.array(rewards)
@@ -174,7 +179,7 @@ class KInteractionsAgent:
         targets_f = self.model.predict(states)
         targets_f[np.arange(targets_f.shape[0]), actions] = targets
 
-        self.model.fit(states, targets_f, epochs=1, verbose=1)
+        self.model.fit(states, targets_f, epochs=1, verbose=0)
 
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
@@ -187,22 +192,29 @@ class KInteractionsAgent:
 
     def _build_model(self):
         model = Sequential()
-        model.add(Conv2D(1, (1, 1), activation='relu',
-                         input_shape=(self.action_size,
-                                      binom(self.action_size - 1, self.k - 1),
-                                      self.k * self.k),
-                         name="shared_conv"))
+        model.add(InputLayer(input_shape=(self.action_size,
+                                          binom(self.action_size - 1, self.k - 1),
+                                          self.k * self.k)))
+
+        channels = self.k * self.k
+        while channels // 2 > 0:
+            model.add(Conv2D(channels // 2, (1, 1), activation='relu'))
+            channels = channels // 2
+
         model.add(Reshape((self.action_size, -1)))
         model.add(Lambda(lambda x: K.permute_dimensions(x, (0, 2, 1))))
         model.add(GlobalAveragePooling1D())
-        model.add(Dense(self.action_size, activation='linear'))
+
+        model.add(Lambda(
+            lambda x: x * self.action_size * self.action_size
+            / binom(self.action_size - 1, self.k - 1)))
 
         model.compile(loss='logcosh', optimizer='adam')
         return model
 
 
-env = RowChoiceEnvironment((2, 2), 0.5)
-agent = KInteractionsAgent(2, 2)
+env = RowChoiceEnvironment((5, 10), 0.5)
+agent = KInteractionsAgent(2, 5)
 
 
 def train(episodes, batch_size):
@@ -218,3 +230,26 @@ def train(episodes, batch_size):
             agent.remember(state, action, reward, next_state, done)
             state = next_state
         agent.replay(batch_size)
+
+
+def test(episodes):
+    """Test the agent and get average reward over given episodes."""
+    rewards = []
+    for _ in range(episodes):
+        state = env.reset()
+        done = False
+        r = 0
+        while not done:
+            action = agent.act(state)
+            next_state, reward, done = env.step(action)
+            state = next_state
+            r += reward
+        rewards.append(r)
+    return min(rewards), median(rewards), max(rewards), mean(rewards)
+
+
+if __name__ == "__main__":
+    for i in range(100):
+        train(100, 1024)
+        result = test(100)
+        print(i, ": ", result)
