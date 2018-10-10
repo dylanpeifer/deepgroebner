@@ -144,7 +144,7 @@ class KInteractionsAgent:
         self.gamma = 0.99
         self.epsilon = 1.0
         self.epsilon_min = 0.01
-        self.epsilon_decay = 1.0
+        self.epsilon_decay = 0.99
         self.model = self._build_model()
 
     def remember(self, state, action, reward, next_state, done):
@@ -252,7 +252,7 @@ def test(episodes):
 
 
 if __name__ == "__main__":
-    for i in range(100):
+    for i in range(1000):
         train(100, 1024)
         result = test(100)
         agent.replay(1024, verbose=1)
