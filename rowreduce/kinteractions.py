@@ -144,7 +144,7 @@ class KInteractionsAgent:
         self.gamma = 0.99
         self.epsilon = 1.0
         self.epsilon_min = 0.01
-        self.epsilon_decay = 0.9995
+        self.epsilon_decay = 1.0
         self.model = self._build_model()
 
     def remember(self, state, action, reward, next_state, done):
@@ -162,7 +162,7 @@ class KInteractionsAgent:
         tensor = np.expand_dims(state_tensor(state, self.k), axis=0)
         return np.argmax(self.model.predict(tensor)[0])
 
-    def replay(self, batch_size):
+    def replay(self, batch_size, verbose=0):
         """Train on batch_size transitions from memory."""
         if len(self.memory) < batch_size:
             return
@@ -179,7 +179,7 @@ class KInteractionsAgent:
         targets_f = self.model.predict(states)
         targets_f[np.arange(targets_f.shape[0]), actions] = targets
 
-        self.model.fit(states, targets_f, epochs=1, verbose=0)
+        self.model.fit(states, targets_f, epochs=1, verbose=verbose)
 
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
@@ -213,8 +213,8 @@ class KInteractionsAgent:
         return model
 
 
-env = RowChoiceEnvironment((5, 10), 0.5)
-agent = KInteractionsAgent(2, 5)
+env = RowChoiceEnvironment((3, 3), 0.5)
+agent = KInteractionsAgent(2, 3)
 
 
 def train(episodes, batch_size):
@@ -229,11 +229,13 @@ def train(episodes, batch_size):
             next_state, reward, done = env.step(action)
             agent.remember(state, action, reward, next_state, done)
             state = next_state
-        agent.replay(batch_size)
+        agent.replay(batch_size, verbose=0)
 
 
 def test(episodes):
     """Test the agent and get average reward over given episodes."""
+    eps = agent.epsilon
+    agent.epsilon = 0.01
     rewards = []
     for _ in range(episodes):
         state = env.reset()
@@ -245,6 +247,7 @@ def test(episodes):
             state = next_state
             r += reward
         rewards.append(r)
+    agent.epsilon = eps
     return min(rewards), median(rewards), max(rewards), mean(rewards)
 
 
@@ -252,4 +255,5 @@ if __name__ == "__main__":
     for i in range(100):
         train(100, 1024)
         result = test(100)
+        agent.replay(1024, verbose=1)
         print(i, ": ", result)
