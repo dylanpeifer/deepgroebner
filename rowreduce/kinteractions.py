@@ -196,19 +196,26 @@ class KInteractionsAgent:
                                           binom(self.action_size - 1, self.k - 1),
                                           self.k * self.k)))
 
+        # phi applies to each submatrix
         channels = self.k * self.k
-        while channels // 2 > 0:
-            model.add(Conv2D(channels // 2, (1, 1), activation='relu'))
-            channels = channels // 2
+        for i in range(5):
+            model.add(Conv2D(channels * 2, (1, 1), activation='relu'))
+            channels *= 2
 
-        model.add(Reshape((self.action_size, -1)))
-        model.add(Lambda(lambda x: K.permute_dimensions(x, (0, 2, 1))))
+        # accumulate submatrix information for each row
+        model.add(Lambda(lambda x: K.permute_dimensions(x, (0, 2, 1, 3))))
+        model.add(Reshape((binom(self.action_size-1, self.k-1), -1)))
         model.add(GlobalAveragePooling1D())
+        model.add(Reshape((self.action_size, 1, -1)))
 
-        model.add(Lambda(
-            lambda x: x * self.action_size * self.action_size
-            / binom(self.action_size - 1, self.k - 1)))
+        # F applies to each row
+        for i in range(5):
+            model.add(Conv2D(channels // 2, (1, 1), activation='relu'))
+            channels //= 2
+        model.add(Conv2D(1, (1, 1), activation='relu'))
 
+        model.add(Reshape((self.action_size,)))
+        
         model.compile(loss='logcosh', optimizer='adam')
         return model
 
