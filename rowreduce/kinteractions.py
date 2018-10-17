@@ -15,7 +15,7 @@ import random
 from math import factorial
 from itertools import combinations
 from keras.models import Sequential
-from keras.layers import InputLayer, Conv2D, Reshape, Lambda, GlobalAveragePooling1D
+from keras.layers import InputLayer, Conv2D, Reshape, Lambda, GlobalAveragePooling1D, Activation, BatchNormalization
 import keras.backend as K
 from statistics import mean, median
 
@@ -199,7 +199,9 @@ class KInteractionsAgent:
         # phi applies to each submatrix
         channels = self.k * self.k
         for i in range(5):
-            model.add(Conv2D(channels * 2, (1, 1), activation='relu'))
+            model.add(Conv2D(channels * 2, (1, 1), use_bias=False))
+            model.add(BatchNormalization())
+            model.add(Activation('relu'))
             channels *= 2
 
         # accumulate submatrix information for each row
@@ -210,9 +212,13 @@ class KInteractionsAgent:
 
         # F applies to each row
         for i in range(5):
-            model.add(Conv2D(channels // 2, (1, 1), activation='relu'))
+            model.add(Conv2D(channels // 2, (1, 1), use_bias=False))
+            model.add(BatchNormalization())
+            model.add(Activation('relu'))
             channels //= 2
-        model.add(Conv2D(1, (1, 1), activation='relu'))
+        model.add(Conv2D(1, (1, 1), use_bias=False))
+        model.add(BatchNormalization())
+        model.add(Activation('relu'))
 
         model.add(Reshape((self.action_size,)))
         
