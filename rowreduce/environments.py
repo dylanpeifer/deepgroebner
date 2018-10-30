@@ -70,6 +70,60 @@ class RowEchelonEnvironment:
 
 class RowChoiceEnvironment:
     """An environment for matrix row reduction over F2. Agents choose a row
+    to use, and this row is then used as a pivot.
+    """
+
+    def __init__(self, shape, density):
+        self.N = shape[0]
+        self.M = shape[1]
+        self.density = density
+        self.matrix = np.zeros((self.N, self.M))
+        self.action_size = self.N
+
+    def reset(self):
+        """Reset the state of the environment to a matrix that is not
+        reduced.
+        """
+        self.matrix = self._random_matrix()
+        while self._is_reduced():
+            self.matrix = self._random_matrix()
+        return np.copy(self.matrix)
+
+    def step(self, action):
+        """Perform a step from current state using action."""
+        lead = next((i for i, x in enumerate(self.matrix[action, :]) if x != 0), None)
+        if lead is None:
+            return (np.copy(self.matrix),
+                    -100,
+                    self._is_reduced())
+        moves = 0
+        for i in range(self.N):
+            if i != action and self.matrix[i, lead] != 0:
+                self.matrix[i, :] = (self.matrix[i, :] + self.matrix[action, :]) % 2
+                moves += 1
+        return (np.copy(self.matrix),
+                -100 - moves,
+                self._is_reduced())
+
+    def _is_reduced(self):
+        """Return true if the current matrix is reduced."""
+        for row in range(self.N):
+            # find index of lead term in this row
+            lead = next((i for i, x in enumerate(self.matrix[row, :]) if x != 0), None)
+            # if this row has lead then everything in lead's column must be 0
+            if lead is not None:
+                for i in range(self.N):
+                    if i != row and self.matrix[i, lead] != 0:
+                        return False
+        return True
+
+    def _random_matrix(self):
+        """Return a new random matrix."""
+        return 1 * (np.random.rand(self.N, self.M) > (1 - self.density))
+
+
+class RowChoiceEnvironmentExtra:
+    """An environment for matrix row reduction over F2. Agents choose a row
     to use, and this row is then used as a pivot. The environment also returns
     an additional column vector that stores which rows have not been used.
     """

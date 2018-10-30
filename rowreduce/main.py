@@ -43,6 +43,8 @@ def train(episodes, batch_size):
 
 def test(episodes):
     """Test the agent and get average reward over given episodes."""
+    eps = agent.epsilon
+    agent.epsilon = 0.01
     rewards = []
     for _ in range(episodes):
         state = env.reset()
@@ -54,6 +56,7 @@ def test(episodes):
             state = next_state
             r += reward
         rewards.append(r)
+    agent.epsilon = eps
     return min(rewards), median(rewards), max(rewards), mean(rewards)
 
 
@@ -70,17 +73,6 @@ def play():
         state = next_state
     print(state)
     agent.epsilon = epsilon  # reset epsilon
-
-
-def stupid_strat():
-    env.reset()
-    total_reward = 0
-    for i in range(5):
-        next_state, reward, done = env.step(i)
-        total_reward += reward
-        if done:
-            break
-    return total_reward
 
 
 N = 5  # number of rows in matrix
