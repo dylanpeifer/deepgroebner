@@ -1,6 +1,6 @@
 # main.py
 # Dylan Peifer
-# 10 May 2018
+# 05 Nov 2018
 """Doing computer algebra with reinforcement learning.
 
 Running this file with
@@ -21,15 +21,13 @@ size and options can be changed at the bottom of the file.
 """
 
 from environments import RowChoiceEnvironment
-from agents import RowChoiceAgent
+from agents import KInteractionsAgent
 
 from statistics import mean, median
 
 
-def train(episodes, batch_size):
-    """Train the agent on env for given episodes and using batch_size replays
-    per episode.
-    """
+def explore(agent, env, episodes):
+    """Run the agent on env for given episodes and save transitions."""
     for _ in range(episodes):
         state = env.reset()
         done = False
@@ -38,10 +36,25 @@ def train(episodes, batch_size):
             next_state, reward, done = env.step(action)
             agent.remember(state, action, reward, next_state, done)
             state = next_state
-        agent.replay(batch_size)
 
 
-def test(episodes):
+def remember_stupid_strat(agent, env, episodes):
+    """Fill the agents memory with episodes of the strategy that picks each
+    row in order."""
+    for _ in range(episodes):
+        state = env.reset()
+        done = False
+        i = 0
+        while not done:
+            action = i
+            next_state, reward, done = env.step(action)
+            if reward != -1:
+                agent.remember(state, action, reward, next_state, done)
+            state = next_state
+            i += 1
+
+
+def test(agent, env, episodes):
     """Test the agent and get average reward over given episodes."""
     eps = agent.epsilon
     agent.epsilon = 0.01
@@ -60,7 +73,7 @@ def test(episodes):
     return min(rewards), median(rewards), max(rewards), mean(rewards)
 
 
-def play():
+def play(agent, env):
     """Show the steps as the agent solves a matrix."""
     epsilon = agent.epsilon  # save current epsilon
     agent.epsilon = 0  # don't explore during a play
@@ -75,16 +88,15 @@ def play():
     agent.epsilon = epsilon  # reset epsilon
 
 
-N = 5  # number of rows in matrix
-M = 15  # number of cols in matrix
-env = RowChoiceEnvironment((N, M), 0.25)
-agent = RowChoiceAgent((N, M), env.action_size)
-
-if __name__ == "__main__":
+def main(agent, env):
     print("Moves needed before training: ", test(100))
     print("training batch || min || median || max || mean || epsilon")
     for i in range(10):
-        train(100, 1024)
+        train(agent, env, 100, 1024)
         print(str(i), test(100), agent.epsilon, len(agent.memory))
     agent.save("models/agent.h5")
     print("Agent saved to models/agent.h5")
+
+
+agent = KInteractionsAgent(2, 3)
+env = RowChoiceEnvironment((3, 3), 0.5)
