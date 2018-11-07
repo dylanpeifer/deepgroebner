@@ -18,6 +18,18 @@ from keras.layers import Dense
 env = gym.make('CartPole-v0')
 
 
+class Parameters:
+    """An even simpler agent to solve cartpole. Parameters were found by
+    random search. The agent reliably gets to 200.
+    """
+
+    def __init__(self):
+        self.params = np.array([0.20, 0.23, 0.52, 0.52])
+
+    def act(self, state):
+        return 0 if np.matmul(self.params, state) < 0 else 1
+
+
 class Agent:
     """A simple agent to solve cartpole."""
 
@@ -104,7 +116,7 @@ class DQNAgent:
 
     def __init__(self):
         self.memory = Memory(1000000)
-        self.gamma = 0.99
+        self.gamma = 0.95
         self.epsilon = 1.0
         self.epsilon_min = 0.01
         self.epsilon_decay = 0.99
@@ -168,7 +180,9 @@ def explore(agent, env, episodes):
 
 
 def train(agent, epochs, batch_size, verbose=0):
-    """Train the agent epochs times on batches of batch_size from its memory."""
+    """Train the agent epochs times on batches of batch_size from its
+    memory.
+    """
     for _ in range(epochs):
         agent.replay(batch_size, verbose=verbose)
 
