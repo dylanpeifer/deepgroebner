@@ -223,7 +223,7 @@ class KInteractionsAgent:
         self.k = k
         self.action_size = rows
         self.memory = Memory(1000000)
-        self.gamma = 0.99
+        self.gamma = 0.95
         self.epsilon = 1.0
         self.epsilon_min = 0.01
         self.epsilon_decay = 0.99

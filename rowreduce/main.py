@@ -25,6 +25,9 @@ from agents import KInteractionsAgent
 
 from statistics import mean, median
 
+agent = KInteractionsAgent(2, 3)
+env = RowChoiceEnvironment((3, 3), 0.5)
+
 
 def explore(agent, env, episodes):
     """Run the agent on env for given episodes and save transitions."""
@@ -36,6 +39,14 @@ def explore(agent, env, episodes):
             next_state, reward, done = env.step(action)
             agent.remember(state, action, reward, next_state, done)
             state = next_state
+
+
+def train(agent, epochs, batch_size, verbose=0):
+    """Train the agent epochs times on batches of batch_size from its
+    memory.
+    """
+    for _ in range(epochs):
+        agent.replay(batch_size, verbose=verbose)
 
 
 def remember_stupid_strat(agent, env, episodes):
@@ -88,15 +99,8 @@ def play(agent, env):
     agent.epsilon = epsilon  # reset epsilon
 
 
-def main(agent, env):
-    print("Moves needed before training: ", test(100))
-    print("training batch || min || median || max || mean || epsilon")
-    for i in range(10):
-        train(agent, env, 100, 1024)
-        print(str(i), test(100), agent.epsilon, len(agent.memory))
-    agent.save("models/agent.h5")
-    print("Agent saved to models/agent.h5")
-
-
-agent = KInteractionsAgent(2, 3)
-env = RowChoiceEnvironment((3, 3), 0.5)
+def main(agent, env, episodes, epochs, batch_size):
+    for i in range(epochs):
+        explore(agent, env, episodes)
+        train(agent, episodes, batch_size, verbose=1)
+        print(str(i) + ": ", test(agent, env, 100), agent.epsilon, len(agent.memory))
