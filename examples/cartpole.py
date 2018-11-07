@@ -11,6 +11,7 @@ if negative and 1 otherwise.
 import gym
 import numpy as np
 import time
+import random
 from keras.models import Sequential
 from keras.layers import Dense
 
@@ -74,8 +75,121 @@ def hill_climb(agent, rate=0.1, iterations=10000):
     agent.model.set_weights(weights)
 
 
+class Memory:
+    """A cyclic buffer to store transition memories. Adapted from
+    http://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html.
+    """
+
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.memory = []
+        self.position = 0
+
+    def push(self, *args):
+        """Saves a transition."""
+        if len(self.memory) < self.capacity:
+            self.memory.append(None)
+        self.memory[self.position] = args
+        self.position = (self.position + 1) % self.capacity
+
+    def sample(self, batch_size):
+        return random.sample(self.memory, batch_size)
+
+    def __len__(self):
+        return len(self.memory)
+
+
 class DQNAgent:
-    pass
+    """A Deep Q Network agent for cartpole."""
+
+    def __init__(self):
+        self.memory = Memory(1000000)
+        self.gamma = 0.99
+        self.epsilon = 1.0
+        self.epsilon_min = 0.01
+        self.epsilon_decay = 0.99
+        self.model = self._build_model()
+
+    def remember(self, state, action, reward, next_state, done):
+        self.memory.push(state, action, reward, next_state, done)
+
+    def act(self, state):
+        if np.random.rand() <= self.epsilon:
+            return random.randrange(2)
+        return np.argmax(self.model.predict(np.expand_dims(state, axis=0))[0])
+
+    def replay(self, batch_size, verbose=0):
+        if len(self.memory) < batch_size:
+            return
+
+        minibatch = self.memory.sample(batch_size)
+        states, actions, rewards, next_states, dones = zip(*minibatch)
+        states = np.array(states)
+        next_states = np.array(next_states)
+        dones = np.array(dones)
+
+        targets = np.array(rewards)
+        targets = targets + (dones == False) * self.gamma * \
+                  np.max(self.model.predict(next_states), axis=1)
+        targets_f = self.model.predict(states)
+        targets_f[np.arange(targets_f.shape[0]), actions] = targets
+
+        self.model.fit(states, targets_f, epochs=1, verbose=verbose)
+
+        if self.epsilon > self.epsilon_min:
+            self.epsilon *= self.epsilon_decay
+
+    def save(self, name):
+        self.model.save_weights(name)
+
+    def load(self, name):
+        self.model.load_weights(name)
+
+    def _build_model(self):
+        model = Sequential()
+        model.add(Dense(32, input_dim=4, activation='relu'))
+        model.add(Dense(16, activation='relu'))
+        model.add(Dense(2, activation='linear'))
+
+        model.compile(loss='logcosh', optimizer='adam')
+        return model
+
+
+def explore(agent, env, episodes):
+    """Run the agent on env for given episodes and save transitions."""
+    for _ in range(episodes):
+        state = env.reset()
+        done = False
+        while not done:
+            action = agent.act(state)
+            next_state, reward, done, _ = env.step(action)
+            agent.remember(state, action, reward, next_state, done)
+            state = next_state
+
+
+def train(agent, epochs, batch_size, verbose=0):
+    """Train the agent epochs times on batches of batch_size from its memory."""
+    for _ in range(epochs):
+        agent.replay(batch_size, verbose=verbose)
+
+
+def copy(leader, follower, env, episodes):
+    """Store episodes from env acted on by leader in follower's memory."""
+    for _ in range(episodes):
+        state = env.reset()
+        done = False
+        while not done:
+            action = leader.act(state)
+            next_state, reward, done, _ = env.step(action)
+            follower.remember(state, action, reward, next_state, done)
+            state = next_state
+
+
+def main(agent, env, episodes, epochs, batch_size):
+    for _ in range(epochs):
+        explore(agent, env, episodes)
+        train(agent, episodes, batch_size, verbose=1)
+        print(run_episodes(agent, 100))
 
 
 def run_episode(agent):
