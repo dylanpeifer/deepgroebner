@@ -244,6 +244,11 @@ class KInteractionsAgent:
         tensor = np.expand_dims(state_tensor(state, self.k), axis=0)
         return np.argmax(self.model.predict(tensor)[0])
 
+    def predict(self, state):
+        """Return the predicted Q-values."""
+        tensor = np.expand_dims(state_tensor(state, self.k), axis=0)
+        return self.model.predict(tensor)
+
     def replay(self, batch_size, verbose=0):
         """Train on batch_size transitions from memory."""
         if len(self.memory) < batch_size:
@@ -300,7 +305,7 @@ class KInteractionsAgent:
             channels //= 2
         model.add(Conv2D(1, (1, 1), use_bias=False))
         model.add(BatchNormalization())
-        model.add(Activation('relu'))
+        model.add(Activation('linear'))
 
         model.add(Reshape((self.action_size,)))
         

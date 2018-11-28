@@ -29,6 +29,23 @@ import numpy as np
 agent = KInteractionsAgent(2, 2)
 env = RowChoiceEnvironment((2, 2), 0.5)
 
+matrices = [np.array([[0,0],[0,0]]),
+            np.array([[1,0],[0,0]]),
+            np.array([[0,1],[0,0]]),
+            np.array([[0,0],[1,0]]),
+            np.array([[0,0],[0,1]]),
+            np.array([[1,1],[0,0]]),
+            np.array([[1,0],[1,0]]),
+            np.array([[0,1],[0,1]]),
+            np.array([[0,0],[1,1]]),
+            np.array([[1,0],[0,1]]),
+            np.array([[0,1],[1,0]]),
+            np.array([[0,1],[1,1]]),
+            np.array([[1,0],[1,1]]),
+            np.array([[1,1],[0,1]]),
+            np.array([[1,1],[1,0]]),
+            np.array([[1,1],[1,1]])]
+
 
 def explore(agent, env, episodes):
     """Run the agent on env for given episodes and save transitions."""
