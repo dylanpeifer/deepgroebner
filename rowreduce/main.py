@@ -26,9 +26,6 @@ from agents import KInteractionsAgent, state_tensor
 from statistics import mean, median
 import numpy as np
 
-agent = KInteractionsAgent(2, 2)
-env = RowChoiceEnvironment((2, 2), 0.5)
-
 matrices = [np.array([[0,0],[0,0]]),
             np.array([[1,0],[0,0]]),
             np.array([[0,1],[0,0]]),
@@ -170,8 +167,10 @@ def min_strat_Q(state, gamma):
     return Q_values
 
 
-def train_Q(agent, episodes, epochs, verbose=0):
+def train_Q(k, n, episodes, epochs, lr, verbose=0):
     """Train the agent directly to the Q-function."""
+    agent = KInteractionsAgent(k, n, lr=lr)
+
     states = np.array([1 * (np.random.rand(agent.action_size, agent.action_size) < 0.5)
                        for _ in range(episodes)])
     targets = np.array([min_strat_Q(state, agent.gamma) for state in states])
@@ -227,7 +226,10 @@ def play(agent, env):
     agent.epsilon = epsilon  # reset epsilon
 
 
-def main(agent, env, episodes, epochs, batch_size):
+def main(k, n, episodes, epochs, batch_size, lr):
+    agent = KInteractionsAgent(k, n, lr=lr)
+    env = RowChoiceEnvironment((n, n), 0.5)
+
     for i in range(epochs):
         explore(agent, env, episodes)
         train(agent, episodes, batch_size, verbose=1)

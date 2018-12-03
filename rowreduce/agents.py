@@ -15,7 +15,9 @@ from math import factorial
 from itertools import combinations
 from keras.models import Sequential, Model
 from keras.layers import InputLayer, Flatten, Dense, Conv2D, Input, Concatenate, Reshape, GlobalAveragePooling1D, Activation, BatchNormalization, Lambda
+from keras.optimizers import Adam
 import keras.backend as K
+
 
 
 class Memory:
@@ -219,7 +221,7 @@ class KInteractionsAgent:
     """A Q network agent that uses k-way interactions to decide which row of a
     matrix to choose as the pivot."""
 
-    def __init__(self, k, rows):
+    def __init__(self, k, rows, lr=0.001):
         self.k = k
         self.action_size = rows
         self.memory = Memory(1000000)
@@ -227,6 +229,7 @@ class KInteractionsAgent:
         self.epsilon = 1.0
         self.epsilon_min = 0.01
         self.epsilon_decay = 0.99
+        self.lr = lr
         self.model = self._build_model()
 
     def remember(self, state, action, reward, next_state, done):
@@ -308,6 +311,7 @@ class KInteractionsAgent:
         model.add(Activation('linear'))
 
         model.add(Reshape((self.action_size,)))
-        
-        model.compile(loss='logcosh', optimizer='adam')
+
+        optimizer = Adam(lr=self.lr)
+        model.compile(loss='logcosh', optimizer=optimizer)
         return model
