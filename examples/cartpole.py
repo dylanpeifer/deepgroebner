@@ -98,17 +98,91 @@ class Memory:
         self.position = 0
 
     def push(self, *args):
-        """Saves a transition."""
+        """Save a transition."""
         if len(self.memory) < self.capacity:
             self.memory.append(None)
         self.memory[self.position] = args
         self.position = (self.position + 1) % self.capacity
 
     def sample(self, batch_size):
+        """Return a random sample from memory."""
         return random.sample(self.memory, batch_size)
 
     def __len__(self):
         return len(self.memory)
+
+
+def discounted_rewards(rewards, gamma):
+    out = np.empty(len(rewards))
+    cumulative_reward = 0
+    for i in reversed(range(len(rewards))):
+        cumulative_reward = rewards[i] + gamma * cumulative_reward
+        out[i] = cumulative_reward
+    return list(out)
+
+
+class PGAgent:
+    """A policy gradient agent for cartpole."""
+
+    def __init__(self):
+        self.gamma = 0.95
+        self.model = self._build_model()
+
+    def act(self, state):
+        probs = self.model.predict(np.expand_dims(state, axis=0))[0]
+        return np.random.choice(2, p=probs)
+
+    def train(self, episodes):
+        """Train the agent using policy gradients."""
+        total_states = []
+        total_actions = []
+        total_rewards = []
+
+        # generate rollouts and discounted rewards
+        for _ in range(episodes):
+            state = env.reset()
+            done = False
+            states = []
+            actions = []
+            rewards = []
+            while not done:
+                action = self.act(state)
+                next_state, reward, done, _ = env.step(action)
+                states += [state]
+                actions += [action]
+                rewards += [reward]
+                state = next_state
+            rewards = discounted_rewards(rewards, self.gamma)
+
+            total_states += states
+            total_actions += actions
+            total_rewards += rewards
+
+        # normalize the rewards and produce the advantage vectors
+        total_rewards = np.array(total_rewards)
+        total_rewards -= np.mean(total_rewards)
+        total_rewards /= np.std(total_rewards)
+        advantages = np.zeros((len(total_rewards), 2))
+        for i in range(len(total_rewards)):
+            advantages[i][total_actions[i]] = total_rewards[i]
+
+        # fitting to advantages performs policy gradient step
+        self.model.fit(np.array(total_states), advantages, epochs=1, verbose=0)
+
+    def save(self, name):
+        self.model.save_weights(name)
+
+    def load(self, name):
+        self.model.load_weights(name)
+
+    def _build_model(self):
+        model = Sequential()
+        model.add(Dense(32, input_dim=4, activation='relu'))
+        model.add(Dense(16, activation='relu'))
+        model.add(Dense(2, activation='softmax'))
+
+        model.compile(loss='categorical_crossentropy', optimizer='adam')
+        return model
 
 
 class DQNAgent:
