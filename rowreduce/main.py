@@ -1,23 +1,7 @@
 # main.py
 # Dylan Peifer
-# 05 Nov 2018
+# 05 Dec 2018
 """Doing computer algebra with reinforcement learning.
-
-Running this file with
-
-     $ python3 main.py
-
-will create a new agent, train it, and save it. You can then observe the agent
-on a random environment by entering the python interpreter and loading the
-saved model.
-
-     $ python3
-     >>> from main import *
-     >>> agent.load("models/agent.h5")
-     >>> play()
-
-Hyperparameters can be adjusted in the init method for the agent, and matrix
-size and options can be changed at the bottom of the file.
 """
 
 from environments import RowChoiceEnvironment
@@ -25,23 +9,6 @@ from agents import KInteractionsAgent, state_tensor
 
 from statistics import mean, median
 import numpy as np
-
-matrices = [np.array([[0,0],[0,0]]),
-            np.array([[1,0],[0,0]]),
-            np.array([[0,1],[0,0]]),
-            np.array([[0,0],[1,0]]),
-            np.array([[0,0],[0,1]]),
-            np.array([[1,1],[0,0]]),
-            np.array([[1,0],[1,0]]),
-            np.array([[0,1],[0,1]]),
-            np.array([[0,0],[1,1]]),
-            np.array([[1,0],[0,1]]),
-            np.array([[0,1],[1,0]]),
-            np.array([[0,1],[1,1]]),
-            np.array([[1,0],[1,1]]),
-            np.array([[1,1],[0,1]]),
-            np.array([[1,1],[1,0]]),
-            np.array([[1,1],[1,1]])]
 
 
 def explore(agent, env, episodes):
@@ -167,18 +134,6 @@ def min_strat_Q(state, gamma):
     return Q_values
 
 
-def train_Q(k, n, episodes, epochs, lr, verbose=0):
-    """Train the agent directly to the Q-function."""
-    agent = KInteractionsAgent(k, n, lr=lr)
-
-    states = np.array([1 * (np.random.rand(agent.action_size, agent.action_size) < 0.5)
-                       for _ in range(episodes)])
-    targets = np.array([min_strat_Q(state, agent.gamma) for state in states])
-    tensors = np.array([state_tensor(state, agent.k) for state in states])
-    for _ in range(epochs):
-        agent.model.fit(tensors, targets, verbose=verbose)
-
-
 def is_reduced(matrix):
     """Return true if the matrix is reduced."""
     for row in range(len(matrix)):
@@ -226,11 +181,51 @@ def play(agent, env):
     agent.epsilon = epsilon  # reset epsilon
 
 
-def main(k, n, episodes, epochs, batch_size, lr):
-    agent = KInteractionsAgent(k, n, lr=lr)
-    env = RowChoiceEnvironment((n, n), 0.5)
-
+def train_indirect(agent, env, episodes, epochs, batch_size):
+    """Train the agent as in typical Q-learning."""
     for i in range(epochs):
         explore(agent, env, episodes)
         train(agent, episodes, batch_size, verbose=1)
         print(str(i) + ": ", test(agent, env, 100), agent.epsilon, len(agent.memory))
+
+
+def train_direct(agent, episodes, epochs, verbose=0):
+    """Train the agent directly to the Q-function."""
+    states = np.array([1 * (np.random.rand(agent.action_size, agent.action_size) < 0.5)
+                       for _ in range(episodes)])
+    targets = np.array([min_strat_Q(state, agent.gamma) for state in states])
+    tensors = np.array([state_tensor(state, agent.k) for state in states])
+    for _ in range(epochs):
+        agent.model.fit(tensors, targets, verbose=verbose)
+
+
+def main(k, n, episodes, epochs, verbose=0, lr=0.001):
+    agent = KInteractionsAgent(k, n, lr=lr)
+    train_direct(agent, episodes, epochs, verbose=verbose)
+    agent.save("models/" + str(k) + "-" + str(n) + "agent.h5")
+
+
+if __name__ == "__main__":
+    print("training 2-2:")
+    main(2, 2, 10000, 10, verbose=1, lr=0.1)
+    print()
+    print("training 2-3:")
+    main(2, 3, 10000, 20, verbose=1, lr=0.1)
+    print()
+    print("training 2-4:")
+    main(2, 4, 100000, 5, verbose=1, lr=0.1)
+    print()
+    print("training 2-5:")
+    main(2, 5, 100000, 5, verbose=1, lr=0.1)
+    print()
+    print("training 2-10:")
+    main(2, 10, 100000, 5, verbose=1, lr=0.1)
+    print()
+    print("training 3-3:")
+    main(3, 3, 10000, 20, verbose=1, lr=0.1)
+    print()
+    print("training 3-4:")
+    main(3, 4, 100000, 5, verbose=1, lr=0.1)
+    print()
+    print("training 3-5:")
+    main(3, 5, 100000, 5, verbose=1, lr=0.1)
