@@ -19,7 +19,6 @@ from keras.optimizers import Adam
 import keras.backend as K
 
 
-
 class Memory:
     """A cyclic buffer to store transition memories. Adapted from
     http://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html.
@@ -311,6 +310,113 @@ class KInteractionsAgent:
         model.add(Activation('linear'))
 
         model.add(Reshape((self.action_size,)))
+
+        optimizer = Adam(lr=self.lr)
+        model.compile(loss='logcosh', optimizer=optimizer)
+        return model
+
+
+def discounted_rewards(rewards, gamma):
+    out = np.empty(len(rewards))
+    cumulative_reward = 0
+    for i in reversed(range(len(rewards))):
+        cumulative_reward = rewards[i] + gamma * cumulative_reward
+        out[i] = cumulative_reward
+    return list(out)
+
+
+class KInteractionsAgentPG:
+    """A policy gradient agent that uses k-way interactions to decide which row of a
+    matrix to choose as the pivot."""
+
+    def __init__(self, k, rows, lr=0.001):
+        self.k = k
+        self.action_size = rows
+        self.gamma = 0.95
+        self.lr = lr
+        self.model = self._build_model()
+
+    def act(self, state):
+        """Choose an action (row) for the given state."""
+        tensor = np.expand_dims(state_tensor(state, self.k), axis=0)
+        probs = self.model.predict(tensor)[0]
+        return np.random.choice(self.action_size, p=probs)
+
+    def train(self, env, episodes):
+        """Train the agent using policy gradients."""
+        total_states = []
+        total_actions = []
+        total_rewards = []
+
+        # generate rollouts and discounted rewards
+        for _ in range(episodes):
+            state = env.reset()
+            done = False
+            states = []
+            actions = []
+            rewards = []
+            while not done:
+                action = self.act(state)
+                next_state, reward, done = env.step(action)
+                states += [state]
+                actions += [action]
+                rewards += [reward]
+                state = next_state
+            rewards = discounted_rewards(rewards, self.gamma)
+
+            total_states += states
+            total_actions += actions
+            total_rewards += rewards
+
+        # normalize the rewards and produce the advantage vectors
+        total_rewards = np.array(total_rewards)
+        total_rewards -= np.mean(total_rewards)
+        total_rewards /= np.std(total_rewards)
+        advantages = np.zeros((len(total_rewards), self.action_size))
+        for i in range(len(total_rewards)):
+            advantages[i][total_actions[i]] = total_rewards[i]
+
+        # fitting to advantages performs policy gradient step
+        self.model.fit(np.array([state_tensor(s, self.k) for s in total_states]),
+                       advantages, epochs=1, verbose=0)
+
+    def save(self, name):
+        self.model.save_weights(name)
+
+    def load(self, name):
+        self.model.load_weights(name, by_name=True)
+
+    def _build_model(self):
+        model = Sequential()
+        model.add(InputLayer(input_shape=(self.action_size,
+                                          binom(self.action_size - 1, self.k - 1),
+                                          self.k * self.k)))
+
+        # phi applies to each submatrix
+        channels = self.k * self.k
+        for i in range(5):
+            model.add(Conv2D(channels * 2, (1, 1), use_bias=False))
+            model.add(BatchNormalization())
+            model.add(Activation('relu'))
+            channels *= 2
+
+        # accumulate submatrix information for each row
+        model.add(Lambda(lambda x: K.permute_dimensions(x, (0, 2, 1, 3))))
+        model.add(Reshape((binom(self.action_size-1, self.k-1), -1)))
+        model.add(GlobalAveragePooling1D())
+        model.add(Reshape((self.action_size, 1, -1)))
+
+        # F applies to each row
+        for i in range(5):
+            model.add(Conv2D(channels // 2, (1, 1), use_bias=False))
+            model.add(BatchNormalization())
+            model.add(Activation('relu'))
+            channels //= 2
+        model.add(Conv2D(1, (1, 1), use_bias=False))
+        model.add(BatchNormalization())
+
+        model.add(Reshape((self.action_size,)))
+        model.add(Activation('softmax'))
 
         optimizer = Adam(lr=self.lr)
         model.compile(loss='logcosh', optimizer=optimizer)

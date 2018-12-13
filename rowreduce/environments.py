@@ -101,9 +101,14 @@ class RowChoiceEnvironment:
             if i != action and self.matrix[i, lead] != 0:
                 self.matrix[i, :] = (self.matrix[i, :] + self.matrix[action, :]) % 2
                 moves += 1
-        return (np.copy(self.matrix),
-                -100 - moves,
-                self._is_reduced())
+        if moves == 0:
+            return (np.copy(self.matrix),
+                    -100,
+                    self._is_reduced())
+        else:
+            return (np.copy(self.matrix),
+                    -moves,
+                    self._is_reduced())
 
     def _is_reduced(self):
         """Return true if the current matrix is reduced."""

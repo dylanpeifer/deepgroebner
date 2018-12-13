@@ -5,7 +5,7 @@
 """
 
 from environments import RowChoiceEnvironment
-from agents import KInteractionsAgent, state_tensor
+from agents import KInteractionsAgentPG, state_tensor
 
 from statistics import mean, median
 import numpy as np
@@ -149,8 +149,6 @@ def is_reduced(matrix):
 
 def test(agent, env, episodes):
     """Test the agent and get average reward over given episodes."""
-    eps = agent.epsilon
-    agent.epsilon = 0.01
     rewards = []
     for _ in range(episodes):
         state = env.reset()
@@ -162,14 +160,11 @@ def test(agent, env, episodes):
             state = next_state
             r += reward
         rewards.append(r)
-    agent.epsilon = eps
     return min(rewards), median(rewards), max(rewards), mean(rewards)
 
 
 def play(agent, env):
     """Show the steps as the agent solves a matrix."""
-    epsilon = agent.epsilon  # save current epsilon
-    agent.epsilon = 0  # don't explore during a play
     state = env.reset()
     done = False
     while not done:
@@ -178,7 +173,6 @@ def play(agent, env):
         next_state, reward, done = env.step(action)
         state = next_state
     print(state)
-    agent.epsilon = epsilon  # reset epsilon
 
 
 def train_indirect(agent, env, episodes, epochs, batch_size):
@@ -199,33 +193,12 @@ def train_direct(agent, episodes, epochs, verbose=0):
         agent.model.fit(tensors, targets, verbose=verbose)
 
 
-def main(k, n, episodes, epochs, verbose=0, lr=0.001):
-    agent = KInteractionsAgent(k, n, lr=lr)
-    train_direct(agent, episodes, epochs, verbose=verbose)
-    agent.save("models/" + str(k) + "-" + str(n) + "agent.h5")
+k = 2
+n = 10
+agent = KInteractionsAgentPG(k, n)
+env = RowChoiceEnvironment((n, n), 0.5)
 
-
-if __name__ == "__main__":
-    print("training 2-2:")
-    main(2, 2, 10000, 10, verbose=1, lr=0.1)
-    print()
-    print("training 2-3:")
-    main(2, 3, 10000, 20, verbose=1, lr=0.1)
-    print()
-    print("training 2-4:")
-    main(2, 4, 100000, 5, verbose=1, lr=0.1)
-    print()
-    print("training 2-5:")
-    main(2, 5, 100000, 5, verbose=1, lr=0.1)
-    print()
-    print("training 2-10:")
-    main(2, 10, 100000, 5, verbose=1, lr=0.1)
-    print()
-    print("training 3-3:")
-    main(3, 3, 10000, 20, verbose=1, lr=0.1)
-    print()
-    print("training 3-4:")
-    main(3, 4, 100000, 5, verbose=1, lr=0.1)
-    print()
-    print("training 3-5:")
-    main(3, 5, 100000, 5, verbose=1, lr=0.1)
+def main():
+    for _ in range(1000):
+        print(test(agent, env, 100))
+        agent.train(env, 1000)
