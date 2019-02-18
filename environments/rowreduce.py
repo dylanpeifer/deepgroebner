@@ -1,18 +1,14 @@
-# environments.py
+# rowreduce.py
 # Dylan Peifer
-# 10 May 2018
-"""Several environments for reinforcement learning in computer algebra.
+# 18 Feb 2019
+"""An environment for matrix row reduction."""
 
-The structure of Q-learning involves an agent and an environment. The agent
-gives the environment actions and gets from the environment states, rewards,
-and if the current episode is done. The classes in this file are environments
-that implement methods reset() and step(action).
-"""
-
+from itertools import combinations
+from math import factorial
 import numpy as np
 
 
-class RowEchelonEnvironment:
+class RowEchelonEnv:
     """A simple environment for matrix row reduction. Agents can add or swap
     rows, and the environment is done when the matrix is in row echelon form.
     """
@@ -68,7 +64,7 @@ class RowEchelonEnvironment:
         return np.random.randint(self.F, size=(self.N, self.M))
 
 
-class RowChoiceEnvironment:
+class RowChoiceEnv:
     """An environment for matrix row reduction over F2. Agents choose a row
     to use, and this row is then used as a pivot.
     """
@@ -127,65 +123,51 @@ class RowChoiceEnvironment:
         return 1 * (np.random.rand(self.N, self.M) > (1 - self.density))
 
 
-class RowChoiceEnvironmentExtra:
-    """An environment for matrix row reduction over F2. Agents choose a row
-    to use, and this row is then used as a pivot. The environment also returns
-    an additional column vector that stores which rows have not been used.
-    """
+def binom(n, m):
+    """Return the value of (n choose m)."""
+    return factorial(n) // factorial(m) // factorial(n - m)
 
-    def __init__(self, shape, density):
-        self.N = shape[0]
-        self.M = shape[1]
-        self.density = density
-        self.matrix = np.zeros((self.N, self.M))
-        self.rows = np.ones(self.N)
-        self.action_size = self.N
+
+def leading_submatrix(matrix, rows, k):
+    """Return the matrix consisting of the first k nonzero columns in the
+    given rows. Pad with zeros at end if necessary."""
+    submatrix = np.zeros((len(rows), k), dtype=int)
+    input_index = 0
+    output_index = 0
+    while input_index < matrix.shape[1] and output_index < k:
+        col = matrix[rows, input_index]
+        if np.any(col):
+            submatrix[:, output_index] = col
+            output_index += 1
+        input_index += 1
+    return submatrix
+
+
+def state_tensor(matrix, k):
+    """Return the k-way interactions state tensor for given matrix. If matrix
+    is mxn then the return is m x (m-1 choose k-1) x k^2."""
+    m, n = matrix.shape
+    tensor = np.zeros((m, binom(m - 1, k - 1), k * k))
+    for row in range(m):
+        other_rows = [x for x in range(m) if x != row]
+        i = 0
+        for rows in combinations(other_rows, k - 1):
+            lead = leading_submatrix(matrix, [row] + list(rows), k)
+            tensor[row, i, :] = np.reshape(lead, (1, 1, -1))
+            i += 1
+    return tensor
+
+
+class KInteractionsEnv(RowChoiceEnv):
+
+    def __init__(self, k, shape, density):
+        RowChoiceEnv.__init__(self, shape, density)
+        self.k = k
 
     def reset(self):
-        """Reset the state of the environment to a matrix that is not
-        reduced.
-        """
-        self.matrix = self._random_matrix()
-        while self._is_reduced():
-            self.matrix = self._random_matrix()
-        self.rows = np.ones((self.N, 1))
-        return np.copy(self.rows), np.copy(self.matrix)
+        state = RowChoiceEnv.reset(self)
+        return state_tensor(state, self.k)
 
     def step(self, action):
-        """Perform a step from current state using action."""
-        is_new = self.rows[action, 0]  # is 1 if row has not been used
-        self.rows[action] = 0
-        lead = next((i for i, x in enumerate(self.matrix[action, :]) if x != 0), None)
-        if lead is None:
-            return ((np.copy(self.rows), np.copy(self.matrix)),
-                    1000 * (is_new - 1),
-                    self._is_reduced())
-        moves = 0
-        for i in range(self.N):
-            if i != action and self.matrix[i, lead] != 0:
-                self.matrix[i, :] = (self.matrix[i, :] + self.matrix[action, :]) % 2
-                moves += 1
-        if moves == 0:
-            return ((np.copy(self.rows), np.copy(self.matrix)),
-                    1000 * (is_new - 1),
-                    self._is_reduced())
-        else:
-            return ((np.copy(self.rows), np.copy(self.matrix)),
-                    - moves,
-                    self._is_reduced())
-
-    def _is_reduced(self):
-        """Return true if the current matrix is reduced."""
-        for row in range(self.N):
-            # find index of lead term in this row
-            lead = next((i for i, x in enumerate(self.matrix[row, :]) if x != 0), None)
-            # if this row has lead term then zero everything else in column
-            if lead is not None:
-                for i in range(self.N):
-                    if i != row and self.matrix[i, lead] != 0:
-                        return False
-        return True
-
-    def _random_matrix(self):
-        """Return a new random matrix."""
-        return 1.0 * (np.random.rand(self.N, self.M) > (1 - self.density))
+        state, reward, done = RowChoiceEnv.step(self, action)
+        return state_tensor(state), reward, done
