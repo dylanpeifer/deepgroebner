@@ -106,7 +106,7 @@ class BuchbergerEnv:
                 self.P.add((i, j))
             self.G.append(r)
 
-        return (self.G, self.P), -1, len(self.P) == 0
+        return (self.G, self.P), -1, len(self.P) == 0, {}
 
     def reset(self, F, variables):
         self.G = [sp.poly(f, *variables, domain=self.domain) for f in F]

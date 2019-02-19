@@ -50,11 +50,12 @@ def binom(n, m):
     return factorial(n) // factorial(m) // factorial(n - m)
 
 
-def KInteractions(k, m):
+def KInteractionsNet(k, m):
     model = tf.keras.models.Sequential()
     model.add(tf.keras.layers.InputLayer(input_shape=(m, binom(m-1, k-1), k*k)))
 
-    # phi applies to each submatrix
+    # shape is (None, m, binom(m-1, k-1), k^2)
+    # phi applies to each submatrix, which is last dimension
     channels = k * k
     for i in range(5):
         model.add(tf.keras.layers.Conv2D(2 * channels, 1, use_bias=False))
@@ -62,13 +63,15 @@ def KInteractions(k, m):
         model.add(tf.keras.layers.Activation('relu'))
         channels *= 2
 
-    # accumulate submatrix information for each row
-    model.add(tf.keras.layers.Permute((0, 2, 1, 3)))
-    model.add(tf.keras.layers.Reshape((binom(m-1, k-1), -1)))
+    # shape is (None, m, binom(m-1, k-1), channels)
+    # accumulate submatrix information for each row (pool over 3rd dimension)
+    model.add(tf.keras.layers.Permute((2, 1, 3)))
+    model.add(tf.keras.layers.Reshape((binom(m-1, k-1), m*channels)))
     model.add(tf.keras.layers.GlobalAveragePooling1D())
-    model.add(tf.keras.layers.Reshape((m, 1, -1)))
-
-    # F applies to each row
+    model.add(tf.keras.layers.Reshape((m, 1, channels)))
+    
+    # shape is (None, m, 1, channels)
+    # F applies to each row, which is last dimension
     for i in range(5):
         model.add(tf.keras.layers.Conv2D(channels // 2, 1, use_bias=False))
         model.add(tf.keras.layers.BatchNormalization())

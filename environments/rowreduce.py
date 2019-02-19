@@ -38,7 +38,7 @@ class RowEchelonEnv:
             self._add_rows(action[1:])
         else:
             self._swap_rows(action[1:])
-        return np.copy(self.matrix), -1, self._is_row_echelon()
+        return np.copy(self.matrix), -1, self._is_row_echelon(), {}
 
     def _add_rows(self, pair):
         """Add the rows given by pair."""
@@ -91,7 +91,8 @@ class RowChoiceEnv:
         if lead is None:
             return (np.copy(self.matrix),
                     -100,
-                    self._is_reduced())
+                    self._is_reduced(),
+                    {})
         moves = 0
         for i in range(self.N):
             if i != action and self.matrix[i, lead] != 0:
@@ -100,11 +101,13 @@ class RowChoiceEnv:
         if moves == 0:
             return (np.copy(self.matrix),
                     -100,
-                    self._is_reduced())
+                    self._is_reduced(),
+                    {})
         else:
             return (np.copy(self.matrix),
                     -moves,
-                    self._is_reduced())
+                    self._is_reduced(),
+                    {})
 
     def _is_reduced(self):
         """Return true if the current matrix is reduced."""
@@ -169,5 +172,5 @@ class KInteractionsEnv(RowChoiceEnv):
         return state_tensor(state, self.k)
 
     def step(self, action):
-        state, reward, done = RowChoiceEnv.step(self, action)
-        return state_tensor(state), reward, done
+        state, reward, done, info = RowChoiceEnv.step(self, action)
+        return state_tensor(state, self.k), reward, done, info

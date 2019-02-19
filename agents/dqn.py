@@ -1,7 +1,7 @@
 # dqn.py
 # Dylan Peifer
 # 18 Feb 2019
-"""A Deep Q-Network agent."""
+"""A deep Q-Network agent."""
 
 import numpy as np
 import tensorflow as tf
@@ -35,26 +35,31 @@ class CyclicMemory:
 class DQNAgent:
     """A deep Q network agent."""
 
-    def __init__(self, network, double=False):
+    def __init__(self, network, learning_rate=0.00025,
+                 memory_capacity=100000, batch_size=32,
+                 gamma=0.99,
+                 epsilon_min=0.01, decay_rate=0.999, decay_mode='exponential',
+                 start_steps=1000, replay_freq=1, target_update_freq=100, epsilon_decay_freq=1,
+                 double=False):
         self.action_size = network.output_shape[1]
-        self.onlineModel = self._buildModel(network)
-        self.targetModel = self._buildModel(network)
+        self.onlineModel = self._buildModel(network, learning_rate)
+        self.targetModel = self._buildModel(network, learning_rate)
         
-        self.memory = CyclicMemory(100000)
-        self.batch_size = 32
+        self.memory = CyclicMemory(memory_capacity)
+        self.batch_size = batch_size
         
-        self.gamma = 0.99
+        self.gamma = gamma
         
         self.epsilon = 1.0
-        self.epsilon_min = 0.1
-        self.decay_rate = 0.0000009
-        self.decay_mode = 'linear'
+        self.epsilon_min = epsilon_min
+        self.decay_rate = decay_rate
+        self.decay_mode = decay_mode
 
         self.steps = 0
-        self.start_steps = 50000
-        self.replay_freq = 4
-        self.target_update_freq = 10000
-        self.epsilon_decay_freq = 1
+        self.start_steps = start_steps
+        self.replay_freq = replay_freq
+        self.target_update_freq = target_update_freq
+        self.epsilon_decay_freq = epsilon_decay_freq
         
         self.double = double
 
@@ -190,9 +195,9 @@ class DQNAgent:
     def loadOnlineModel(self, filename):
         self.onlineModel.load_weights(filename)
 
-    def _buildModel(self, network):
+    def _buildModel(self, network, learning_rate):
         model = tf.keras.models.clone_model(network)
         loss = 'mse'
-        optimizer = tf.keras.optimizers.Adam(0.00025)
+        optimizer = tf.keras.optimizers.Adam(learning_rate)
         model.compile(loss=loss, optimizer=optimizer)
         return model

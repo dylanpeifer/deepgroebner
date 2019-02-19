@@ -20,10 +20,10 @@ def discounted_rewards(rewards, gamma):
 class PGAgent:
     """A policy gradient agent."""
 
-    def __init__(self, network):
+    def __init__(self, network, learning_rate=0.00025, gamma=0.99):
         self.action_size = network.output_shape[1]
-        self.model = self._buildModel(network)
-        self.gamma = 0.99
+        self.model = self._buildModel(network, learning_rate)
+        self.gamma = gamma
 
     def act(self, state):
         """Choose an action (row) for the given state."""
@@ -89,9 +89,9 @@ class PGAgent:
     def load(self, name):
         self.model.load_weights(name)
 
-    def _buildModel(self, network):
+    def _buildModel(self, network, learning_rate):
         model = tf.keras.models.clone_model(network)
         loss = 'categorical_crossentropy'
-        optimizer = tf.keras.optimizers.Adam(0.00025)
+        optimizer = tf.keras.optimizers.Adam(learning_rate)
         model.compile(loss=loss, optimizer=optimizer)
         return model
