@@ -56,10 +56,7 @@ class PGAgent:
             total_actions += actions
             total_rewards += rewards
 
-        # normalize the rewards and produce the advantage vectors
-        total_rewards = np.array(total_rewards)
-        total_rewards -= np.mean(total_rewards)
-        total_rewards /= np.std(total_rewards)
+        # produce the advantage vectors
         advantages = np.zeros((len(total_rewards), self.action_size))
         for i in range(len(total_rewards)):
             advantages[i][total_actions[i]] = total_rewards[i]
