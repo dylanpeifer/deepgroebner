@@ -1,6 +1,6 @@
 # dqn.py
 # Dylan Peifer
-# 18 Feb 2019
+# 21 Feb 2019
 """A deep Q-Network agent."""
 
 import numpy as np
@@ -63,9 +63,11 @@ class DQNAgent:
         
         self.double = double
 
-    def act(self, state, explore=True):
+    def act(self, state, epsilon=None):
         """Choose an action for the given state using an epsilon-greedy policy."""
-        if explore and np.random.rand() <= self.epsilon:
+        if epsilon is None:
+            epsilon = self.epsilon
+        if np.random.rand() < epsilon:
             return np.random.randint(self.action_size)
         else:
             return np.argmax(self.predict(state))
@@ -128,65 +130,76 @@ class DQNAgent:
     def updateTargetModel(self):
         """Copy online model weights to target model."""
         self.targetModel.set_weights(self.onlineModel.get_weights())
-
-    def train(self, env, episodes, verbose=0):
-        """Train the agent for given episodes on given environment."""
-
-        while self.steps < self.start_steps:
-            state = env.reset()
-            done = False
-            while not done:
-                action = self.act(state)
-                next_state, reward, done, _ = env.step(action)
-                self.remember(state, action, reward, next_state, done)
-                self.steps += 1
-                if self.steps >= self.start_steps:
-                    break
-                state = next_state
-
-        rewards = np.zeros(episodes)
         
-        for i in range(episodes):
-            state = env.reset()
-            done = False
-            while not done:
-                action = self.act(state)
-                next_state, reward, done, _ = env.step(action)
-                rewards[i] += reward    
-                self.remember(state, action, reward, next_state, done)
-                state = next_state
-
-                self.steps += 1
-                if self.steps % self.replay_freq == 0:
-                    self.replay(self.batch_size)
-                if self.steps % self.target_update_freq == 0:
-                    self.updateTargetModel()
-                if self.steps % self.epsilon_decay_freq == 0:
-                    self.decayEpsilon()
-                
-            if verbose == 1:
-                print("\rEpisode {}/{} - reward: {} - epsilon: {}".format(i+1, episodes, rewards[i], self.epsilon), end="")
-            if verbose == 2:
-                print("Episode {}/{} - reward: {} - epsilon: {}".format(i+1, episodes, rewards[i], self.epsilon))
-            if verbose > 0 and i+1 == episodes:
-                print()
-
-        return rewards
-    
-    def test(self, env, episodes, explore=True, render=False):
+    def test(self, env, episodes, epsilon=None, render=False):
         """Test the agent for given episodes on given environment."""
         rewards = np.zeros(episodes)
         for i in range(episodes):
             state = env.reset()
             done = False
             while not done:
-                action = self.act(state, explore=explore)
-                next_state, reward, done, _ = env.step(action)
+                action = self.act(state, epsilon=epsilon)
+                state, reward, done, _ = env.step(action)
                 rewards[i] += reward
-                state = next_state
                 if render:
                     env.render()
                     time.sleep(0.05)
+        return rewards
+    
+    def explore(self, env, steps, epsilon=None):
+        """Add transitions to the agent's memory without training."""
+        while steps > 0:
+            state = env.reset()
+            done = False
+            while not done:
+                action = self.act(state, epsilon=epsilon)
+                next_state, reward, done, _ = env.step(action)
+                self.remember(state, action, reward, next_state, done)
+                state = next_state
+                steps -= 1
+                if steps <= 0:
+                    break
+
+    def train(self, env, steps, epochs=1, verbose=0, test_env=None, test_episodes=None, test_epsilon=None, savefile=None):
+        """Train the agent for given steps on given environment."""
+        if self.steps < self.start_steps:
+            self.explore(env, self.start_steps - self.steps)
+            self.steps = self.start_steps
+
+        rewards = np.zeros(epochs)
+        state = env.reset()
+        done = False
+        for epoch in range(epochs):
+            epoch_steps = 0
+            while epoch_steps < steps:
+                if done:
+                    state = env.reset()
+                    done = False
+                while not done:
+                    action = self.act(state)
+                    next_state, reward, done, _ = env.step(action) 
+                    self.remember(state, action, reward, next_state, done)
+                    state = next_state
+
+                    self.steps += 1
+                    if self.steps % self.replay_freq == 0:
+                        self.replay(self.batch_size)
+                    if self.steps % self.target_update_freq == 0:
+                        self.updateTargetModel()
+                    if self.steps % self.epsilon_decay_freq == 0:
+                        self.decayEpsilon()
+
+                    epoch_steps += 1
+                    if epoch_steps >= steps:
+                        break
+                        
+            if test_episodes is not None:
+                rewards[epoch] = np.mean(self.test(test_env, test_episodes, epsilon=test_epsilon))       
+            if savefile is not None:
+                self.saveOnlineModel(str(epoch) + savefile)     
+            if verbose == 1:
+                print("\rEpoch {}/{} - avg_reward: {}".format(epoch+1, epochs, rewards[epoch]), end="")
+                
         return rewards
 
     def saveOnlineModel(self, filename):
