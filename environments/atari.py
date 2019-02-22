@@ -20,7 +20,10 @@ class AtariEnv:
         self.reset_on_death = reset_on_death
 
     def reset(self):
-        if self.lives == 0:
+        if not self.reset_on_death:
+            state = self.env.reset()
+            done = False
+        elif self.lives == 0:
             state = self.env.reset()
             self.lives = self.env.unwrapped.ale.lives()
             done = False
