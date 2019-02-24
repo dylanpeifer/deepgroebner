@@ -7,7 +7,7 @@ from environments.atari import AtariEnv
 
 
 env = AtariEnv('BreakoutDeterministic-v4')
-test_env = AtariEnv('BreakoutDeterministic-v4', reset_on_death=False)
+test_env = AtariEnv('BreakoutDeterministic-v4', reset_on_death=False, clip_rewards=False)
 network = AtariNetSmall((105, 80, 4), 4)
 agent = DQNAgent(network,
                  memory_capacity=1000000,
