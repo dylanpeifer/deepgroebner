@@ -1,6 +1,6 @@
 # networks.py
 # Dylan Peifer
-# 18 Feb 2019
+# 24 Feb 2019
 """Networks for agents."""
 
 from math import factorial
@@ -15,6 +15,17 @@ def MultilayerPerceptron(input_dim, hidden_layers, output_dim, activation='relu'
         if dropout is not None:
             model.add(tf.keras.layers.Dropout(dropout))
     model.add(tf.keras.layers.Dense(output_dim, activation=final_activation))
+    return model
+
+
+def ParallelMultilayerPerceptron(input_dim, hidden_layers, activation='relu', final_activation='softmax'):
+    model = tf.keras.models.Sequential()
+    model.add(tf.keras.layers.InputLayer(input_shape=(None, 1, input_dim)))
+    for hidden in hidden_layers:
+        model.add(tf.keras.layers.Conv2D(hidden, 1, activation=activation))
+    model.add(tf.keras.layers.Conv2D(1, 1, activation='linear'))
+    model.add(tf.keras.layers.Flatten())
+    model.add(tf.keras.layers.Activation(final_activation))
     return model
 
 

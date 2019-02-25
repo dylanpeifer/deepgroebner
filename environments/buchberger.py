@@ -157,3 +157,30 @@ class BinomialBuchbergerEnv(BuchbergerEnv):
     def reset(self):
         F = [random_binomial(self.degree) for _ in range(self.size)]
         return BuchbergerEnv.reset(self, F, variables)
+
+
+def state_to_tensor(state):
+    G, P = state
+    vecs = []
+    for pair in P:
+        vec = sp.degree_list(lm(G[pair[0]], 'grevlex')) + sp.degree_list(lm(G[pair[1]], 'grevlex'))
+        vecs.append(vec)
+    return np.expand_dims(np.array(vecs), axis=1)
+
+
+class LeadMonomialWrapper:
+    """A wrapper for Buchberger environments that returns lead monomials as vectors."""
+    
+    def __init__(self, env):
+        self.env = env
+        self.state = None
+        
+    def reset(self):
+        self.state = self.env.reset()
+        return state_to_tensor(self.state)
+    
+    def step(self, action):
+        G, P = self.state
+        action = list(P)[action]
+        self.state, reward, done, info = self.env.step(action)
+        return state_to_tensor(self.state), reward, done, info
