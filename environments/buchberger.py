@@ -1,30 +1,30 @@
 # buchberger.py
 # Dylan Peifer
-# 18 Feb 2019
+# 26 Feb 2019
 """An environment for computing Groebner bases with Buchberger."""
 
 import numpy as np
 import sympy as sp
 
 
-x, y, z = sp.symbols('x y z')
-variables = [x, y, z]
-
-
 def lm(f, order):
+    """Return lead monomial of polynomial f as a polynomial in the same ring."""
     return sp.poly(sp.LM(f, order=order), *f.gens, domain=f.domain)
 
 
 def lt(f, order):
+    """Return lead term of polynomial f as a polynomial in the same ring."""
     return sp.poly(sp.LT(f, order=order), *f.gens, domain=f.domain)
 
 
 def spoly(f, g, order):
+    """Return the s-polynomial of polynomials f and g."""
     lcm = sp.lcm(lm(f, order), lm(g, order))
     return lcm//lt(f, order) * f - lcm//lt(g, order) * g
 
 
 def reduce(g, F, order):
+    """Return the remainder when polynomial g is divided by polynomials F."""
     r = g.zero()
     while g != 0:
 
@@ -45,6 +45,7 @@ def reduce(g, F, order):
 
 
 def minimalize(G, order):
+    """Return a minimal Groebner basis from arbitrary Groebner basis G."""
     Gmin = []
     for f in G:
         if all([lm(f, order) % lm(g, order) != 0 for g in Gmin]):
@@ -54,6 +55,7 @@ def minimalize(G, order):
 
 
 def interreduce(G, order):
+    """Return a list of the polynomials in G reduced with respect to each other."""
     Gred = []
     for i in range(len(G)):
         g = reduce(G[i], G[:i] + G[i+1:], order)
@@ -62,8 +64,9 @@ def interreduce(G, order):
 
 
 def buchberger(F, variables, domain, order):
+    """Return a Groebner basis from polynomials F using Buchberger's algorithm."""
     G = [sp.poly(f, *variables, domain=domain) for f in F]
-    P = set((i, j) for j in range(len(G)) for i in range(j))
+    P = [(i, j) for j in range(len(G)) for i in range(j)]
 
     while P:
         i, j = min(P)
@@ -75,7 +78,7 @@ def buchberger(F, variables, domain, order):
         if r != 0:
             j = len(G)
             for i in range(len(G)):
-                P.add((i, j))
+                P.append((i, j))
             G.append(r)
 
     G = minimalize(G, order)
@@ -87,13 +90,15 @@ def buchberger(F, variables, domain, order):
 class BuchbergerEnv:
     """An environment for Groebner basis computation using Buchberger."""
 
-    def __init__(self, domain=sp.FF(32003), order='grevlex'):
-        self.G = []
-        self.P = set()
+    def __init__(self, variables, domain=sp.FF(32003), order='grevlex'):
+        self.variables = variables
         self.domain = domain
         self.order = order
+        self.G = []
+        self.P = []
 
     def step(self, action):
+        """Perform one reduction and return the new polynomial list and pair list."""
         i, j = action
         self.P.remove((i, j))
 
@@ -103,14 +108,15 @@ class BuchbergerEnv:
         if r != 0:
             j = len(self.G)
             for i in range(len(self.G)):
-                self.P.add((i, j))
+                self.P.append((i, j))
             self.G.append(r)
 
         return (self.G, self.P), -1, len(self.P) == 0, {}
 
-    def reset(self, F, variables):
-        self.G = [sp.poly(f, *variables, domain=self.domain) for f in F]
-        self.P = set((i, j) for j in range(len(self.G)) for i in range(j))
+    def reset(self, F):
+        """Initialize the polynomial list and pair list from polynomials F."""
+        self.G = [sp.poly(f, *self.variables, domain=self.domain) for f in F]
+        self.P = [(i, j) for j in range(len(self.G)) for i in range(j)]
         return self.G, self.P
 
     def render(self):
@@ -133,39 +139,39 @@ def random_partition(n, k):
     return counts
 
 
-def exponent_to_monomial(exponent):
-    """Convert an exponent 3-vector (as a list) into a monomial in x,y,z."""
+def exponent_to_monomial(exponent, variables):
+    """Convert an exponent vector (as a list) into a monomial in variables."""
     return np.product([x**k for x, k in zip(variables, exponent)])
 
 
-def random_binomial(degree):
-    """Return a random binomial in x,y,z in given degree."""
-    m1 = exponent_to_monomial(random_partition(degree, 3))
-    m2 = exponent_to_monomial(random_partition(degree, 3))
+def random_binomial(degree, variables):
+    """Return a random binomial in variables in given degree."""
+    n = len(variables)
+    m1 = exponent_to_monomial(random_partition(degree, n), variables)
+    m2 = exponent_to_monomial(random_partition(degree, n), variables)
     while m2 == m1:
-        m2 = exponent_to_monomial(random_partition(degree, 3))
+        m2 = exponent_to_monomial(random_partition(degree, n), variables)
     return m1 + m2
 
 
 class BinomialBuchbergerEnv(BuchbergerEnv):
+    """A Buchberger environment that resets with random binomials."""
 
-    def __init__(self, degree, size):
-        BuchbergerEnv.__init__(self)
+    def __init__(self, degree, size, variables, domain=sp.FF(32003), order='grevlex'):
+        BuchbergerEnv.__init__(self, variables, domain=domain, order=order)
         self.degree = degree
         self.size = size
 
     def reset(self):
-        F = [random_binomial(self.degree) for _ in range(self.size)]
-        return BuchbergerEnv.reset(self, F, variables)
+        F = [random_binomial(self.degree, self.variables) for _ in range(self.size)]
+        return BuchbergerEnv.reset(self, F)
 
 
-def state_to_tensor(state):
+def monomial_tensor(state, order):
+    """Return a (len(P), 1, 2*len(variables)) tensor of pairs of lead monomials."""
     G, P = state
-    vecs = []
-    for pair in P:
-        vec = sp.degree_list(lm(G[pair[0]], 'grevlex')) + sp.degree_list(lm(G[pair[1]], 'grevlex'))
-        vecs.append(vec)
-    return np.expand_dims(np.array(vecs), axis=1)
+    vecs = [sp.degree_list(lm(G[p[0]], order)) + sp.degree_list(lm(G[p[1]], order)) for p in P]
+    return np.expand_dims(np.array(vecs, dtype=int), axis=1)
 
 
 class LeadMonomialWrapper:
@@ -177,10 +183,10 @@ class LeadMonomialWrapper:
         
     def reset(self):
         self.state = self.env.reset()
-        return state_to_tensor(self.state)
+        return monomial_tensor(self.state, self.env.order)
     
     def step(self, action):
         G, P = self.state
-        action = list(P)[action]
+        action = P[action]
         self.state, reward, done, info = self.env.step(action)
-        return state_to_tensor(self.state), reward, done, info
+        return monomial_tensor(self.state, self.env.order), reward, done, info

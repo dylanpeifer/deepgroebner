@@ -1,6 +1,6 @@
 # buchberger.py
 # Dylan Peifer
-# 18 Feb 2019
+# 26 Feb 2019
 """Agents for Buchberger environments."""
 
 import numpy as np
@@ -12,44 +12,58 @@ def lm(f, order):
 
 
 class FirstAgent:
+    """Agent which chooses the first pair on the list."""
 
     def act(self, state):
         _, P = state
-        return min(P)
+        return P[0]
 
 
 class RandomAgent:
+    """Agent which chooses a random pair on the list."""
 
     def act(self, state):
         _, P = state
-        index = np.random.choice(len(P))
-        return list(P)[index]
+        return P[np.random.randint(len(P))]
 
 
-def degree_normal_tuple(pair, G):
-    """Return a tuple which gives ordering of pair in degree normal selection."""
+def pair_degree(pair, G, order):
+    """Return the degree of the lcm of the lead monomials of the pair."""
     f, g = G[pair[0]], G[pair[1]]
-    lcm = sp.lcm(lm(f, 'grevlex'), lm(g, 'grevlex'))
+    lcm = sp.lcm(lm(f, order), lm(g, order))
     return sum(sp.degree_list(lcm))
 
 
 class DegreeAgent:
+    """Agent which chooses the first pair with minimal degree of lcm."""
+
+    def __init__(self, order):
+        self.order = order
 
     def act(self, state):
         G, P = state
-        return min(P, key=lambda pair: degree_normal_tuple(pair, G))
+        return min(P, key=lambda pair: pair_degree(pair, G, self.order))
 
 
-def grevlex_normal_tuple(pair, G):
-    """Return a tuple which gives ordering of pair in grevlex normal selection."""
+def pair_normal_tuple(pair, G, order):
+    """Return a tuple which gives ordering of lcm of pair in given order."""
     f, g = G[pair[0]], G[pair[1]]
-    lcm = sp.lcm(lm(f, 'grevlex'), lm(g, 'grevlex'))
+    lcm = sp.lcm(lm(f, order), lm(g, order))
     vec = sp.degree_list(lcm)
-    return sum(vec), tuple(reversed([-x for x in vec]))
+    if order == 'lex':
+        return vec
+    elif order == 'grlex':
+        return sum(vec), vec
+    elif order == 'grevlex':
+        return sum(vec), tuple(reversed([-x for x in vec]))
 
 
 class NormalAgent:
+    """Agent which chooses the first pair with minimal lcm in the monomial order."""
+
+    def __init__(self, order):
+        self.order = order
 
     def act(self, state):
         G, P = state
-        return min(P, key=lambda pair: grevlex_normal_tuple(pair, G))
+        return min(P, key=lambda pair: pair_normal_tuple(pair, G, self.order))
