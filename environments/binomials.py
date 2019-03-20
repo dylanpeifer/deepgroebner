@@ -195,12 +195,14 @@ def random_partition(d, n):
     return counts
 
 
-def random_binomial(degree, num_variables):
+def random_binomial(degree, num_variables, degree2=None):
     """Return a random binomial in variables in given degree."""
+    if degree2 is None:
+        degree2 = degree
     M1 = np.array(random_partition(degree, num_variables), dtype=int)
-    M2 = np.array(random_partition(degree, num_variables), dtype=int)
+    M2 = np.array(random_partition(degree2, num_variables), dtype=int)
     while all(M2 == M1):
-        M2 = np.array(random_partition(degree, num_variables), dtype=int)
+        M2 = np.array(random_partition(degree2, num_variables), dtype=int)
     a1 = np.random.randint(CHAR, dtype=np.int64)
     a2 = np.random.randint(CHAR, dtype=np.int64)
     return Binomial(a1,a2,M1,M2)
@@ -234,8 +236,9 @@ class BinomialBuchbergerEnv:
 
     def reset(self, G=None):
         """Initialize the polynomial list and pair list from polynomials G."""
+        degrees = np.random.randint(1, self.degree + 1, size=(self.size, 2))
         if G is None:
-            self.G = [random_binomial(self.degree, self.num_variables) for _ in range(self.size)]
+            self.G = [random_binomial(degrees[i, 0], self.num_variables, degrees[i, 1]) for i in range(self.size)]
         else:
             self.G = G
 
@@ -248,26 +251,30 @@ class BinomialBuchbergerEnv:
         print()
 
 
-def monomial_tensor(state):
+def monomial_tensor(state, k=1):
     """Return a (len(P), 1, 2*num_variables) tensor of pairs of lead monomials."""
     G, P = state
-    vecs = [np.concatenate((G[p[0]].M1, G[p[1]].M1)) for p in P]
+    if k == 1:
+        vecs = [np.concatenate((G[p[0]].M1, G[p[1]].M1)) for p in P]
+    else:
+        vecs = [np.concatenate((G[p[0]].M1, G[p[0]].M2, G[p[1]].M1, G[p[1]].M2)) for p in P]
     return np.expand_dims(np.array(vecs, dtype=int), axis=1)
 
 
 class LeadMonomialWrapper:
     """A wrapper for Buchberger environments that returns lead monomials as vectors."""
 
-    def __init__(self, env):
+    def __init__(self, env, k=1):
         self.env = env
         self.state = None
+        self.k = k
 
     def reset(self):
         self.state = self.env.reset()
-        return monomial_tensor(self.state)
+        return monomial_tensor(self.state, k=self.k)
 
     def step(self, action):
         G, P = self.state
         action = P[action]
         self.state, reward, done, info = self.env.step(action)
-        return monomial_tensor(self.state), reward, done, info
+        return monomial_tensor(self.state, k=self.k), reward, done, info
