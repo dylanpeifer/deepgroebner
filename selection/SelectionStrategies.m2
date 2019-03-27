@@ -9,10 +9,12 @@ newPackage(
         DebuggingMode => true
         )
 
-export {"SugarPolynomial", "polynomial", "sugar", "spoly", "reduce",
-    "minimalize", "interreduce", "cyclic", "hcyclic", "katsura",
+export {"SugarPolynomial", "sugarPolynomial", "polynomial", "sugar",
+    "reduce", "minimalize", "interreduce",
+    "spoly",
     "buchberger", "SelectionStrategy", "EliminationStrategy",
-    "ReductionStrategy", "Homogenize"}
+    "ReductionStrategy", "Homogenize",
+    "cyclic", "hcyclic", "katsura"}
 
 -------------------------------------------------------------------------------
 --- utility functions
@@ -40,103 +42,68 @@ argmin(List, Function) := ZZ => (x, f) -> (
 -------------------------------------------------------------------------------
 --- sugar polynomials
 -------------------------------------------------------------------------------
-SugarPolynomial = new Type of List;
+SugarPolynomial = new Type of List
 
-new SugarPolynomial from RingElement := (S, f) -> (
-    {first degree f, f}
-    )
+sugarPolynomial = method(TypicalValue => SugarPolynomial)
+sugarPolynomial(ZZ, SugarPolynomial) :=
+sugarPolynomial(ZZ, RingElement)     :=
+sugarPolynomial(ZZ, Number)          := (z, f) -> new SugarPolynomial from {z, polynomial f}
+sugarPolynomial SugarPolynomial      :=
+sugarPolynomial RingElement          :=
+sugarPolynomial Number               := f -> sugarPolynomial(sugar f, f)
 
-sugar = method()
-sugar(SugarPolynomial) := ZZ => (f) -> (
-    f#0
-    )
-sugar(RingElement) := ZZ => (f) -> (
-    first degree f
-    )
+sugar = method(TypicalValue => ZZ)
+sugar SugarPolynomial := f -> f#0
+sugar RingElement     := f -> if #(degree f) == 0 then 0 else first degree f
+sugar Number          := f -> 0
 
-polynomial = method()
-polynomial(SugarPolynomial) := RingElement => (f) -> (
-    f#1
-    )
+polynomial = method(TypicalValue => RingElement)
+polynomial SugarPolynomial := f -> f#1
+polynomial RingElement     := f -> f
+polynomial Number          := f -> f
 
-leadTerm(SugarPolynomial) := RingElement => (f) -> (
-    leadTerm polynomial f
-    )
-
-leadMonomial(SugarPolynomial) := RingElement => (f) -> (
-    leadMonomial polynomial f
-    )
-
-leadCoefficient(SugarPolynomial) := RingElement => (f) -> (
-    leadCoefficient polynomial f
-    )
+leadTerm SugarPolynomial        := f -> leadTerm polynomial f
+leadMonomial SugarPolynomial    := f -> leadMonomial polynomial f
+leadCoefficient SugarPolynomial := f -> leadCoefficient polynomial f
 
 SugarPolynomial + SugarPolynomial := SugarPolynomial => (f, g) -> (
-    new SugarPolynomial from {max(sugar f, sugar g), (polynomial f) + (polynomial g)}
+    sugarPolynomial(max(sugar f, sugar g), polynomial f + polynomial g)
     )
-
-RingElement + SugarPolynomial := SugarPolynomial => (f, g) -> (
-    new SugarPolynomial from {max(first degree f, sugar g), f + (polynomial g)}
-    )
-
-SugarPolynomial + RingElement := SugarPolynomial => (f, g) -> (
-    new SugarPolynomial from {max(sugar f, first degree g), (polynomial f) + g}
-    )
-
-ZZ + SugarPolynomial := SugarPolynomial => (f, g) -> (
-    new SugarPolynomial from {sugar g, f + (polynomial g)}
+SugarPolynomial + RingElement := SugarPolynomial =>
+SugarPolynomial + Number      := SugarPolynomial =>
+RingElement + SugarPolynomial := SugarPolynomial =>
+Number + SugarPolynomial      := SugarPolynomial => (f, g) -> (
+    sugarPolynomial f + sugarPolynomial g
     )
 
 SugarPolynomial - SugarPolynomial := SugarPolynomial => (f, g) -> (
-    new SugarPolynomial from {max(sugar f, sugar g), (polynomial f) - (polynomial g)}
+    sugarPolynomial(max(sugar f, sugar g), polynomial f - polynomial g)
     )
-
-RingElement - SugarPolynomial := SugarPolynomial => (f, g) -> (
-    new SugarPolynomial from {max(first degree f, sugar g), f - (polynomial g)}
-    )
-
-SugarPolynomial - RingElement := SugarPolynomial => (f, g) -> (
-    new SugarPolynomial from {max(sugar f, first degree g), (polynomial f) - g}
+SugarPolynomial - RingElement := SugarPolynomial =>
+SugarPolynomial - Number      := SugarPolynomial =>
+RingElement - SugarPolynomial := SugarPolynomial =>
+Number - SugarPolynomial      := SugarPolynomial => (f, g) -> (
+    sugarPolynomial f - sugarPolynomial g
     )
 
 SugarPolynomial * SugarPolynomial := SugarPolynomial => (f, g) -> (
-    new SugarPolynomial from {(sugar f) + (sugar g), (polynomial f) * (polynomial g)}
+    sugarPolynomial(sugar f + sugar g, polynomial f * polynomial g)
     )
-
-RingElement * SugarPolynomial := SugarPolynomial => (f, g) -> (
-    new SugarPolynomial from {(first degree f) + (sugar g), f * (polynomial g)}
-    )
-
-SugarPolynomial * RingElement := SugarPolynomial => (f, g) -> (
-    new SugarPolynomial from {(sugar f) + (first degree g), (polynomial f) * g}
-    )
-
-QQ * SugarPolynomial := SugarPolynomial => (f, g) -> (
-    new SugarPolynomial from {sugar g, f * (polynomial g)}
-    )
-
-SugarPolynomial * QQ := SugarPolynomial => (f, g) -> (
-    new SugarPolynomial from {sugar f, (polynomial f) * g}
+SugarPolynomial * RingElement := SugarPolynomial =>
+SugarPolynomial * Number      := SugarPolynomial =>
+RingElement * SugarPolynomial := SugarPolynomial =>
+Number * SugarPolynomial      := SugarPolynomial => (f, g) -> (
+    sugarPolynomial f * sugarPolynomial g
     )
 
 SugarPolynomial == SugarPolynomial := Boolean => (f, g) -> (
-    (polynomial f) == (polynomial g)
+    polynomial f == polynomial g
     )
-
-SugarPolynomial == RingElement := Boolean => (f, g) -> (
-    (polynomial f) == g
-    )
-
-RingElement == SugarPolynomial := Boolean => (f, g) -> (
-    f == (polynomial g)
-    )
-
-SugarPolynomial == ZZ := Boolean => (f, g) -> (
-    (polynomial f) == g
-    )
-
-ZZ == SugarPolynomial := Boolean => (f, g) -> (
-    f == (polynomial g)
+SugarPolynomial == RingElement := SugarPolynomial =>
+SugarPolynomial == Number      := SugarPolynomial =>
+RingElement == SugarPolynomial := SugarPolynomial =>
+Number == SugarPolynomial      := SugarPolynomial => (f, g) -> (
+    sugarPolynomial f == sugarPolynomial g
     )
 
 -------------------------------------------------------------------------------
@@ -163,7 +130,7 @@ reduce(SugarPolynomial, List) := SugarPolynomial => opts -> (g, F) -> (
 	lg := leadTerm g;
 	foundDivisor := false;
 
-	-- try to remove lead term by some f, don't increase sugar if doubleSugar is on
+	-- try to remove lead term of g by some f, don't increase sugar if doubleSugar
 	for f in F do (
 	    lf := leadTerm f;
 	    if (lg % lf) == 0 then (
@@ -179,17 +146,18 @@ reduce(SugarPolynomial, List) := SugarPolynomial => opts -> (g, F) -> (
 	        );
 	    );
 
+    	-- if first pass didn't find a divisor then we
+	--    try again without doubleSugar if using Saccharine
+	--    are done if only head reducing
+	--    otherwise remove lead term of g and add it to the remainder
 	if not foundDivisor then (
-	    -- if first try didn't work on Saccharine then try again without doubleSugar
 	    if opts.Strategy === "Saccharine" and doubleSugar then (
 		doubleSugar = false;
 		continue;
 		)
-	    -- if only head reducing then stop here and return g
 	    else if opts.Reduce === "Head" then (
 		break;
 		)
-	    -- otherwise move lead term of g to remainder and continue reducing g
 	    else (
 		r = r + lg;
 		g = g - lg;
@@ -210,9 +178,8 @@ minimalize(List) := List => (F) -> (
     -- returns a minimal Groebner basis from F
 
     G := {};
-    for f in F do (
+    for f in sort F do (
 	if all(G, g -> (leadTerm f) % (leadTerm g) != 0) then (
-	    G = select(G, g -> (leadTerm g) % (leadTerm f) != 0);
 	    G = append(G, f);
 	    );
 	);
@@ -240,22 +207,14 @@ SPair = new Type of List;
 spair = method()
 spair(ZZ, ZZ, List) := SPair => (i, j, F) -> (
     gamma := lcm(leadMonomial F#i, leadMonomial F#j);
-    sug := max((sugar F#i) + (first degree (gamma//leadMonomial F#i)),
-	       (sugar F#j) + (first degree (gamma//leadMonomial F#j)));
+    sug := max((sugar F#i) + (sugar (gamma // leadMonomial F#i)),
+	       (sugar F#j) + (sugar (gamma // leadMonomial F#j)));
     new SPair from {i, j, gamma, sug}
     )
 
-lcm(SPair) := RingElement => (p) -> (
-    p#2
-    )
-
-sugar(SPair) := ZZ => (p) -> (
-    p#3
-    )
-
-degree(SPair) := ZZ => (p) -> (
-    degree lcm p
-    )
+lcm SPair := RingElement => p -> p#2
+sugar SPair := ZZ => p -> p#3
+degree SPair := ZZ => p -> degree lcm p
 
 spoly = method()
 spoly(RingElement, RingElement) := RingElement =>
@@ -376,7 +335,7 @@ buchberger(Ideal) := BuchbergerHistory => opts -> (I) -> (
 
     F := first entries gens I;
     if opts.SelectionStrategy === "Sugar" then (
-	F = apply(F, f -> new SugarPolynomial from f);
+	F = apply(F, sugarPolynomial);
 	);
 
     -- initialize pairs P and polynomials G
@@ -449,21 +408,21 @@ beginDocumentation()
 
 TEST /// -- SugarPolynomial (construct with given sugar)
 R = ZZ/32003[x,y]
-f = new SugarPolynomial from {5, x^2 + x*y}
+f = sugarPolynomial(5, x^2 + x*y)
 assert(polynomial f == x^2 + x*y)
 assert(sugar f == 5)
 ///
 
 TEST /// -- SugarPolynomial (construct without given sugar)
 R = ZZ/32003[x,y]
-f = new SugarPolynomial from x^2 + x*y
+f = sugarPolynomial(x^2 + x*y)
 assert(polynomial f == x^2 + x*y)
 assert(sugar f == 2)
 ///
 
 TEST /// -- SugarPolynomial (construct without given sugar, sugar degree not in lead term)
 R = ZZ/32003[x,y,z, MonomialOrder => Lex]
-f = new SugarPolynomial from x^2*y + y*z^10
+f = sugarPolynomial(x^2*y + y*z^10)
 assert(polynomial f == x^2*y + y*z^10)
 assert(sugar f == 11)
 ///
@@ -479,10 +438,10 @@ assert(reduce(g, F, Reduce => "Tail") == x^5*z + x^3*y + x + (1/4)*z^7 - z^5)
 
 TEST /// -- reduce (Full/Head/Tail with sugar polynomials)
 R = QQ[x,y,z, MonomialOrder => Lex]
-g = new SugarPolynomial from x^5*z + x^3*y + x^2*y^2 + x*y^2 + x
-F = {new SugarPolynomial from x^2*z - x,
-     new SugarPolynomial from x*y^2 + z^5,
-     new SugarPolynomial from 4*x*z + z^3}
+g = sugarPolynomial(x^5*z + x^3*y + x^2*y^2 + x*y^2 + x)
+F = {sugarPolynomial(x^2*z - x),
+     sugarPolynomial(x*y^2 + z^5),
+     sugarPolynomial(4*x*z + z^3)}
 g1 = reduce(g, F)
 g2 = reduce(g, F, Reduce => "Head")
 g3 = reduce(g, F, Reduce => "Tail")
@@ -496,10 +455,10 @@ assert(sugar g3 == 7)
 
 TEST /// -- reduce (DoubleSugar and Saccharine)
 R = QQ[x,y,z, MonomialOrder => Lex]
-g = new SugarPolynomial from x^3*y*z^2 + x^2*z
-F = {new SugarPolynomial from {6, x^2 + y},
-     new SugarPolynomial from {10, x*y*z + z},
-     new SugarPolynomial from {3, x*z^2 + y^2}}
+g = sugarPolynomial(x^3*y*z^2 + x^2*z)
+F = {sugarPolynomial(6, x^2 + y),
+     sugarPolynomial(10, x*y*z + z),
+     sugarPolynomial(3, x*z^2 + y^2)}
 g1 = reduce(g, F)
 g2 = reduce(g, F, Strategy => "DoubleSugar")
 g3 = reduce(g, F, Strategy => "Saccharine")
@@ -516,14 +475,14 @@ R = QQ[x,y,z, MonomialOrder => Lex]
 G = {x*y^2 + z, x*z + 3*y, x^2 + y*z, -3*y^3 + z^2, -3*y - (1/3)*z^3, (1/243)*z^8 + z}
 G' = minimalize(G)
 G'' = interreduce(G')
-assert(G' == {x*z + 3*y, x^2 + y*z, -3*y - (1/3)*z^3, (1/243)*z^8 + z})
-assert(G'' == {x*z - (1/3)*z^3, x^2 - (1/9)*z^4, y + (1/9)*z^3, z^8 + 243*z})
+assert(G' == {(1/243)*z^8 + z, -3*y - (1/3)*z^3, x*z + 3*y, x^2 + y*z})
+assert(G'' == {z^8 + 243*z, y + (1/9)*z^3, x*z - (1/3)*z^3, x^2 - (1/9)*z^4})
 ///
 
 TEST /// -- minimalize and interreduce (sugar polynomials)
 R = QQ[x,y,z, MonomialOrder => Lex]
 G = {x*y^2 + z, x*z + 3*y, x^2 + y*z, -3*y^3 + z^2, -3*y - (1/3)*z^3, (1/243)*z^8 + z}
-G = apply(G, g -> new SugarPolynomial from g)
+G = apply(G, sugarPolynomial)
 G' = minimalize(G)
 G'' = interreduce(G')
 assert(apply(G', polynomial) == {x*z + 3*y, x^2 + y*z, -3*y - (1/3)*z^3, (1/243)*z^8 + z})
@@ -537,9 +496,10 @@ R = QQ[x,y]
 f = x^2 + x*y
 g = y^2 + x*y
 assert(spoly(f, g) == 0)
-fs = new SugarPolynomial from f
-gs = new SugarPolynomial from g
-assert(spoly(fs, gs) == new SugarPolynomial from {3, 0})
+fs = sugarPolynomial f
+gs = sugarPolynomial g
+assert(sugar spoly(fs, gs) == 3)
+assert(polynomial spoly(fs, gs) == 0)
 ///
 
 TEST /// -- spoly (division by lead coefficient over rationals)
@@ -547,9 +507,10 @@ R = QQ[x,y]
 f = x^3*y^2 - x^2*y^3
 g = 3*x^4*y + y^2
 assert(spoly(f, g) == -x^3*y^3 - (1/3)*y^3)
-fs = new SugarPolynomial from f
-gs = new SugarPolynomial from g
-assert(spoly(fs, gs) == new SugarPolynomial from {6, -x^3*y^3 - (1/3)*y^3})
+fs = sugarPolynomial f
+gs = sugarPolynomial g
+assert(sugar spoly(fs, gs) == 6)
+assert(polynomial spoly(fs, gs) == -x^3*y^3 - (1/3)*y^3)
 ///
 
 TEST /// -- spoly (division by lead coefficient over finite field)
@@ -557,9 +518,10 @@ R = ZZ/32003[x,y]
 f = x^3*y^2 - x^2*y^3
 g = 3*x^4*y + y^2
 assert(spoly(f, g) == -x^3*y^3 - (1/3)*y^3)
-fs = new SugarPolynomial from f
-gs = new SugarPolynomial from g
-assert(spoly(fs, gs) == new SugarPolynomial from {6, -x^3*y^3 - (1/3)*y^3})
+fs = sugarPolynomial f
+gs = sugarPolynomial g
+assert(sugar spoly(fs, gs) == 6)
+assert(polynomial spoly(fs, gs) == -x^3*y^3 - (1/3)*y^3)
 ///
 
 TEST /// -- spoly (lex order)
@@ -567,9 +529,10 @@ R = ZZ/32003[x,y, MonomialOrder => Lex]
 f = x^2 - y^3
 g = x*y^2 + x
 assert(spoly(f, g) == -y^5 - x^2)
-fs = new SugarPolynomial from f
-gs = new SugarPolynomial from g
-assert(spoly(fs, gs) == new SugarPolynomial from {5, -y^5 - x^2})
+fs = sugarPolynomial f
+gs = sugarPolynomial g
+assert(sugar spoly(fs, gs) == 5)
+assert(polynomial spoly(fs, gs) == -y^5 - x^2)
 ///
 
 TEST /// -- full Groebner basis (LCM elimination)
@@ -621,10 +584,6 @@ restart
 needsPackage "SelectionStrategies"
 check SelectionStrategies
 
--- TODO: sugar fails because of leadCoefficient * SugarPolynomial
-R = ZZ/32003[x]
-interreduce({new SugarPolynomial from x})
-
 -- TODO: add random binomials to examples
 GB = (I) -> flatten entries gens gb I
 genquadbinom = (R) -> (
@@ -661,5 +620,44 @@ I = ideal(x^31 - x^6 - x - y, x^8 - z, x^10 - t)
 (i2, j2, G) = buchberger(I, ReductionStrategy => "DoubleSugar")
 (i3, j3, G) = buchberger(I, SelectionStrategy => "Normal")
 
+-- trig example
+needsPackage "NumericalAlgebraicGeometry"
+needsPackage "NautyGraphs"
+needsPackage "Visualize"
+needsPackage "MinimalPrimes"
+needsPackage "Bertini"
+installMinprimes()
 
+trig = method()
+trig Ring := (R) -> (
+    n := numgens R // 2;
+    ideal for i from 0 to n - 1 list R_i^2 + R_(n+i)^2 - 1
+    )
 
+oscSystem = method()
+oscSystem(Graph, Ring) := (G, R) -> (
+    n := # vertices G - 1;  -- R should have == 2n variables.
+    assert(n == (numgens R // 2));
+    sine := (i) -> if i === 0 then 0_R else R_(n+i-1);
+    cosine := (i) -> if i === 0 then 1_R else R_(i-1);
+    I := ideal for i from 0 to n-1 list (
+        N := toList neighbors(G,i);
+        sum for j in N list (
+            sine j * cosine i - sine i * cosine j
+            )
+        );
+    I + trig R
+    )
+
+Gstrings = generateGraphs(6, OnlyConnected => true)
+G = stringToGraph(Gstrings_10)
+R = ZZ/32003[x_1..x_5,y_1..y_5]
+I = oscSystem(G, R)
+(i, j, g) = buchberger(I)
+
+G = stringToGraph(Gstrings_100)
+R = ZZ/32003[x_1..x_5,y_1..y_5, MonomialOrder => Lex]
+I = oscSystem(G, R)
+(i, j, g) = buchberger(I)
+elapsedTime (i, j, g) = buchberger(I, ReductionStrategy => "DoubleSugar")
+#Gstrings
