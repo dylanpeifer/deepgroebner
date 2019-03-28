@@ -12,9 +12,8 @@ newPackage(
 export {"SugarPolynomial", "sugarPolynomial", "polynomial", "sugar",
     "reduce", "minimalize", "interreduce",
     "spoly",
-    "buchberger", "SelectionStrategy", "EliminationStrategy",
-    "ReductionStrategy", "Homogenize",
-    "cyclic", "hcyclic", "katsura"}
+    "buchberger", "SelectionStrategy", "EliminationStrategy", "ReductionStrategy", "Homogenize", "Minimalize"}
+
 
 -------------------------------------------------------------------------------
 --- utility functions
@@ -42,7 +41,7 @@ argmin(List, Function) := ZZ => (x, f) -> (
 -------------------------------------------------------------------------------
 --- sugar polynomials
 -------------------------------------------------------------------------------
-SugarPolynomial = new Type of List
+SugarPolynomial = new Type of BasicList
 
 sugarPolynomial = method(TypicalValue => SugarPolynomial)
 sugarPolynomial(ZZ, SugarPolynomial) :=
@@ -69,9 +68,9 @@ leadCoefficient SugarPolynomial := f -> leadCoefficient polynomial f
 SugarPolynomial + SugarPolynomial := SugarPolynomial => (f, g) -> (
     sugarPolynomial(max(sugar f, sugar g), polynomial f + polynomial g)
     )
-SugarPolynomial + RingElement := SugarPolynomial =>
-SugarPolynomial + Number      := SugarPolynomial =>
-RingElement + SugarPolynomial := SugarPolynomial =>
+SugarPolynomial + RingElement :=
+SugarPolynomial + Number      :=
+RingElement + SugarPolynomial :=
 Number + SugarPolynomial      := SugarPolynomial => (f, g) -> (
     sugarPolynomial f + sugarPolynomial g
     )
@@ -79,9 +78,9 @@ Number + SugarPolynomial      := SugarPolynomial => (f, g) -> (
 SugarPolynomial - SugarPolynomial := SugarPolynomial => (f, g) -> (
     sugarPolynomial(max(sugar f, sugar g), polynomial f - polynomial g)
     )
-SugarPolynomial - RingElement := SugarPolynomial =>
-SugarPolynomial - Number      := SugarPolynomial =>
-RingElement - SugarPolynomial := SugarPolynomial =>
+SugarPolynomial - RingElement :=
+SugarPolynomial - Number      :=
+RingElement - SugarPolynomial :=
 Number - SugarPolynomial      := SugarPolynomial => (f, g) -> (
     sugarPolynomial f - sugarPolynomial g
     )
@@ -89,9 +88,9 @@ Number - SugarPolynomial      := SugarPolynomial => (f, g) -> (
 SugarPolynomial * SugarPolynomial := SugarPolynomial => (f, g) -> (
     sugarPolynomial(sugar f + sugar g, polynomial f * polynomial g)
     )
-SugarPolynomial * RingElement := SugarPolynomial =>
-SugarPolynomial * Number      := SugarPolynomial =>
-RingElement * SugarPolynomial := SugarPolynomial =>
+SugarPolynomial * RingElement :=
+SugarPolynomial * Number      :=
+RingElement * SugarPolynomial :=
 Number * SugarPolynomial      := SugarPolynomial => (f, g) -> (
     sugarPolynomial f * sugarPolynomial g
     )
@@ -99,12 +98,14 @@ Number * SugarPolynomial      := SugarPolynomial => (f, g) -> (
 SugarPolynomial == SugarPolynomial := Boolean => (f, g) -> (
     polynomial f == polynomial g
     )
-SugarPolynomial == RingElement := SugarPolynomial =>
-SugarPolynomial == Number      := SugarPolynomial =>
-RingElement == SugarPolynomial := SugarPolynomial =>
+SugarPolynomial == RingElement :=
+SugarPolynomial == Number      :=
+RingElement == SugarPolynomial :=
 Number == SugarPolynomial      := SugarPolynomial => (f, g) -> (
     sugarPolynomial f == sugarPolynomial g
     )
+
+SugarPolynomial ? SugarPolynomial := (f, g) -> polynomial f ? polynomial g
 
 -------------------------------------------------------------------------------
 --- reduction
@@ -120,8 +121,8 @@ reduce(SugarPolynomial, List) := SugarPolynomial => opts -> (g, F) -> (
 
     -- if only tail reducing then put lead term on remainder here
     if opts.Reduce === "Tail" then (
-	r = r + (leadTerm g);
-	g = g - (leadTerm g);
+	r = r + leadTerm g;
+	g = g - leadTerm g;
 	);
     
     doubleSugar := opts.Strategy === "DoubleSugar" or opts.Strategy === "Saccharine";
@@ -133,9 +134,9 @@ reduce(SugarPolynomial, List) := SugarPolynomial => opts -> (g, F) -> (
 	-- try to remove lead term of g by some f, don't increase sugar if doubleSugar
 	for f in F do (
 	    lf := leadTerm f;
-	    if (lg % lf) == 0 then (
+	    if lg % lf == 0 then (
 		reducer := (lg//lf) * f;
-		if doubleSugar and (sugar reducer) > (sugar g) then (
+		if doubleSugar and sugar reducer > sugar g then (
 		    continue;
 		    )
 		else (
@@ -179,7 +180,7 @@ minimalize(List) := List => (F) -> (
 
     G := {};
     for f in sort F do (
-	if all(G, g -> (leadTerm f) % (leadTerm g) != 0) then (
+	if all(G, g -> leadTerm f % leadTerm g != 0) then (
 	    G = append(G, f);
 	    );
 	);
@@ -202,19 +203,22 @@ interreduce(List) := List => (F) -> (
 -------------------------------------------------------------------------------
 --- s-pairs and s-polynomials
 -------------------------------------------------------------------------------
-SPair = new Type of List;
+SPair = new Type of BasicList
 
-spair = method()
-spair(ZZ, ZZ, List) := SPair => (i, j, F) -> (
-    gamma := lcm(leadMonomial F#i, leadMonomial F#j);
-    sug := max((sugar F#i) + (sugar (gamma // leadMonomial F#i)),
-	       (sugar F#j) + (sugar (gamma // leadMonomial F#j)));
-    new SPair from {i, j, gamma, sug}
+spair = method(TypicalValue => SPair)
+spair(Sequence, List) := (S, F) -> (
+    f := F#(S#0);
+    g := F#(S#1);
+    gamma := lcm(leadMonomial f, leadMonomial g);
+    sug := max(sugar f + sugar (gamma // leadMonomial f),
+	       sugar g + sugar (gamma // leadMonomial g));
+    new SPair from {S, gamma, sug}
     )
 
-lcm SPair := RingElement => p -> p#2
-sugar SPair := ZZ => p -> p#3
-degree SPair := ZZ => p -> degree lcm p
+indices SPair := Sequence    => p -> p#0
+lcm     SPair := RingElement => p -> p#1
+sugar   SPair := ZZ          => p -> p#2
+degree  SPair := ZZ          => p -> first degree lcm p
 
 spoly = method()
 spoly(RingElement, RingElement) := RingElement =>
@@ -224,48 +228,57 @@ spoly(SugarPolynomial, SugarPolynomial) := SugarPolynomial => (f, g) -> (
     -- returns the s-polynomial of f and g
 
     gamma := lcm(leadMonomial f, leadMonomial g);
-    (gamma // (leadTerm f)) * f - (gamma // (leadTerm g)) * g
+    (gamma // leadTerm f) * f - (gamma // leadTerm g) * g
     )
 spoly(SPair, List) := (p, F) -> (
     -- p = an SPair
     -- F = a list of polynomials
     -- returns the s-polynomial given by p
 
-    spoly(F#(p#0), F#(p#1))
+    (i, j) := indices p;
+    spoly(F#i, F#j)
     )
 
--------------------------------------------------------------------------------
---- s-pair selection and updates
--------------------------------------------------------------------------------
 lcmCriterion = method()
 lcmCriterion(SPair, List) := Boolean => (p, F) -> (
     -- p = an SPair
     -- F = the corresponding list of polynomials
     -- returns true if the pair satisfies the lcm criterion
     
-    lcm p == (leadMonomial F#(p#0)) * (leadMonomial F#(p#1))
+    (i, j) := indices p;
+    lcm p == leadMonomial F#i * leadMonomial F#j
     )
 
-selectPair = method(Options => {Strategy => "First"})
+-------------------------------------------------------------------------------
+--- s-pair selection and updates
+-------------------------------------------------------------------------------
+PairList := new Type of MutableList
+
+selectPair = method(Options => {Strategy => "First", Sort => false})
 selectPair(List) := SPair => opts -> (P) -> (
     -- P = a list of SPairs in Buchberger's algorithm
     -- returns the next pair to process
 
+    p := 0;
+
     if opts.Strategy === "First" then (
-	P#0
+	p = P#0
 	)
     else if opts.Strategy === "Random" then (
-	P#(random(#P))
+	p = P#(random(#P))
 	)
     else if opts.Strategy === "Degree" then (
-	P#(argmin(P, degree))
+	p = P#(argmin(P, degree))
 	)
     else if opts.Strategy === "Normal" then (
-	P#(argmin(P, lcm))
+	p = P#(argmin(P, lcm))
 	)
     else if opts.Strategy === "Sugar" then (
-	P#(argmin(P, p -> {sugar p, lcm p}))
-	)
+	p = P#(argmin(P, p -> {sugar p, lcm p}))
+	);
+
+    P = delete(p, P);
+    (p, P)
     )
 
 updatePairs = method(Options => {Strategy => "None"})
@@ -278,44 +291,39 @@ updatePairs(List, List, SugarPolynomial) := List => opts -> (P, F, f) -> (
     --     polynomials F obtained after adding f
 
     F = append(F, f);
-    newPairs := apply(#F-1, i -> spair(i, #F-1, F));
+    P' := apply(#F-1, i -> spair((i, #F-1), F));
 
     if opts.Strategy === "LCM" then (
-	newPairs = select(newPairs, p -> not lcmCriterion(p, F));
+	P' = select(P', p -> not lcmCriterion(p, F));
 	)
-    else (
+    else if opts.Strategy === "Sugar" or opts.Strategy === "GebauerMoeller" then (
 	-- eliminate from old list
 	lf := leadMonomial f;
-	P = select(P, p ->
-	    (lcm p) % lf != 0 or
-	    lcm(leadMonomial F#(p#0), lf) == lcm p or
-	    lcm(leadMonomial F#(p#1), lf) == lcm p);
-	
-	-- sugar paper eliminates lcm criterion here (this seems wrong)
-    	P' := {};
-	for p in newPairs do (
-	    equiv := select(newPairs, p' -> lcm p == lcm p');
-	    if any(equiv, p' -> lcmCriterion(p', F)) then continue;
-	    P' = P' | equiv;
-	    );
-	newPairs = P';
+	P = select(P, p -> (
+		(i, j) := indices p;
+	    	lcm p % lf != 0 or
+		lcm(leadMonomial F#i, lf) == lcm p or
+	    	lcm(leadMonomial F#j, lf) == lcm p));
 
-    	-- eliminate if strictly divisible
-    	newPairs = select(newPairs, p ->
-	    all(newPairs, p' -> lcm p % lcm p' != 0 or lcm p == lcm p'));
-
-    	-- keep 1 of each equivalence class and remove any with lcm criterion
-    	P' = {};
-	for p in newPairs do (
-	    equiv := select(newPairs, p' -> lcm p == lcm p');
-	    if any(equiv, p' -> lcmCriterion(p', F)) then continue;
-	    if any(P', p' -> lcm p == lcm p') then continue;
-	    P' = append(P', p);
-	    );
-	newPairs = P';
+    	-- sugar paper eliminates LCM early
+	if opts.Strategy === "Sugar" then (
+	    P' = select(P', p -> not lcmCriterion(p, F));
 	);
 
-    (P | newPairs, F)
+    	-- eliminate if strictly divisible
+    	P' = select(P', p -> all(P', p' -> lcm p % lcm p' != 0 or lcm p == lcm p'));
+
+    	-- keep 1 of each equivalence class and remove any with lcm criterion
+    	classes := partition(lcm, P');
+	P'' := {};
+	for m in keys classes do (
+	    if any(classes#m, p -> lcmCriterion(p, F)) then continue;
+	    P'' = append(P'', classes#m#0);
+	    );
+	P' = P'';
+	);
+
+    (P | P', F)
     )
 
 -------------------------------------------------------------------------------
@@ -327,16 +335,15 @@ buchberger = method(Options => {
 	SelectionStrategy => "Sugar",
 	EliminationStrategy => "GebauerMoeller",
 	ReductionStrategy => "Regular",
-	Homogenize => false
+	Homogenize => false,
+	Minimalize => true
 	})
 buchberger(Ideal) := BuchbergerHistory => opts -> (I) -> (
     -- I = an ideal in a polynomial ring
     -- returns number of pairs processed in computing a Groebner basis of I
 
     F := first entries gens I;
-    if opts.SelectionStrategy === "Sugar" then (
-	F = apply(F, sugarPolynomial);
-	);
+    if opts.SelectionStrategy === "Sugar" then F = apply(F, sugarPolynomial);
 
     -- initialize pairs P and polynomials G
     P := {};
@@ -347,11 +354,10 @@ buchberger(Ideal) := BuchbergerHistory => opts -> (I) -> (
 
     zeroReductions := 0;
     nonzeroReductions := 0;
+    p := 0;
 
     while #P > 0 do (
-	p := selectPair(P, Strategy => opts.SelectionStrategy);
-	P = delete(p, P);
-
+	(p, P) = selectPair(P, Strategy => opts.SelectionStrategy);
 	s := spoly(p, G);
 	r := reduce(s, G, Strategy => opts.ReductionStrategy);
 	if r != 0 then (
@@ -363,10 +369,8 @@ buchberger(Ideal) := BuchbergerHistory => opts -> (I) -> (
 	    );
 	);
 
-    if opts.SelectionStrategy === "Sugar" then (
-	G = apply(G, polynomial);
-	);
-    G = interreduce(minimalize(G));
+    if opts.SelectionStrategy === "Sugar" then G = apply(G, polynomial);
+    if opts.Minimalize then G = interreduce(minimalize(G));
 
     (zeroReductions, nonzeroReductions, G)
     )
@@ -375,7 +379,7 @@ buchberger(Ideal) := BuchbergerHistory => opts -> (I) -> (
 --- example ideals
 -------------------------------------------------------------------------------
 cyclic = method(Options => {CoefficientRing => ZZ/32003, MonomialOrder => GRevLex})
-cyclic(ZZ) := Ideal => opts -> (n) -> (
+cyclic ZZ := Ideal => opts -> n -> (
     R := (opts.CoefficientRing)[vars(0..n-1), MonomialOrder => opts.MonomialOrder];
     F := toList apply(1..n-1, d -> sum(0..n-1, i -> product(d, k -> R_((i+k)%n))))
          | {product gens R - 1};
@@ -383,26 +387,115 @@ cyclic(ZZ) := Ideal => opts -> (n) -> (
     )
 
 hcyclic = method(Options => {CoefficientRing => ZZ/32003, MonomialOrder => GRevLex})
-hcyclic(ZZ) := Ideal => opts -> (n) -> (
+hcyclic ZZ := Ideal => opts -> n -> (
     R := (opts.CoefficientRing)[vars(0..n), MonomialOrder => opts.MonomialOrder];
-    F := toList apply(1..n-1, d -> sum(0..n-1, i -> product(d, k -> R_((i+k)%n)))) 
+    F := toList apply(1..n-1, d -> sum(0..n-1, i -> product(d, k -> R_((i+k)%n))))
          | {product(n, i -> R_i) - R_n^n};
     ideal F
     )
 
-katsura = method(Options => {CoefficientRing => ZZ/32003, MonomialOrder => GRevLex})
-katsura(ZZ) := Ideal => opts -> (n) -> (
-    n = n-1;
+ecyclic = method(Options => {CoefficientRing => ZZ/32003, MonomialOrder => GRevLex})
+ecyclic ZZ := Ideal => opts -> n -> (
     R := (opts.CoefficientRing)[vars(0..n), MonomialOrder => opts.MonomialOrder];
-    L := gens R;
+    F := toList apply(1..n-1, d -> R_0^d + sum(0..n-1, i -> product(d, k -> R_((i+k)%n+1))))
+         | {product(1..n, i -> R_i) - 1, R_0^n + 1};
+    ideal F
+    )
+
+rcyclic = method(Options => {CoefficientRing => ZZ/32003, MonomialOrder => GRevLex})
+rcyclic ZZ := Ideal => opts -> n -> (
+    R := (opts.CoefficientRing)[vars(0..n), MonomialOrder => opts.MonomialOrder];
+    F := toList apply(1..n-1, d -> sum(0..n-1, i -> product(d, k -> R_((i+k)%n))));
+    F = apply(F, f -> sub(f, R_(n-1) => 1));
+    F = append(F, sub(product(n, i -> R_i), R_(n-1) => R_(n-1)^n) - 1);
+    ideal F
+    )
+
+elemsym = method(Options => {CoefficientRing => ZZ/32003, MonomialOrder => GRevLex})
+elemsym ZZ := Ideal => opts -> n -> (
+    R := (opts.CoefficientRing)[vars(0..n-1), MonomialOrder => opts.MonomialOrder];
+    F := apply(1..n, d -> sum(apply(subsets(gens R, d), product)));
+    ideal F
+    )
+
+eco = method(Options => {CoefficientRing => ZZ/32003, MonomialOrder => GRevLex})
+eco ZZ := Ideal => opts -> n -> (
+    R := (opts.CoefficientRing)[vars(0..n-1), MonomialOrder => opts.MonomialOrder];
+    F := toList apply(0..n-2, k -> R_(n-1) * (R_k + sum(0..n-k-3, i -> R_i * R_(i+k+1))) - k - 1)
+         | {sum(0..n-2, i -> R_i) + 1};
+    ideal F
+    )
+
+noon = method(Options => {CoefficientRing => ZZ/32003, MonomialOrder => GRevLex})
+noon ZZ := Ideal => opts -> n -> (
+    R := (opts.CoefficientRing)[vars(0..n-1), MonomialOrder => opts.MonomialOrder];
+    F := apply(0..n-1, i -> 10 * R_i * (sum(0..n-1, j -> R_j^2) - R_i^2) - 11 * R_i + 10);
+    ideal F
+    )
+
+reimer = method(Options => {CoefficientRing => ZZ/32003, MonomialOrder => GRevLex})
+reimer ZZ := Ideal => opts -> n -> (
+    R := (opts.CoefficientRing)[vars(0..n-1), MonomialOrder => opts.MonomialOrder];
+    F := apply(2..n+1, d -> sum(0..n-1, i -> (-1)^i * 2 * R_i^d) - 1);
+    ideal F
+    )
+
+katsura = method(Options => {CoefficientRing => ZZ/32003, MonomialOrder => GRevLex})
+katsura ZZ := Ideal => opts -> n -> (
+    n = n - 1;
+    R := (opts.CoefficientRing)[vars(0..n), MonomialOrder => opts.MonomialOrder];
     u := i -> (
 	 if i < 0 then i = -i;
-	 if i <= n then L_i else 0_R
+	 if i <= n then R_i else 0_R
 	 );
     f1 := -1 + sum for i from -n to n list u i;
     F := toList prepend(f1, apply(0..n-1, i -> - u i + sum(-n..n, j -> (u j) * (u (i-j)))));
     ideal F
     )
+
+jason210 = method(Options => {CoefficientRing => ZZ/32003, MonomialOrder => GRevLex})
+installMethod(jason210, Ideal => opts -> () -> (
+    R := (opts.CoefficientRing)[vars(0..7), MonomialOrder => opts.MonomialOrder];
+    ideal "a6,
+           b6,
+           a2c4+b2d4+abc2e2+abd2f2+abcdeg+abcdfh"
+    ))
+
+lichtblau = method(Options => {CoefficientRing => ZZ/32003, MonomialOrder => GRevLex})
+installMethod(lichtblau, Ideal => opts -> () -> (
+    R := (opts.CoefficientRing)[vars(0..2), MonomialOrder => opts.MonomialOrder];
+    ideal "374a11-2189a10+5555a9-8085a8+7590a7-5082a6+2772a5-1320a4+495a3-110a2+b,
+           -22a11-88a10+550a9-1650a8+3300a7-3696a6+1848a5-330a3+110a2-22a+c"
+    ))
+
+virasoro = method(Options => {CoefficientRing => ZZ/32003, MonomialOrder => GRevLex})
+installMethod(virasoro, Ideal => opts -> () -> (
+    R := (opts.CoefficientRing)[vars(0..7), MonomialOrder => opts.MonomialOrder];
+    ideal "8a2+8ab+8ac+2ad+2ae+2af+2ag-a-8bc-2dg-2ef,
+           8ab-8ac+8b2+8bc+2bd+2be+2bf+2bg-b-2df-2eg,
+	   -8ab+8ac+8bc+8c2+2cd+2ce+2cf+2cg-c-2de-2fg,
+	   2ad-2ag+2bd-2bf+2cd-2ce+8d2+8de+2df+2dg+6dh-d-6eh,
+	   2ae-2af+2be-2bg-2cd+2ce+8de-6dh+8e2+2ef+2eg+6eh-e,
+	   -2ae+2af-2bd+2bf+2cf-2cg+2df+2ef+8f2+8fg+6fh-f-6gh,
+	   -2ad+2ag-2be+2bg-2cf+2cg+2dg+2eg+8fg-6fh+8g2+6gh-g,
+	   -6de+6dh+6eh-6fg+6fh+6gh+8h2-h"
+    ))
+
+chemkin = method(Options => {CoefficientRing => ZZ/32003, MonomialOrder => GRevLex})
+installMethod(chemkin, Ideal => opts -> () -> (
+    R := (opts.CoefficientRing)[vars(0..10), MonomialOrder => opts.MonomialOrder];
+    ideal "-4ad+9d2+h,
+           b2+e2+i2-1,
+	   c2+f2+j2-1,
+	   9g2+9k2-8,
+	   -6abd+3b+3de+3hi-1,
+	   3bc+3ef+3ij-1,
+	   c+3fg+3jk-1,
+	   -6a+3b+3c+8,
+	   9d+9e+9f+9g+8,
+	   h+i+j+k,
+	   a2-2"
+    ))
 
 beginDocumentation()
 
@@ -485,10 +578,10 @@ G = {x*y^2 + z, x*z + 3*y, x^2 + y*z, -3*y^3 + z^2, -3*y - (1/3)*z^3, (1/243)*z^
 G = apply(G, sugarPolynomial)
 G' = minimalize(G)
 G'' = interreduce(G')
-assert(apply(G', polynomial) == {x*z + 3*y, x^2 + y*z, -3*y - (1/3)*z^3, (1/243)*z^8 + z})
-assert(apply(G', sugar) == {2, 2, 3, 8})
-assert(apply(G'', polynomial) == {x*z - (1/3)*z^3, x^2 - (1/9)*z^4, y + (1/9)*z^3, z^8 + 243*z})
-assert(apply(G'', sugar) == {3, 4, 3, 8})
+assert(apply(G', polynomial) == {(1/243)*z^8 + z, -3*y - (1/3)*z^3, x*z + 3*y, x^2 + y*z})
+assert(apply(G', sugar) == {8, 3, 2, 2})
+assert(apply(G'', polynomial) == {z^8 + 243*z, y + (1/9)*z^3, x*z - (1/3)*z^3, x^2 - (1/9)*z^4})
+assert(apply(G'', sugar) == {8, 3, 3, 4})
 ///
 
 TEST /// -- spoly (basic example)
@@ -598,17 +691,21 @@ genquadbinom = (R) -> (
 genid = (R, nelems) -> ideal for i from 1 to nelems list genquadbinom R
 R = ZZ/101[a,b,c,d]
 
--- cyclic roots numbers now agree with sugar paper
+-- cyclic roots
 I = cyclic(5, MonomialOrder => Lex)
 (i1, j1, G) = buchberger I
 (i2, j2, G) = buchberger(I, ReductionStrategy => "DoubleSugar")
+(i3, j3, G) = buchberger(I, Homogenize => true)
+(i3, j2, G) = buchberger(I, SelectionStrategy => "Degree")
+(i3, j3, G) = buchberger(I, SelectionStrategy => "Normal")
 
 I = cyclic 5
 (i1, j1, G) = buchberger I
+(i1, j1, G) = buchberger(I, Homogenize => true)
 (i2, j2, G) = buchberger(I, ReductionStrategy => "DoubleSugar")
 (i3, j3, G) = buchberger(I, SelectionStrategy => "Normal")
 
--- parametric curves numbers now agree with sugar paper (except DoubleSugar)
+-- parametric curves
 R = QQ[x,y,z,t, MonomialOrder => Lex]
 I = ideal(x^31 - x^6 - x - y, x^8 - z, x^10 - t)
 (i1, j1, G) = buchberger I
