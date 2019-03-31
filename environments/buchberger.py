@@ -69,7 +69,7 @@ def buchberger(F, variables, domain, order):
     P = [(i, j) for j in range(len(G)) for i in range(j)]
 
     while P:
-        i, j = min(P)
+        i, j = min(P, key=lambda p: (p[1], p[0]))  # first selection
         P.remove((i, j))
 
         s = spoly(G[i], G[j], order)
@@ -90,12 +90,13 @@ def buchberger(F, variables, domain, order):
 class BuchbergerEnv:
     """An environment for Groebner basis computation using Buchberger."""
 
-    def __init__(self, variables, domain=sp.FF(32003), order='grevlex'):
+    def __init__(self, variables, domain=sp.FF(32003), order='grevlex', f=None):
         self.variables = variables
         self.domain = domain
         self.order = order
         self.G = []
         self.P = []
+        self.f = f
 
     def step(self, action):
         """Perform one reduction and return the new polynomial list and pair list."""
@@ -113,7 +114,7 @@ class BuchbergerEnv:
 
         return (self.G, self.P), -1, len(self.P) == 0, {}
 
-    def reset(self, F):
+    def reset(self, F=None):
         """Initialize the polynomial list and pair list from polynomials F."""
         self.G = [sp.poly(f, *self.variables, domain=self.domain) for f in F]
         self.P = [(i, j) for j in range(len(self.G)) for i in range(j)]
@@ -123,6 +124,31 @@ class BuchbergerEnv:
         print(self.G)
         print(self.P)
         print()
+
+
+def monomial_tensor(state, order):
+    """Return a (len(P), 1, 2*len(variables)) tensor of pairs of lead monomials."""
+    G, P = state
+    vecs = [sp.degree_list(lm(G[p[0]], order)) + sp.degree_list(lm(G[p[1]], order)) for p in P]
+    return np.expand_dims(np.array(vecs, dtype=int), axis=1)
+
+
+class LeadMonomialWrapper:
+    """A wrapper for Buchberger environments that returns lead monomials as vectors."""
+    
+    def __init__(self, env):
+        self.env = env
+        self.state = None
+        
+    def reset(self):
+        self.state = self.env.reset()
+        return monomial_tensor(self.state, self.env.order)
+    
+    def step(self, action):
+        G, P = self.state
+        action = P[action]
+        self.state, reward, done, info = self.env.step(action)
+        return monomial_tensor(self.state, self.env.order), reward, done, info
 
 
 def random_partition(n, k):
@@ -152,41 +178,3 @@ def random_binomial(degree, variables):
     while m2 == m1:
         m2 = exponent_to_monomial(random_partition(degree, n), variables)
     return m1 + m2
-
-
-class BinomialBuchbergerEnv(BuchbergerEnv):
-    """A Buchberger environment that resets with random binomials."""
-
-    def __init__(self, degree, size, variables, domain=sp.FF(32003), order='grevlex'):
-        BuchbergerEnv.__init__(self, variables, domain=domain, order=order)
-        self.degree = degree
-        self.size = size
-
-    def reset(self):
-        F = [random_binomial(self.degree, self.variables) for _ in range(self.size)]
-        return BuchbergerEnv.reset(self, F)
-
-
-def monomial_tensor(state, order):
-    """Return a (len(P), 1, 2*len(variables)) tensor of pairs of lead monomials."""
-    G, P = state
-    vecs = [sp.degree_list(lm(G[p[0]], order)) + sp.degree_list(lm(G[p[1]], order)) for p in P]
-    return np.expand_dims(np.array(vecs, dtype=int), axis=1)
-
-
-class LeadMonomialWrapper:
-    """A wrapper for Buchberger environments that returns lead monomials as vectors."""
-    
-    def __init__(self, env):
-        self.env = env
-        self.state = None
-        
-    def reset(self):
-        self.state = self.env.reset()
-        return monomial_tensor(self.state, self.env.order)
-    
-    def step(self, action):
-        G, P = self.state
-        action = P[action]
-        self.state, reward, done, info = self.env.step(action)
-        return monomial_tensor(self.state, self.env.order), reward, done, info

@@ -23,21 +23,21 @@ def grevlex(M1, M2):
 
 
 def euclidean(a, b):
-   if abs(b) > abs(a):
-      (x,y,d) = euclidean(b, a)
-      return (y,x,d)
+    if abs(b) > abs(a):
+        (x,y,d) = euclidean(b, a)
+        return (y,x,d)
 
-   if abs(b) == 0:
-      return (1, 0, a)
+    if abs(b) == 0:
+        return (1, 0, a)
 
-   x1, x2, y1, y2 = 0, 1, 1, 0
-   while abs(b) > 0:
-      q, r = divmod(a,b)
-      x = x2 - q*x1
-      y = y2 - q*y1
-      a, b, x2, x1, y2, y1 = b, r, x1, x, y1, y
+    x1, x2, y1, y2 = 0, 1, 1, 0
+    while abs(b) > 0:
+        q, r = divmod(a,b)
+        x = x2 - q*x1
+        y = y2 - q*y1
+        a, b, x2, x1, y2, y1 = b, r, x1, x, y1, y
 
-   return (x2, y2, a)
+    return (x2, y2, a)
 
 
 def invert(a):
@@ -278,3 +278,24 @@ class LeadMonomialWrapper:
         action = P[action]
         self.state, reward, done, info = self.env.step(action)
         return monomial_tensor(self.state, k=self.k), reward, done, info
+    
+    
+class DegreeAgent:
+
+    def __init__(self, random=False):
+        self.random = random
+
+    def act(self, state):
+        n = state.shape[2]//2  # number of variables
+        degs = np.sum(np.maximum(state[:, :, :n], state[:, :, n:]), axis=2)
+        if self.random:
+            indices = np.where(degs == np.min(degs))[0]
+            return np.random.choice(indices)
+        else:
+            return np.argmin(degs)
+
+
+class RandomAgent:
+
+    def act(self, state):
+        return np.random.randint(state.shape[0])
