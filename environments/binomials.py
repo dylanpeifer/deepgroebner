@@ -87,8 +87,8 @@ class Binomial(object):
             return
 
         if self.a1 is not 0:
-            self.a1 = 1
             self.a2 = (self.a2 * invert(self.a1)) % CHAR
+            self.a1 = 1
 
 
 def spoly(f, g):
