@@ -29,6 +29,14 @@ def ParallelMultilayerPerceptron(input_dim, hidden_layers, activation='relu', fi
     return model
 
 
+def CountTensor(input_shape, i):
+    model = tf.keras.Sequential([
+        tf.keras.layers.Lambda(lambda x: tf.fill((tf.shape(x)[0], 1), tf.cast(tf.shape(x)[i], tf.float32)),
+                               input_shape=input_shape)
+    ])
+    return model
+
+
 def AtariNetSmall(input_shape, action_size, final_activation='linear'):
     """Return the network from the first DQN paper."""
     model = tf.keras.models.Sequential()
