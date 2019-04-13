@@ -1,6 +1,6 @@
 # buchberger.py
 # Dylan Peifer
-# 26 Feb 2019
+# 01 Apr 2019
 """An environment for computing Groebner bases with Buchberger."""
 
 import numpy as np
@@ -15,6 +15,11 @@ def lm(f, order):
 def lt(f, order):
     """Return lead term of polynomial f as a polynomial in the same ring."""
     return sp.poly(sp.LT(f, order=order), *f.gens, domain=f.domain)
+
+
+def lcm(f, g, order):
+    """Return the lcm of the lead monomials of f and g."""
+    return sp.lcm(lm(f, order), lm(g, order))
 
 
 def spoly(f, g, order):
@@ -63,6 +68,29 @@ def interreduce(G, order):
     return Gred
 
 
+def update_pairs(G, P, f, order, strategy='gebauermoeller'):
+    """Return the updated list of polynomials and pairs when f is added to the basis G."""
+    G.append(f)
+    P_ = [(i, len(G)-1) for i in range(len(G)-1)]
+    
+    if strategy == 'none':
+        return G, P + P_
+    elif strategy == 'lcm':
+        P_ = [p_ for p_ in P_ if sp.gcd(lm(G[p_[0]], order), lm(G[p_[1]], order)) != 1]
+        return G, P + P_
+    elif strategy == 'gebauermoeller':
+        P = [p for p in P if any(lcm(G[p[0]], G[p[1]], order) % lm(f, order) != 0,
+                                 lcm(G[p[0]], G[p[1]], order) == lcm(G[p[0]], lm(f, order), order),
+                                 lcm(G[p[0]], G[p[1]], order) == lcm(G[p[0]], lm(f, order), order))]
+        P_ = [p_ for p_ in P_ if all(lcm(G[p_[0]], G[p_[1]], order) % lcm(G[p[0]], G[p[1]], order) != 0 or
+                                     lcm(G[p_[0]], G[p_[1]], order) == lcm(G[p[0]], G[p[1]], order)
+                                     for p in P_)]
+        lcms = {lcm(G[p[0]], G[p[1]], order) : p for p in P_}
+        P_ = list(lcms.values())
+        P_ = [p_ for p_ in P_ if sp.gcd(lm(G[p_[0]], order), lm(G[p_[1]], order)) != 1]
+        return G, P + P_
+
+
 def buchberger(F, variables, domain, order):
     """Return a Groebner basis from polynomials F using Buchberger's algorithm."""
     G = [sp.poly(f, *variables, domain=domain) for f in F]
@@ -76,10 +104,7 @@ def buchberger(F, variables, domain, order):
         r = reduce(s, G, order)
 
         if r != 0:
-            j = len(G)
-            for i in range(len(G)):
-                P.append((i, j))
-            G.append(r)
+            G, P = update_pairs(G, P, r, order)
 
     G = minimalize(G, order)
     G = interreduce(G, order)
@@ -90,13 +115,13 @@ def buchberger(F, variables, domain, order):
 class BuchbergerEnv:
     """An environment for Groebner basis computation using Buchberger."""
 
-    def __init__(self, variables, domain=sp.FF(32003), order='grevlex', f=None):
+    def __init__(self, variables, domain=sp.FF(32003), order='grevlex', elimination='gebauermoeller'):
         self.variables = variables
         self.domain = domain
         self.order = order
+        self.elimination = elimination
         self.G = []
         self.P = []
-        self.f = f
 
     def step(self, action):
         """Perform one reduction and return the new polynomial list and pair list."""
@@ -107,15 +132,14 @@ class BuchbergerEnv:
         r = reduce(s, self.G, self.order)
 
         if r != 0:
-            j = len(self.G)
-            for i in range(len(self.G)):
-                self.P.append((i, j))
-            self.G.append(r)
+            self.G, self.P = update_pairs(self.G, self.P, r, self.order, strategy=self.elimination)
 
         return (self.G, self.P), -1, len(self.P) == 0, {}
 
     def reset(self, F=None):
         """Initialize the polynomial list and pair list from polynomials F."""
+        if F is None:
+            F = self.f(self.variables, self.domain)
         self.G = [sp.poly(f, *self.variables, domain=self.domain) for f in F]
         self.P = [(i, j) for j in range(len(self.G)) for i in range(j)]
         return self.G, self.P
@@ -149,6 +173,44 @@ class LeadMonomialWrapper:
         action = P[action]
         self.state, reward, done, info = self.env.step(action)
         return monomial_tensor(self.state, self.env.order), reward, done, info
+    
+    
+def pair_degree(pair, G, order):
+    """Return the degree of the lcm of the lead monomials of the pair."""
+    f, g = G[pair[0]], G[pair[1]]
+    lcm = sp.lcm(lm(f, order), lm(g, order))
+    return sum(sp.degree_list(lcm))
+
+
+def pair_normal_tuple(pair, G, order):
+    """Return a tuple which gives ordering of lcm of pair in given order."""
+    f, g = G[pair[0]], G[pair[1]]
+    lcm = sp.lcm(lm(f, order), lm(g, order))
+    vec = sp.degree_list(lcm)
+    if order == 'lex':
+        return vec
+    elif order == 'grlex':
+        return sum(vec), vec
+    elif order == 'grevlex':
+        return sum(vec), tuple(reversed([-x for x in vec]))
+
+
+class BuchbergerAgent:
+    
+    def __init__(self, strategy='normal', order='grevlex'):
+        self.strategy = strategy
+        self.order = order
+        
+    def act(self, state):
+        G, P = state
+        if self.strategy == 'first':
+            return min(P, key=lambda p: (p[1], p[0]))
+        elif self.strategy == 'random':
+            return P[np.random.randint(len(P))]
+        elif self.strategy == 'degree':
+            return min(P, key=lambda p: pair_degree(p, G, self.order))
+        elif self.strategy == 'normal':
+            return min(P, key=lambda p: pair_normal_tuple(p, G, self.order))
 
 
 def random_partition(n, k):
