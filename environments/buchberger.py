@@ -1,148 +1,157 @@
 # buchberger.py
 # Dylan Peifer
-# 01 Apr 2019
-"""An environment for computing Groebner bases with Buchberger."""
+# 28 Apr 2019
+"""An environment for computing Groebner bases with Buchberger's algorithm."""
 
 import numpy as np
 import sympy as sp
 
 
-def lm(f, order):
-    """Return lead monomial of polynomial f as a polynomial in the same ring."""
-    return sp.poly(sp.LM(f, order=order), *f.gens, domain=f.domain)
-
-
-def lt(f, order):
-    """Return lead term of polynomial f as a polynomial in the same ring."""
-    return sp.poly(sp.LT(f, order=order), *f.gens, domain=f.domain)
-
-
-def lcm(f, g, order):
-    """Return the lcm of the lead monomials of f and g."""
-    return sp.lcm(lm(f, order), lm(g, order))
-
-
-def spoly(f, g, order):
+def spoly(f, g):
     """Return the s-polynomial of polynomials f and g."""
-    lcm = sp.lcm(lm(f, order), lm(g, order))
-    return lcm//lt(f, order) * f - lcm//lt(g, order) * g
+    assert f.ring == g.ring, "polynomials must be in same ring"
+    R = f.ring
+    lcm = R.monomial_lcm(f.LM, g.LM)
+    s1 = f.mul_monom(R.monomial_div(lcm, f.LM)).quo_ground(f.LC)
+    s2 = g.mul_monom(R.monomial_div(lcm, g.LM)).quo_ground(g.LC)
+    return s1 - s2
 
 
-def reduce(g, F, order):
+def reduce(g, F):
     """Return the remainder when polynomial g is divided by polynomials F."""
-    r = g.zero()
-    while g != 0:
-
-        found_divisor = False
-
-        for f in F:
-            if lm(g, order) % lm(f, order) == 0:
-                g -= lt(g, order)//lt(f, order) * f
-                found_divisor = True
-                break
-
-        if not found_divisor:
-            lg = lt(g, order)
-            r += lg
-            g -= lg
-
-    return r
+    # TODO: return dictionary of statistics
+    return g.rem(F), {}
 
 
-def minimalize(G, order):
+def select(G, P, strategy='normal'):
+    """Select and return a pair from P."""
+    assert len(G) > 0, "polynomial list must be nonempty"
+    assert len(P) > 0, "pair set must be nonempty"
+    R = G[0].ring
+
+    if isinstance(strategy, str):
+        strategy = [strategy]
+
+    def strategy_key(p, s):
+        """Return a sort key for pair p in the strategy s."""
+        if s == 'first':
+            return p[1], p[0]
+        elif s == 'normal':
+            lcm = R.monomial_lcm(G[p[0]].LM, G[p[1]].LM)
+            return R.order(lcm)
+        elif s == 'degree':
+            lcm = R.monomial_lcm(G[p[0]].LM, G[p[1]].LM)
+            return sum(lcm)
+        elif s == 'random':
+            return np.random.rand()
+
+    return min(P, key=lambda p: tuple(strategy_key(p, s) for s in strategy))
+
+
+def update(G, P, f, strategy='gebauermoeller'):
+    """Return the updated list of polynomials and set of pairs when f is added to the basis G."""
+    lf = f.LM
+    R = f.ring
+    lcm = R.monomial_lcm
+    mul = R.monomial_mul
+    div = R.monomial_div
+
+    if strategy == 'none':
+        P_ = {(i, len(G)) for i in range(len(G))}
+    elif strategy == 'lcm':
+        P_ = {(i, len(G)) for i in range(len(G)) if lcm(G[i].LM, lf) != mul(G[i].LM, lf)}
+    elif strategy == 'gebauermoeller':
+        P = {p for p in P if (not div(lcm(G[p[0]].LM, G[p[1]].LM), lf) or
+                              lcm(G[p[0]].LM, G[p[1]].LM) == lcm(G[p[0]].LM, lf) or
+                              lcm(G[p[0]].LM, G[p[1]].LM) == lcm(G[p[1]].LM, lf))}
+        lcm_dict = {}
+        for i in range(len(G)):
+            lcm_dict.setdefault(lcm(G[i].LM, lf), []).append(i)
+        minimalized_lcms = []
+        for L in sorted(lcm_dict.keys(), key=R.order):
+            if all(not div(L, L_) for L_ in minimalized_lcms):
+                minimalized_lcms.append(L)
+        P_ = set()
+        for L in minimalized_lcms:
+            if not any(lcm(G[i].LM, lf) == mul(G[i].LM, lf) for i in lcm_dict[L]):
+                P_.add((min(lcm_dict[L]), len(G)))
+
+    return G + [f], P | P_
+
+
+def minimalize(G):
     """Return a minimal Groebner basis from arbitrary Groebner basis G."""
+    R = G[0].ring if len(G) > 0 else None
+    assert all(g.ring == R for g in G), "polynomials must be in same ring"    
     Gmin = []
-    for f in G:
-        if all([lm(f, order) % lm(g, order) != 0 for g in Gmin]):
-            Gmin = [g for g in Gmin if lm(g, order) % lm(f, order) != 0]
+    for f in sorted(G, key=lambda h: R.order(h.LM)):
+        if all(not R.monomial_div(f.LM, g.LM) for g in Gmin):
             Gmin.append(f)
     return Gmin
 
 
-def interreduce(G, order):
-    """Return a list of the polynomials in G reduced with respect to each other."""
+def interreduce(G):
+    """Return the reduced Groebner basis from a minimal Groebner basis G."""
+    R = G[0].ring if len(G) > 0 else None
+    assert all(g.ring == R for g in G), "polynomials must be in same ring"
     Gred = []
     for i in range(len(G)):
-        g = reduce(G[i], G[:i] + G[i+1:], order)
-        Gred.append(g.quo_ground(sp.LC(g, order=order)))
+        g = G[i].rem(G[:i] + G[i+1:])
+        Gred.append(g.monic())
     return Gred
 
 
-def update_pairs(G, P, f, order, strategy='gebauermoeller'):
-    """Return the updated list of polynomials and pairs when f is added to the basis G."""
-    G.append(f)
-    P_ = [(i, len(G)-1) for i in range(len(G)-1)]
-    
-    if strategy == 'none':
-        return G, P + P_
-    elif strategy == 'lcm':
-        P_ = [p_ for p_ in P_ if sp.gcd(lm(G[p_[0]], order), lm(G[p_[1]], order)) != 1]
-        return G, P + P_
-    elif strategy == 'gebauermoeller':
-        P = [p for p in P if any(lcm(G[p[0]], G[p[1]], order) % lm(f, order) != 0,
-                                 lcm(G[p[0]], G[p[1]], order) == lcm(G[p[0]], lm(f, order), order),
-                                 lcm(G[p[0]], G[p[1]], order) == lcm(G[p[0]], lm(f, order), order))]
-        P_ = [p_ for p_ in P_ if all(lcm(G[p_[0]], G[p_[1]], order) % lcm(G[p[0]], G[p[1]], order) != 0 or
-                                     lcm(G[p_[0]], G[p_[1]], order) == lcm(G[p[0]], G[p[1]], order)
-                                     for p in P_)]
-        lcms = {lcm(G[p[0]], G[p[1]], order) : p for p in P_}
-        P_ = list(lcms.values())
-        P_ = [p_ for p_ in P_ if sp.gcd(lm(G[p_[0]], order), lm(G[p_[1]], order)) != 1]
-        return G, P + P_
-
-
-def buchberger(F, variables, domain, order):
+def buchberger(F, selection='normal', elimination='gebauermoeller'):
     """Return a Groebner basis from polynomials F using Buchberger's algorithm."""
-    G = [sp.poly(f, *variables, domain=domain) for f in F]
-    P = [(i, j) for j in range(len(G)) for i in range(j)]
+    R = F[0].ring if len(F) > 0 else None
+    assert all(f.ring == R for f in F), "polynomials must be in same ring"
+
+    G = []
+    P = set()
+    for f in F:
+        G, P = update(G, P, f, strategy=elimination)
 
     while P:
-        i, j = min(P, key=lambda p: (p[1], p[0]))  # first selection
+        i, j = select(G, P, strategy=selection)
         P.remove((i, j))
-
-        s = spoly(G[i], G[j], order)
-        r = reduce(s, G, order)
-
+        s = spoly(G[i], G[j])
+        r, _ = reduce(s, G)
         if r != 0:
-            G, P = update_pairs(G, P, r, order)
+            G, P = update(G, P, r, strategy=elimination)
 
-    G = minimalize(G, order)
-    G = interreduce(G, order)
-
-    return G
+    return interreduce(minimalize(G))
 
 
 class BuchbergerEnv:
-    """An environment for Groebner basis computation using Buchberger."""
+    """An environment for computing a Groebner basis using Buchberger's algorithm."""
 
-    def __init__(self, variables, domain=sp.FF(32003), order='grevlex', elimination='gebauermoeller'):
-        self.variables = variables
-        self.domain = domain
-        self.order = order
+    def __init__(self, ideal_fn,
+                 ring=sp.xring('x,y,z', sp.FF(32003), 'grevlex')[0],
+                 elimination='gebauermoeller'):
+        self.ideal_fn = ideal_fn
+        self.ring = ring
         self.elimination = elimination
         self.G = []
-        self.P = []
+        self.P = set()
+
+    def reset(self, F=None):
+        """Initialize the polynomial list and pair list from polynomials F."""
+        F = self.ideal_fn(self.ring) if F is None else F
+        self.G = []
+        self.P = set()
+        for f in F:
+            self.G, self.P = update(self.G, self.P, f, strategy=self.elimination)
+        return self.G, self.P
 
     def step(self, action):
         """Perform one reduction and return the new polynomial list and pair list."""
         i, j = action
         self.P.remove((i, j))
-
-        s = spoly(self.G[i], self.G[j], self.order)
-        r = reduce(s, self.G, self.order)
-
+        s = spoly(self.G[i], self.G[j])
+        r, _ = reduce(s, self.G)
         if r != 0:
-            self.G, self.P = update_pairs(self.G, self.P, r, self.order, strategy=self.elimination)
-
+            self.G, self.P = update(self.G, self.P, r, strategy=self.elimination)
         return (self.G, self.P), -1, len(self.P) == 0, {}
-
-    def reset(self, F=None):
-        """Initialize the polynomial list and pair list from polynomials F."""
-        if F is None:
-            F = self.f(self.variables, self.domain)
-        self.G = [sp.poly(f, *self.variables, domain=self.domain) for f in F]
-        self.P = [(i, j) for j in range(len(self.G)) for i in range(j)]
-        return self.G, self.P
 
     def render(self):
         print(self.G)
@@ -150,93 +159,12 @@ class BuchbergerEnv:
         print()
 
 
-def monomial_tensor(state, order):
-    """Return a (len(P), 1, 2*len(variables)) tensor of pairs of lead monomials."""
-    G, P = state
-    vecs = [sp.degree_list(lm(G[p[0]], order)) + sp.degree_list(lm(G[p[1]], order)) for p in P]
-    return np.expand_dims(np.array(vecs, dtype=int), axis=1)
-
-
-class LeadMonomialWrapper:
-    """A wrapper for Buchberger environments that returns lead monomials as vectors."""
-    
-    def __init__(self, env):
-        self.env = env
-        self.state = None
-        
-    def reset(self):
-        self.state = self.env.reset()
-        return monomial_tensor(self.state, self.env.order)
-    
-    def step(self, action):
-        G, P = self.state
-        action = P[action]
-        self.state, reward, done, info = self.env.step(action)
-        return monomial_tensor(self.state, self.env.order), reward, done, info
-    
-    
-def pair_degree(pair, G, order):
-    """Return the degree of the lcm of the lead monomials of the pair."""
-    f, g = G[pair[0]], G[pair[1]]
-    lcm = sp.lcm(lm(f, order), lm(g, order))
-    return sum(sp.degree_list(lcm))
-
-
-def pair_normal_tuple(pair, G, order):
-    """Return a tuple which gives ordering of lcm of pair in given order."""
-    f, g = G[pair[0]], G[pair[1]]
-    lcm = sp.lcm(lm(f, order), lm(g, order))
-    vec = sp.degree_list(lcm)
-    if order == 'lex':
-        return vec
-    elif order == 'grlex':
-        return sum(vec), vec
-    elif order == 'grevlex':
-        return sum(vec), tuple(reversed([-x for x in vec]))
-
-
 class BuchbergerAgent:
+    """An agent that follows standard selection strategies."""
     
-    def __init__(self, strategy='normal', order='grevlex'):
-        self.strategy = strategy
-        self.order = order
+    def __init__(self, selection='normal'):
+        self.strategy = selection
         
     def act(self, state):
         G, P = state
-        if self.strategy == 'first':
-            return min(P, key=lambda p: (p[1], p[0]))
-        elif self.strategy == 'random':
-            return P[np.random.randint(len(P))]
-        elif self.strategy == 'degree':
-            return min(P, key=lambda p: pair_degree(p, G, self.order))
-        elif self.strategy == 'normal':
-            return min(P, key=lambda p: pair_normal_tuple(p, G, self.order))
-
-
-def random_partition(n, k):
-    """Use bars and stars to get a random partition of integer n into k pieces."""
-    bars = np.random.choice(n+k-1, k-1, replace=False)
-    bars.sort()
-
-    counts = np.empty(k, dtype=int)
-    counts[0] = bars[0]
-    for i in range(1, len(bars)):
-        counts[i] = bars[i] - bars[i-1] - 1
-    counts[k-1] = n + k - 1 - bars[-1] - 1
-
-    return counts
-
-
-def exponent_to_monomial(exponent, variables):
-    """Convert an exponent vector (as a list) into a monomial in variables."""
-    return np.product([x**k for x, k in zip(variables, exponent)])
-
-
-def random_binomial(degree, variables):
-    """Return a random binomial in variables in given degree."""
-    n = len(variables)
-    m1 = exponent_to_monomial(random_partition(degree, n), variables)
-    m2 = exponent_to_monomial(random_partition(degree, n), variables)
-    while m2 == m1:
-        m2 = exponent_to_monomial(random_partition(degree, n), variables)
-    return m1 + m2
+        return select(G, P, strategy=self.strategy)
