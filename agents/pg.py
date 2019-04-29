@@ -1,122 +1,84 @@
 # pg.py
 # Dylan Peifer
-# 14 Mar 2019
-"""Basic policy gradient agents."""
+# 29 Apr 2019
+"""Basic policy gradient agent."""
 
 import numpy as np
 import tensorflow as tf
 
 
-class ExperienceBuffer:
-    """A buffer to store trajectories."""
-    
-    def __init__(self, capacity, state_shape, action_dim, gamma=0.99, rewards_to_go=True, normalize=True):
-        self.states = np.empty([capacity, state_shape])
-        self.actions = np.empty([capacity, action_dim])
-        self.rewards = np.empty(capacity)
-        self.index = 0
+def discount_rewards(rewards, gamma):
+    """Discount the array of rewards by gamma in-place."""
+    cumulative_reward = 0
+    for i in reversed(range(len(rewards))):
+        cumulative_reward = rewards[i] + gamma * cumulative_reward
+        rewards[i] = cumulative_reward
+    return rewards
+
+
+class TrajectoryBuffer:
+    """A buffer for storing trajectories and computing advantages."""
+
+    def __init__(self, capacity, gamma, lam, rewards_to_go=True, normalize=True):
+        self.capacity = capacity
+        self.gamma = gamma
+        self.lam = lam
+        self.states = np.empty(shape=capacity, dtype=np.object)
+        self.actions = np.empty(shape=capacity, dtype=np.int16)
+        self.rewards = np.empty(shape=capacity, dtype=np.float32)
+        self.values = np.empty(shape=capacity, dtype=np.float32)       
         self.start = 0
-    
-    def store(self, state, action, reward):
-        self.states[self.index] = state
-        self.actions[self.index] = action
-        self.rewards[self.index] = reward
-        self.index += 1
-    
-    def finishTrajectory(self):
-        if self.rewards_to_go:
-            for i in reversed(range(self.start, self.index)):
-                cumulative_reward = self.rewards[i] + self.gamma * cumulative_reward
-                rewards[i] = cumulative_reward
-        self.index += 1
-        self.start = self.index
+        self.end = 0
+
+    def store(self, state, action, reward, value):
+        """Store the information from one state."""
+        if self.end == self.capacity:
+            return
+        self.states[self.end] = state
+        self.actions[self.end] = action
+        self.rewards[self.end] = reward
+        self.values[self.end] = value
+        self.end += 1
+
+    def finish(self):
+        """Finish a trajectory and compute discounted rewards and advantages."""
+        values = np.append(self.values[self.start:self.end], 0)
+        rewards = self.rewards[self.start:self.end]
+
+        # values are now GAE values
+        delta = rewards + self.gamma * values[1:] - values[:-1]
+        discount_rewards(delta, self.gamma * self.lam)
+        self.values[self.start:self.end] = delta
+
+        # rewards are now discounted rewards
+        discount_rewards(self.rewards[self.start:self.end], self.gamma)
+
+        self.start = self.end
     
     def get(self):
-        states = self.states[:index]
-        rewards = self.rewards[:index]
-        if self.normalize:
-            rewards = (rewards - np.mean(rewards)) / np.std(rewards)
-        return states, rewards
+        """Return all the finished trajectories with advantages normalized."""
+        final = self.start
+        self.start, self.end = 0, 0
+        m = np.mean(self.values[:final])
+        s = np.std(self.values[:final])
+        self.values[:final] -= m
+        self.values[:final] /= s
+        return self.states[:final], self.actions[:final], self.rewards[:final], self.values[:final]
 
 
 class PGAgent:
-    """A basic policy gradient agent."""
-
-    def __init__(self, network, learning_rate=0.00025, gamma=0.99, rewards_to_go=True, normalize=True):
-        self.policyModel = self._buildPolicyModel(network, learning_rate)
-        self.gamma = gamma
-        self.buffer = ExperienceBuffer(state_shape, action_dim, gamma, rewards_to_go, normalize)
-        self.rewards_to_go = rewards_to_go
-        self.normalize = normalize
-
-    def act(self, state):
-        """Choose an action for the given state."""
-        probs = self.policyModel.predict(np.expand_dims(state, axis=0))[0]
-        return np.random.choice(len(probs), p=probs)
-
-    def train(self, env, episodes):
-        """Train the agent using policy gradients."""
-        rewards = np.zeros(episodes)
-
-        # generate rollouts
-        for i in range(episodes):
-            state = env.reset()
-            done = False
-            while not done:
-                action = self.act(state)
-                next_state, reward, done, _ = env.step(action)
-                self.buffer.store(state, action, reward)
-                state = next_state
-                rewards[i] += reward
-            self.buffer.finishTrajectory()
-
-        # produce the advantage vectors
-        states, advantages = self.buffer.get()
-
-        # fit to advantages to update policy
-        self.policyModel.fit(states, advantages, verbose=0)
-
-        return rewards
-
-    def test(self, env, episodes, render=False):
-        """Test the agent for given episodes on given environment."""
-        rewards = np.zeros(episodes)
-        for i in range(episodes):
-            state = env.reset()
-            done = False
-            while not done:
-                action = self.act(state)
-                state, reward, done, _ = env.step(action)
-                rewards[i] += reward
-                if render:
-                    env.render()
-        return rewards
-
-    def savePolicyModel(self, name):
-        self.policyModel.save_weights(name)
-
-    def loadPolicyModel(self, name):
-        self.policyModel.load_weights(name)
-
-    def _buildPolicyModel(self, network, learning_rate):
-        model = tf.keras.models.clone_model(network)
-        loss = 'categorical_crossentropy'
-        optimizer = tf.keras.optimizers.Adam(learning_rate)
-        model.compile(loss=loss, optimizer=optimizer)
-        return model
-
-
-class VPGAgent:
-    """A vanilla policy gradient agent."""
+    """A policy gradient agent."""
 
     def __init__(self, policy_network, value_network,
-                 policy_learning_rate=0.00025, value_learning_rate=0.0025,
-                 gamma=0.99, lam=0.95):
-        self.action_size = policy_network.output_shape[1]
+                 policy_learning_rate=0.00025, value_learning_rate=0.001,
+                 gam=0.99, lam=0.95, value_fits_per_epoch=10, capacity=100000,
+                 rewards_to_go=True, normalize=True):
         self.policyModel = self._buildPolicyModel(policy_network, policy_learning_rate)
         self.valueModel = self._buildValueModel(value_network, value_learning_rate)
-        self.gamma = gamma
+        self.gam = gam
         self.lam = lam
+        self.value_fits_per_epoch = value_fits_per_epoch
+        self.buf = TrajectoryBuffer(capacity, gam, lam)
 
     def act(self, state):
         """Choose an action for the given state."""
@@ -125,56 +87,48 @@ class VPGAgent:
 
     def train(self, env, episodes):
         """Train the agent using policy gradients."""
-        rewards_out = np.zeros(episodes)
+        reward_out = np.zeros(episodes)
 
-        total_states = []
-        total_actions = []
-        total_rewards = []
-        total_deltas = []
-
-        # generate rollouts and discounted rewards
+        # generate rollouts and store in buffer
         for i in range(episodes):
             state = env.reset()
             done = False
-            states = []
-            actions = []
-            rewards = []
             while not done:
                 action = self.act(state)
                 next_state, reward, done, _ = env.step(action)
-                states += [state]
-                actions += [action]
-                rewards += [reward]
+                value = -1 * self.valueModel.predict(np.expand_dims(state, axis=0))  # TODO: move -1 to net
+                self.buf.store(state, action, reward, value)
+                reward_out[i] += reward
                 state = next_state
-                rewards_out[i] += reward
-                
-            # compute GAE
-            values = self.valueModel.predict(np.array(states))
-            delta = np.expand_dims(np.array(rewards), axis=1) - values
-            delta[:-1] = delta[:-1] + self.gamma * values[1:]
-            delta = discounted_rewards(delta, self.gamma * self.lam)
+            self.buf.finish()
+
+        states, actions, rewards, advantages = self.buf.get()
+        
+        # find indices corresponding to each size
+        batches = {}
+        for i in range(len(states)):
+            size = states[i].shape[0]
+            batches.setdefault(size, []).append(i)
+
+        # fit to advantages to perform policy update
+        for size in batches:
+            if size == 1:
+                continue
+            s = np.stack(states[batches[size]])
+            adv = np.zeros((len(s), size))
+            adv[np.arange(len(s)), actions[batches[size]]] = advantages[batches[size]]
+            self.policyModel.fit(s, adv, verbose=0)
             
-            rewards = discounted_rewards(rewards, self.gamma)
+        # fit to discounted rewards to perform value update
+        for _ in range(self.value_fits_per_epoch):
+            for size in batches:
+                s = np.stack(states[batches[size]])
+                r = np.expand_dims(rewards[batches[size]], axis=1)
+                self.valueModel.fit(s, r, verbose=0)
 
-            total_states += states
-            total_actions += actions
-            total_rewards += rewards
-            total_deltas += delta
+        return reward_out
 
-        # produce the advantage vectors
-        advantages = np.zeros((len(total_rewards), self.action_size))
-        for i in range(len(total_rewards)):
-            advantages[i][total_actions[i]] = total_deltas[i]
-
-        # fit to advantages to update policy
-        self.policyModel.fit(np.array(total_states), advantages, verbose=0)
-
-        # fit to rewards to update value
-        self.valueModel.fit(np.array(total_states), np.array(total_rewards), verbose=0)
-
-        return rewards_out
-
-    def test(self, env, episodes, render=False):
+    def test(self, env, episodes):
         """Test the agent for given episodes on given environment."""
         rewards = np.zeros(episodes)
         for i in range(episodes):
@@ -184,16 +138,19 @@ class VPGAgent:
                 action = self.act(state)
                 state, reward, done, _ = env.step(action)
                 rewards[i] += reward
-                if render:
-                    env.render()
-                    time.sleep(0.05)
         return rewards
 
-    def savePolicyModel(self, name):
-        self.policyModel.save_weights(name)
+    def loadPolicyModel(self, filename):
+        self.policyModel.load_weights(filename)
 
-    def loadPolicyModel(self, name):
-        self.policyModel.load_weights(name)
+    def savePolicyModel(self, filename):
+        self.policyModel.save_weights(filename)
+
+    def loadValueModel(self, filename):
+        self.valueModel.load_weights(filename)
+
+    def saveValueModel(self, filename):
+        self.valueModel.save_weights(filename)
 
     def _buildPolicyModel(self, network, learning_rate):
         model = tf.keras.models.clone_model(network)
