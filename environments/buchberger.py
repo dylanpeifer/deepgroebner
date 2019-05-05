@@ -1,6 +1,6 @@
 # buchberger.py
 # Dylan Peifer
-# 28 Apr 2019
+# 05 May 2019
 """An environment for computing Groebner bases with Buchberger's algorithm."""
 
 import numpy as np
@@ -44,12 +44,14 @@ def select(G, P, strategy='normal'):
             return sum(lcm)
         elif s == 'random':
             return np.random.rand()
+        else:
+            raise ValueError('unknown selection strategy')
 
     return min(P, key=lambda p: tuple(strategy_key(p, s) for s in strategy))
 
 
 def update(G, P, f, strategy='gebauermoeller'):
-    """Return the updated list of polynomials and set of pairs when f is added to the basis G."""
+    """Return the new list of polynomials and set of pairs when f is added to the basis G."""
     lf = f.LM
     R = f.ring
     lcm = R.monomial_lcm
@@ -75,6 +77,8 @@ def update(G, P, f, strategy='gebauermoeller'):
         for L in minimalized_lcms:
             if not any(lcm(G[i].LM, lf) == mul(G[i].LM, lf) for i in lcm_dict[L]):
                 P_.add((min(lcm_dict[L]), len(G)))
+    else:
+        raise ValueError('unknown elimination strategy')
 
     return G + [f], P | P_
 
@@ -168,3 +172,52 @@ class BuchbergerAgent:
     def act(self, state):
         G, P = state
         return select(G, P, strategy=self.strategy)
+
+
+def lead_monomials_vector(g, k=1):
+    """Return the concatenated exponent vectors of the k lead monomials of g."""
+    n = g.ring.ngens
+    it = iter(g.monoms())
+    return np.array([next(it, (0,) * n) for _ in range(k)]).flatten()
+
+
+class LeadMonomialsWrapper():
+    """A wrapper for BuchbergerEnv with state a matrix of the pairs' lead monomials."""
+
+    def __init__(self, env, k=1):
+        self.env = env
+        self.k = k
+        self.pairs = []       # list of current pairs
+        self.m = 0            # size of current basis
+        self.leads = {}       # leads[i] = lead_monomials_vector(env.G[i])
+        self.pair_leads = {}  # pair_leads[(i, j)] = np.concatenate([leads[i], leads[j]])
+
+    def reset(self, F=None):
+        G, P = self.env.reset(F=F)
+        self.pairs = list(P)
+        self.m = len(G)
+        self.leads = {i: lead_monomials_vector(G[i]) for i in range(self.m)}
+        self.pair_leads = {(i, j): np.concatenate([self.leads[i], self.leads[j]])
+                           for i in range(self.m) for j in range(i+1, self.m)}
+        return self._matrix()
+
+    def step(self, action):
+        (G, P), reward, done, info = self.env.step(self.pairs[action])
+        self.pairs = list(P)
+        if len(G) > self.m:
+            self.m += 1
+            self.leads[self.m-1] = lead_monomials_vector(G[self.m-1])
+            new_pairs = {(i, self.m-1): np.concatenate([self.leads[i], self.leads[self.m-1]])
+                         for i in range(self.m-1)}
+            self.pair_leads.update(new_pairs)
+        return self._matrix(), reward, done, info
+
+    def render(self):
+        self.env.render()
+
+    def _matrix(self):
+        if self.pairs:
+            return np.array([self.pair_leads[p] for p in self.pairs])
+        else:
+            n = self.env.G[0].ring.ngens
+            return np.zeros((0, 2*n*self.k))

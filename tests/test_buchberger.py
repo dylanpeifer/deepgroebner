@@ -1,6 +1,6 @@
 # test_buchberger.py
 # Dylan Peifer
-# 28 Apr 2019
+# 05 May 2019
 """Tests for Buchberger environments."""
 
 import pytest
@@ -268,3 +268,55 @@ def test_episode_2(s, reward):
     env = BuchbergerEnv(f, ring=R)
     agent = BuchbergerAgent(selection=s)
     assert run_episode(agent, env) == reward
+
+
+@pytest.mark.parametrize("g, k, v", [
+    (R1.one, 1, [0, 0, 0]),
+    (R2.zero, 2, [0, 0, 0, 0, 0, 0, 0, 0]),
+    (x*y, 1, [1, 1, 0]),
+    (x*y, 3, [1, 1, 0, 0, 0, 0, 0, 0, 0]),
+    (x*y**2*z + x**3 + z + 1, 1, [1, 2, 1]),
+    (x*y**2*z + x**3 + z + 1, 2, [1, 2, 1, 3, 0, 0]),
+    (x*y**2*z + x**3 + z + 1, 4, [1, 2, 1, 3, 0, 0, 0, 0, 1, 0, 0, 0]),
+    (b*d**5 + a**3, 1, [3, 0, 0, 0]),
+    (b*d**5 + a**3, 3, [3, 0, 0, 0, 0, 1, 0, 5, 0, 0, 0, 0]),
+    (u**3*v + t**2, 1, [0, 3, 1]),
+    (u**3*v + t**2, 2, [0, 3, 1, 2, 0, 0]),
+])
+def test_lead_monomials_vector(g, k, v):
+    assert np.array_equal(lead_monomials_vector(g, k=k), np.array(v))
+
+
+def test_LeadMonomialsWrapper_0():
+    R, x, y, z = sp.ring('x,y,z', sp.FF(101), 'grevlex')
+    f = lambda R: [y - x**2, z - x**3]
+    env = LeadMonomialsWrapper(BuchbergerEnv(f, ring=R, elimination='none'))
+    state = env.reset()
+    assert np.array_equal(state, np.array([[2, 0, 0, 3, 0, 0]]))
+    state, _, done, _ = env.step(0)
+    assert (np.array_equal(state, np.array([[2, 0, 0, 1, 1, 0], [3, 0, 0, 1, 1, 0]])) or
+            np.array_equal(state, np.array([[3, 0, 0, 1, 1, 0], [2, 0, 0, 1, 1, 0]])))
+    assert not done
+    action = 0 if np.array_equal(state[0], np.array([3, 0, 0, 1, 1, 0])) else 1
+    state, _, done, _ = env.step(action)
+    assert np.array_equal(state, np.array([[2, 0, 0, 1, 1, 0]]))
+    assert not done
+    for _ in range(4):
+        state, _, done, _ = env.step(0)
+    assert done
+
+
+def test_LeadMonomialsWrapper_1():
+    R, x, y, z = sp.ring('x,y,z', sp.FF(101), 'grevlex')
+    f = lambda R: [y - x**2, z - x**3]
+    env = LeadMonomialsWrapper(BuchbergerEnv(f, ring=R))
+    state = env.reset()
+    assert np.array_equal(state, np.array([[2, 0, 0, 3, 0, 0]]))
+    state, _, done, _ = env.step(0)
+    assert np.array_equal(state, np.array([[2, 0, 0, 1, 1, 0]]))
+    assert not done
+    state, _, done, _ = env.step(0)
+    assert np.array_equal(state, np.array([[1, 1, 0, 0, 2, 0]]))
+    assert not done
+    state, _, done, _ = env.step(0)
+    assert done
