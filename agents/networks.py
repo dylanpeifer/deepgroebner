@@ -1,9 +1,8 @@
 # networks.py
 # Dylan Peifer
-# 29 Apr 2019
+# 05 May 2019
 """Neural networks for agents."""
 
-from math import factorial
 import tensorflow as tf
 
 
@@ -18,10 +17,10 @@ def MultilayerPerceptron(input_dim, hidden_layers, output_dim, activation='relu'
 
 def ParallelMultilayerPerceptron(input_dim, hidden_layers, activation='relu', final_activation='softmax'):
     model = tf.keras.models.Sequential()
-    model.add(tf.keras.layers.InputLayer(input_shape=(None, 1, input_dim)))
+    model.add(tf.keras.layers.InputLayer(input_shape=(None, input_dim)))
     for hidden in hidden_layers:
-        model.add(tf.keras.layers.Conv2D(hidden, 1, activation=activation))
-    model.add(tf.keras.layers.Conv2D(1, 1, activation='linear'))
+        model.add(tf.keras.layers.Conv1D(hidden, 1, activation=activation))
+    model.add(tf.keras.layers.Conv1D(1, 1, activation='linear'))
     model.add(tf.keras.layers.Flatten())
     model.add(tf.keras.layers.Activation(final_activation))
     return model
@@ -32,6 +31,22 @@ def CountTensor(input_shape, i):
         tf.keras.layers.Lambda(lambda x: tf.fill((tf.shape(x)[0], 1), tf.cast(tf.shape(x)[i], tf.float32)),
                                input_shape=input_shape)
     ])
+    return model
+
+
+def ValueRNN(input_dim, size, cell='lstm', final_activation='linear', gpu=False):
+    model = tf.keras.models.Sequential()
+    if gpu:
+        if cell == 'lstm':
+            model.add(tf.keras.layers.CuDNNLSTM(size, input_shape=(None, input_dim)))
+        elif cell == 'gru':
+            model.add(tf.keras.layers.CuDNNGRU(size, input_shape=(None, input_dim)))
+    else:
+        if cell == 'lstm':
+            model.add(tf.keras.layers.LSTM(size, input_shape=(None, input_dim)))
+        elif cell == 'gru':
+            model.add(tf.keras.layers.GRU(size, input_shape=(None, input_dim)))
+    model.add(tf.keras.layers.Dense(1, activation=final_activation))
     return model
 
 
