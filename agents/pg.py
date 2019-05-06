@@ -1,14 +1,14 @@
 # pg.py
 # Dylan Peifer
-# 29 Apr 2019
-"""Basic policy gradient agent."""
+# 06 May 2019
+"""Policy gradient agent that supports changing state shapes."""
 
 import numpy as np
 import tensorflow as tf
 
 
 def discount_rewards(rewards, gamma):
-    """Discount the array of rewards by gamma in-place."""
+    """Discount the list or array of rewards by gamma in-place."""
     cumulative_reward = 0
     for i in reversed(range(len(rewards))):
         cumulative_reward = rewards[i] + gamma * cumulative_reward
@@ -17,125 +17,118 @@ def discount_rewards(rewards, gamma):
 
 
 class TrajectoryBuffer:
-    """A buffer for storing trajectories and computing advantages."""
+    """A buffer to store and compute with trajectories."""
 
-    def __init__(self, capacity, gamma, lam, rewards_to_go=True, normalize=True):
-        self.capacity = capacity
-        self.gamma = gamma
+    def __init__(self, gam, lam):
+        self.gam = gam
         self.lam = lam
-        self.states = np.empty(shape=capacity, dtype=np.object)
-        self.actions = np.empty(shape=capacity, dtype=np.int16)
-        self.rewards = np.empty(shape=capacity, dtype=np.float32)
-        self.values = np.empty(shape=capacity, dtype=np.float32)       
+        self.states = []
+        self.actions = []
+        self.rewards = []
+        self.values = []
         self.start = 0
         self.end = 0
 
     def store(self, state, action, reward, value):
-        """Store the information from one state."""
-        if self.end == self.capacity:
-            return
-        self.states[self.end] = state
-        self.actions[self.end] = action
-        self.rewards[self.end] = reward
-        self.values[self.end] = value
+        self.states.append(state)
+        self.actions.append(action)
+        self.rewards.append(reward)
+        self.values.append(value)
         self.end += 1
 
     def finish(self):
-        """Finish a trajectory and compute discounted rewards and advantages."""
-        values = np.append(self.values[self.start:self.end], 0)
-        rewards = self.rewards[self.start:self.end]
+        """Finish an episode and compute advantages and discounted rewards."""
+        # TODO
+        pass
 
-        # values are now GAE values
-        delta = rewards + self.gamma * values[1:] - values[:-1]
-        discount_rewards(delta, self.gamma * self.lam)
-        self.values[self.start:self.end] = delta
+    def clear(self):
+        self.states.clear()
+        self.actions.clear()
+        self.rewards.clear()
+        self.values.clear()
+        self.start = 0
+        self.end = 0
 
-        # rewards are now discounted rewards
-        discount_rewards(self.rewards[self.start:self.end], self.gamma)
-
-        self.start = self.end
-    
-    def get(self):
-        """Return all the finished trajectories with advantages normalized."""
-        final = self.start
-        self.start, self.end = 0, 0
-        m = np.mean(self.values[:final])
-        s = np.std(self.values[:final])
-        self.values[:final] -= m
-        self.values[:final] /= s
-        return self.states[:final], self.actions[:final], self.rewards[:final], self.values[:final]
+    def makeBatches(self, action_dim_fn, normalize=True):
+        """Return a dictionary of state shapes to (states, rewards, advantages) batches."""
+        # TODO
+        pass
 
 
 class PGAgent:
     """A policy gradient agent."""
 
-    def __init__(self, policy_network, value_network,
-                 policy_learning_rate=0.00025, value_learning_rate=0.001,
-                 gam=0.99, lam=0.95, value_fits_per_epoch=10, capacity=100000,
-                 rewards_to_go=True, normalize=True):
+    def __init__(self, policy_network, policy_learning_rate=0.00025,
+                 value_network=None, value_learning_rate=0.001,
+                 gam=0.99, lam=0.97, normalize=True,
+                 value_updates_per_epoch=25, action_dim_fn=lambda s: s[0]):
         self.policyModel = self._buildPolicyModel(policy_network, policy_learning_rate)
-        self.valueModel = self._buildValueModel(value_network, value_learning_rate)
+        if value_network is None:
+            self.valueModel = None
+        else:
+            self.valueModel = self._buildValueModel(value_network, value_learning_rate)
         self.gam = gam
         self.lam = lam
-        self.value_fits_per_epoch = value_fits_per_epoch
-        self.buf = TrajectoryBuffer(capacity, gam, lam)
+        self.normalize = normalize
+        self.value_updates_per_epoch = value_updates_per_epoch
+        self.action_dim_fn = action_dim_fn
 
-    def act(self, state):
-        """Choose an action for the given state."""
+    def act(self, state, greedy=False):
+        """Return an action for the given state."""
         probs = self.policyModel.predict(np.expand_dims(state, axis=0))[0]
-        return np.random.choice(len(probs), p=probs)
+        if greedy:
+            return np.argmax(probs)
+        else:
+            return np.random.choice(len(probs), p=probs)
 
-    def train(self, env, episodes):
+    def train(self, env, episodes, epochs=1, verbose=0, savedir=None, savefreq=1):
         """Train the agent using policy gradients."""
-        reward_out = np.zeros(episodes)
+        buf = TrajectoryBuffer(self.gam, self.lam)
+        for i in range(1, epochs + 1):
 
-        # generate rollouts and store in buffer
-        for i in range(episodes):
-            state = env.reset()
-            done = False
-            while not done:
-                action = self.act(state)
-                next_state, reward, done, _ = env.step(action)
-                value = -1 * self.valueModel.predict(np.expand_dims(state, axis=0))  # TODO: move -1 to net
-                self.buf.store(state, action, reward, value)
-                reward_out[i] += reward
-                state = next_state
-            self.buf.finish()
+            buf.clear()
+            total_reward = 0
+            for _ in range(episodes):
+                state = env.reset()
+                done = False
+                while not done:
+                    action = self.act(state)
+                    next_state, reward, done, _ = env.step(action)
+                    if self.valueModel is None:
+                        value = 0
+                    else:
+                        value = self.valueModel.predict(np.expand_dims(state, axis=0))[0]
+                    buf.store(state, action, reward, value)
+                    total_reward += reward
+                    state = next_state
+                buf.finish()
 
-        states, actions, rewards, advantages = self.buf.get()
-        
-        # find indices corresponding to each size
-        batches = {}
-        for i in range(len(states)):
-            size = states[i].shape[0]
-            batches.setdefault(size, []).append(i)
+            if verbose == 1:
+                print("\rEpoch: {}/{} - avg_reward: {}"
+                      .format(i, epochs, total_reward / episodes), end="")
 
-        # fit to advantages to perform policy update
-        for size in batches:
-            if size == 1:
-                continue
-            s = np.stack(states[batches[size]])
-            adv = np.zeros((len(s), size))
-            adv[np.arange(len(s)), actions[batches[size]]] = advantages[batches[size]]
-            self.policyModel.fit(s, adv, verbose=0)
-            
-        # fit to discounted rewards to perform value update
-        for _ in range(self.value_fits_per_epoch):
-            for size in batches:
-                s = np.stack(states[batches[size]])
-                r = np.expand_dims(rewards[batches[size]], axis=1)
-                self.valueModel.fit(s, r, verbose=0)
+            batches = buf.makeBatches(self.action_dim_fn, normalize=self.normalize)
+            for shape in batches:
+                self.policyModel.fit(batches[shape][0], batches[shape][2], verbose=0)
+            for _ in range(self.value_updates_per_epoch):
+                for shape in batches:
+                    self.valueModel.fit(batches[shape][0], batches[shape][1], verbose=0)
 
-        return reward_out
+            if savedir is not None:
+                with open(savedir + '/rewards.txt', 'a') as f:
+                    f.write(str(i) + ',' + str(r) + '\n')
+                if i % savefreq == 0:
+                    self.savePolicyModel(savedir + "/policy-" + str(i) + ".h5")
+                    self.saveValueModel(savedir + "/value-" + str(i) + ".h5")
 
-    def test(self, env, episodes):
-        """Test the agent for given episodes on given environment."""
+    def test(self, env, episodes=1, greedy=False):
+        """Test the agent for episodes on env and return array of total rewards."""
         rewards = np.zeros(episodes)
         for i in range(episodes):
             state = env.reset()
             done = False
             while not done:
-                action = self.act(state)
+                action = self.act(state, greedy=greedy)
                 state, reward, done, _ = env.step(action)
                 rewards[i] += reward
         return rewards
