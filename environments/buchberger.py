@@ -138,14 +138,14 @@ class BuchbergerEnv:
         self.G = []
         self.P = set()
 
-    def reset(self, F=None):
-        """Initialize the polynomial list and pair list from polynomials F."""
-        F = self.ideal_fn(self.ring) if F is None else F
+    def reset(self):
+        """Initialize the polynomial list and pair list for a new ideal from ideal_fn."""
+        F = self.ideal_fn(self.ring)
         self.G = []
         self.P = set()
         for f in F:
             self.G, self.P = update(self.G, self.P, f, strategy=self.elimination)
-        return self.G, self.P
+        return self.G, self.P if self.P else self.reset()
 
     def step(self, action):
         """Perform one reduction and return the new polynomial list and pair list."""
@@ -192,8 +192,8 @@ class LeadMonomialsWrapper():
         self.leads = {}       # leads[i] = lead_monomials_vector(env.G[i])
         self.pair_leads = {}  # pair_leads[(i, j)] = np.concatenate([leads[i], leads[j]])
 
-    def reset(self, F=None):
-        G, P = self.env.reset(F=F)
+    def reset(self):
+        G, P = self.env.reset()
         self.pairs = list(P)
         self.m = len(G)
         self.leads = {i: lead_monomials_vector(G[i]) for i in range(self.m)}
