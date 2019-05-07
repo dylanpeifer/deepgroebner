@@ -1,6 +1,6 @@
 # pg.py
 # Dylan Peifer
-# 06 May 2019
+# 07 May 2019
 """Policy gradient agent that supports changing state shapes."""
 
 import numpy as np
@@ -54,7 +54,7 @@ class TrajectoryBuffer:
         self.start = 0
         self.end = 0
 
-    def makeBatches(self, action_dim_fn, normalize=True):
+    def getBatches(self, action_dim_fn, normalize=True):
         """Return a dictionary of state shapes to (states, values, advantages) batches."""
         adv = np.array(self.values[:self.start])
         if normalize:
@@ -102,11 +102,11 @@ class PGAgent:
 
     def train(self, env, episodes, epochs=1, verbose=0, savedir=None, savefreq=1):
         """Train the agent using policy gradients."""
+        avg_rewards = np.zeros(epochs)
         buf = TrajectoryBuffer(self.gam, self.lam)
         for i in range(1, epochs + 1):
 
             buf.clear()
-            total_reward = 0
             for _ in range(episodes):
                 state = env.reset()
                 done = False
@@ -118,27 +118,31 @@ class PGAgent:
                     else:
                         value = self.valueModel.predict(np.expand_dims(state, axis=0))[0][0]
                     buf.store(state, action, reward, value)
-                    total_reward += reward
+                    avg_rewards[i-1] += reward
                     state = next_state
                 buf.finish()
+            avg_rewards[i-1] /= episodes
 
-            batches = buf.makeBatches(self.action_dim_fn, normalize=self.normalize)
+            batches = buf.getBatches(self.action_dim_fn, normalize=self.normalize)
             for shape in batches:
                 self.policyModel.fit(batches[shape][0], batches[shape][2], verbose=0)
-            for _ in range(self.value_updates_per_epoch):
-                for shape in batches:
-                    self.valueModel.fit(batches[shape][0], batches[shape][1], verbose=0)
+            if self.valueModel is not None:
+                for _ in range(self.value_updates_per_epoch):
+                    for shape in batches:
+                        self.valueModel.fit(batches[shape][0], batches[shape][1], verbose=0)
 
             if verbose == 1:
                 print("\rEpoch: {}/{} - avg_reward: {}"
-                      .format(i, epochs, total_reward / episodes), end="")
+                      .format(i, epochs, avg_rewards[i-1]), end="")
 
             if savedir is not None:
                 with open(savedir + '/rewards.txt', 'a') as f:
-                    f.write(str(i) + ',' + str(r) + '\n')
+                    f.write(str(i) + ',' + str(avg_rewards[i-1]) + '\n')
                 if i % savefreq == 0:
                     self.savePolicyModel(savedir + "/policy-" + str(i) + ".h5")
                     self.saveValueModel(savedir + "/value-" + str(i) + ".h5")
+                    
+        return avg_rewards
 
     def test(self, env, episodes=1, greedy=False):
         """Test the agent for episodes on env and return array of total rewards."""
