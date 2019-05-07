@@ -38,8 +38,13 @@ class TrajectoryBuffer:
 
     def finish(self):
         """Finish an episode and compute advantages and discounted rewards."""
-        # TODO
-        pass
+        tau = slice(self.start, self.end)
+        delta = np.array(self.rewards[tau], dtype=np.float)
+        delta -= np.array(self.values[tau])
+        delta[:-1] += self.gam * np.array(self.values[self.start+1:self.end])
+        self.values[tau] = list(discount_rewards(delta, self.gam * self.lam))
+        self.rewards[tau] = discount_rewards(self.rewards[tau], self.gam)
+        self.start = self.end
 
     def clear(self):
         self.states.clear()
@@ -50,9 +55,23 @@ class TrajectoryBuffer:
         self.end = 0
 
     def makeBatches(self, action_dim_fn, normalize=True):
-        """Return a dictionary of state shapes to (states, rewards, advantages) batches."""
-        # TODO
-        pass
+        """Return a dictionary of state shapes to (states, values, advantages) batches."""
+        adv = np.array(self.values[:self.start])
+        if normalize:
+            m, s = np.mean(adv), np.std(adv)
+            adv = (adv - m) / s
+        shapes = {}
+        for i, state in enumerate(self.states[:self.start]):
+            shapes.setdefault(state.shape, []).append(i)
+        batches = {}
+        for shape, indices in shapes.items():
+            states = np.array([self.states[i] for i in indices])
+            values = np.expand_dims(np.array([self.rewards[i] for i in indices]), axis=1)
+            advantages = np.zeros((len(indices), action_dim_fn(shape)))
+            actions = [self.actions[i] for i in indices]
+            advantages[np.arange(len(indices)), actions] = [adv[i] for i in indices]
+            batches[shape] = (states, values, advantages)
+        return batches
 
 
 class PGAgent:
@@ -97,15 +116,11 @@ class PGAgent:
                     if self.valueModel is None:
                         value = 0
                     else:
-                        value = self.valueModel.predict(np.expand_dims(state, axis=0))[0]
+                        value = self.valueModel.predict(np.expand_dims(state, axis=0))[0][0]
                     buf.store(state, action, reward, value)
                     total_reward += reward
                     state = next_state
                 buf.finish()
-
-            if verbose == 1:
-                print("\rEpoch: {}/{} - avg_reward: {}"
-                      .format(i, epochs, total_reward / episodes), end="")
 
             batches = buf.makeBatches(self.action_dim_fn, normalize=self.normalize)
             for shape in batches:
@@ -113,6 +128,10 @@ class PGAgent:
             for _ in range(self.value_updates_per_epoch):
                 for shape in batches:
                     self.valueModel.fit(batches[shape][0], batches[shape][1], verbose=0)
+
+            if verbose == 1:
+                print("\rEpoch: {}/{} - avg_reward: {}"
+                      .format(i, epochs, total_reward / episodes), end="")
 
             if savedir is not None:
                 with open(savedir + '/rewards.txt', 'a') as f:
