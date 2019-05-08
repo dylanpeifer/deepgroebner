@@ -125,6 +125,8 @@ class PGAgent:
 
             batches = buf.getBatches(self.action_dim_fn, normalize=self.normalize)
             for shape in batches:
+                if self.action_dim_fn(shape) == 1:
+                    continue
                 self.policyModel.fit(batches[shape][0], batches[shape][2], verbose=0)
             if self.valueModel is not None:
                 for _ in range(self.value_updates_per_epoch):
