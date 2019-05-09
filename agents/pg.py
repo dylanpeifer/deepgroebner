@@ -58,8 +58,8 @@ class TrajectoryBuffer:
         """Return a dictionary of state shapes to (states, values, advantages) batches."""
         adv = np.array(self.values[:self.start])
         if normalize:
-            m, s = np.mean(adv), np.std(adv)
-            adv = (adv - m) / s
+            adv -= np.mean(adv)
+            adv /= np.std(adv)
         shapes = {}
         for i, state in enumerate(self.states[:self.start]):
             shapes.setdefault(state.shape, []).append(i)

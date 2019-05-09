@@ -1,6 +1,6 @@
 # networks.py
 # Dylan Peifer
-# 05 May 2019
+# 08 May 2019
 """Neural networks for agents."""
 
 import tensorflow as tf
@@ -26,12 +26,23 @@ def ParallelMultilayerPerceptron(input_dim, hidden_layers, activation='relu', fi
     return model
 
 
-def CountTensor(input_shape, i):
+def StateShapeFunction(input_shape, f):
+    """A network that applies a function to the state shape."""
     model = tf.keras.Sequential([
-        tf.keras.layers.Lambda(lambda x: tf.fill((tf.shape(x)[0], 1), tf.cast(tf.shape(x)[i], tf.float32)),
-                               input_shape=input_shape)
+        tf.keras.layers.InputLayer(input_shape=input_shape),
+        tf.keras.layers.Lambda(lambda x:
+             tf.fill((tf.shape(x)[0], 1), f(tf.cast(tf.shape(x)[1:], dtype=tf.float32))))
     ])
     return model
+
+
+def PairsLeft(input_dim, gam=0.99):
+    """A value function baseline that returns discounted number of current pairs."""
+    if gam == 1:
+        f = lambda s: - s[0]
+    else:
+        f = lambda s: - (1 - gam**s[0]) / (1 - gam)
+    return StateShapeFunction((None, input_dim), f)
 
 
 def ValueRNN(input_dim, size, cell='lstm', final_activation='linear', gpu=False):
