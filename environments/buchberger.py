@@ -196,7 +196,7 @@ class LeadMonomialsWrapper():
         G, P = self.env.reset()
         self.pairs = list(P)
         self.m = len(G)
-        self.leads = {i: lead_monomials_vector(G[i]) for i in range(self.m)}
+        self.leads = {i: lead_monomials_vector(G[i], k=self.k) for i in range(self.m)}
         self.pair_leads = {(i, j): np.concatenate([self.leads[i], self.leads[j]])
                            for i in range(self.m) for j in range(i+1, self.m)}
         return self._matrix()
@@ -206,7 +206,7 @@ class LeadMonomialsWrapper():
         self.pairs = list(P)
         if len(G) > self.m:
             self.m += 1
-            self.leads[self.m-1] = lead_monomials_vector(G[self.m-1])
+            self.leads[self.m-1] = lead_monomials_vector(G[self.m-1], k=self.k)
             new_pairs = {(i, self.m-1): np.concatenate([self.leads[i], self.leads[self.m-1]])
                          for i in range(self.m-1)}
             self.pair_leads.update(new_pairs)
