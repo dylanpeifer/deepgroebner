@@ -1,8 +1,10 @@
 # networks.py
 # Dylan Peifer
-# 08 May 2019
+# 12 May 2019
 """Neural networks for agents."""
 
+import numpy as np
+from scipy.special import softmax
 import tensorflow as tf
 
 
@@ -15,34 +17,81 @@ def MultilayerPerceptron(input_dim, hidden_layers, output_dim, activation='relu'
     return model
 
 
-def ParallelMultilayerPerceptron(input_dim, hidden_layers, activation='relu', final_activation='softmax'):
-    model = tf.keras.models.Sequential()
-    model.add(tf.keras.layers.InputLayer(input_shape=(None, input_dim)))
-    for hidden in hidden_layers:
-        model.add(tf.keras.layers.Conv1D(hidden, 1, activation=activation))
-    model.add(tf.keras.layers.Conv1D(1, 1, activation='linear'))
-    model.add(tf.keras.layers.Flatten())
-    model.add(tf.keras.layers.Activation(final_activation))
-    return model
+class ParallelMultilayerPerceptron():
+
+    def __init__(self, input_dim, hidden_layers):
+        self.network = self._build_network(input_dim, hidden_layers)
+        self.weights = self.get_weights()
+
+    def predict(self, X, **kwargs):
+        for i, (m, b) in enumerate(self.weights):
+            X = np.dot(X, m) + b
+            if i == len(self.weights)-1:
+                X = softmax(X, axis=1).squeeze(axis=-1)
+            else:
+                X = np.maximum(X, 0, X)
+        return X
+
+    def fit(self, X, y, **kwargs):
+        self.network.fit(X, y, **kwargs)
+        self.weights = self.get_weights()
+
+    def compile(self, **kwargs):
+        self.network.compile(**kwargs)
+
+    def save_weights(self, filename):
+        self.network.save_weights(filename)
+
+    def load_weights(self, filename):
+        self.network.load_weights(filename)
+        self.weights = self.get_weights()
+
+    def get_weights(self):
+        network_weights = self.network.get_weights()
+        weights = []
+        for i in range(len(network_weights)//2):
+            m = network_weights[2*i].squeeze(axis=0)
+            b = network_weights[2*i + 1]
+            weights.append((m, b))
+        return weights
+
+    def _build_network(self, input_dim, hidden_layers):
+        model = tf.keras.models.Sequential()
+        model.add(tf.keras.layers.InputLayer(input_shape=(None, input_dim)))
+        for hidden in hidden_layers:
+            model.add(tf.keras.layers.Conv1D(hidden, 1, activation='relu'))
+        model.add(tf.keras.layers.Conv1D(1, 1, activation='linear'))
+        model.add(tf.keras.layers.Flatten())
+        model.add(tf.keras.layers.Activation('softmax'))
+        return model
 
 
-def StateShapeFunction(input_shape, f):
-    """A network that applies a function to the state shape."""
-    model = tf.keras.Sequential([
-        tf.keras.layers.InputLayer(input_shape=input_shape),
-        tf.keras.layers.Lambda(lambda x:
-             tf.fill((tf.shape(x)[0], 1), f(tf.cast(tf.shape(x)[1:], dtype=tf.float32))))
-    ])
-    return model
+class PairsLeft():
+    """A Buchberger value network that returns discounted pairs left."""
 
+    def __init__(self, gam=0.99):
+        self.gam = gam
 
-def PairsLeft(input_dim, gam=0.99):
-    """A value function baseline that returns discounted number of current pairs."""
-    if gam == 1:
-        f = lambda s: - s[0]
-    else:
-        f = lambda s: - (1 - gam**s[0]) / (1 - gam)
-    return StateShapeFunction((None, input_dim), f)
+    def predict(self, tensor):
+        states = tensor.shape[0]
+        pairs = tensor.shape[1]
+        if self.gam == 1:
+            fill_value = - pairs
+        else:
+            fill_value = - (1 - self.gam ** pairs) / (1 - self.gam)
+        return np.full((states, 1), fill_value)
+
+    def fit(self, *args, **kwargs):
+        pass
+
+    def compile(self, *args, **kwargs):
+        pass
+
+    def save_weights(self, filename):
+        pass
+
+    def load_weights(self, filename):
+        pass
 
 
 def ValueRNN(input_dim, size, cell='lstm', final_activation='linear', gpu=False):

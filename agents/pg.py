@@ -171,14 +171,14 @@ class PGAgent:
         self.valueModel.save_weights(filename)
 
     def _buildPolicyModel(self, network, learning_rate):
-        model = tf.keras.models.clone_model(network)
+        model = network
         loss = 'categorical_crossentropy'
         optimizer = tf.keras.optimizers.Adam(learning_rate)
         model.compile(loss=loss, optimizer=optimizer)
         return model
 
     def _buildValueModel(self, network, learning_rate):
-        model = tf.keras.models.clone_model(network)
+        model = network
         loss = 'mse'
         optimizer = tf.keras.optimizers.Adam(learning_rate)
         model.compile(loss=loss, optimizer=optimizer)
