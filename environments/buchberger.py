@@ -7,13 +7,15 @@ import numpy as np
 import sympy as sp
 
 
-def spoly(f, g):
+def spoly(f, g, lf=None, lg=None):
     """Return the s-polynomial of monic polynomials f and g."""
     assert f.ring == g.ring, "polynomials must be in same ring"
+    lf = f.LM if lf is None else lf
+    lg = g.LM if lg is None else lg
     R = f.ring
-    lcm = R.monomial_lcm(f.LM, g.LM)
-    s1 = f.mul_monom(R.monomial_div(lcm, f.LM))
-    s2 = g.mul_monom(R.monomial_div(lcm, g.LM))
+    lcm = R.monomial_lcm(lf, lg)
+    s1 = f.mul_monom(R.monomial_div(lcm, lf))
+    s2 = g.mul_monom(R.monomial_div(lcm, lg))
     return s1 - s2
 
 
@@ -111,17 +113,20 @@ def buchberger(F, selection='normal', elimination='gebauermoeller'):
     assert all(f.ring == R for f in F), "polynomials must be in same ring"
 
     G = []
+    lmG = []
     P = set()
     for f in F:
         G, P = update(G, P, f.monic(), strategy=elimination)
+        lmG.append(f.LM)
 
     while P:
         i, j = select(G, P, strategy=selection)
         P.remove((i, j))
-        s = spoly(G[i], G[j])
+        s = spoly(G[i], G[j], lf=lmG[i], lg=lmG[j])
         r, _ = reduce(s, G)
         if r != 0:
             G, P = update(G, P, r.monic(), strategy=elimination)
+            lmG.append(r.LM)
 
     return interreduce(minimalize(G))
 
@@ -142,19 +147,22 @@ class BuchbergerEnv:
         """Initialize the polynomial list and pair list for a new ideal from ideal_fn."""
         F = self.ideal_fn(self.ring)
         self.G = []
+        self.lmG = []
         self.P = set()
         for f in F:
             self.G, self.P = update(self.G, self.P, f.monic(), strategy=self.elimination)
+            self.lmG.append(f.LM)
         return self.G, self.P if self.P else self.reset()
 
     def step(self, action):
         """Perform one reduction and return the new polynomial list and pair list."""
         i, j = action
         self.P.remove((i, j))
-        s = spoly(self.G[i], self.G[j])
+        s = spoly(self.G[i], self.G[j], lf=self.lmG[i], lg=self.lmG[j])
         r, _ = reduce(s, self.G)
         if r != 0:
             self.G, self.P = update(self.G, self.P, r.monic(), strategy=self.elimination)
+            self.lmG.append(r.LM)
         return (self.G, self.P), -1, len(self.P) == 0, {}
 
     def render(self):
