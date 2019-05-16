@@ -1,6 +1,6 @@
 # buchberger.py
 # Dylan Peifer
-# 05 May 2019
+# 16 May 2019
 """An environment for computing Groebner bases with Buchberger's algorithm."""
 
 import numpy as np
@@ -8,12 +8,12 @@ import sympy as sp
 
 
 def spoly(f, g):
-    """Return the s-polynomial of polynomials f and g."""
+    """Return the s-polynomial of monic polynomials f and g."""
     assert f.ring == g.ring, "polynomials must be in same ring"
     R = f.ring
     lcm = R.monomial_lcm(f.LM, g.LM)
-    s1 = f.mul_monom(R.monomial_div(lcm, f.LM)).quo_ground(f.LC)
-    s2 = g.mul_monom(R.monomial_div(lcm, g.LM)).quo_ground(g.LC)
+    s1 = f.mul_monom(R.monomial_div(lcm, f.LM))
+    s2 = g.mul_monom(R.monomial_div(lcm, g.LM))
     return s1 - s2
 
 
@@ -113,7 +113,7 @@ def buchberger(F, selection='normal', elimination='gebauermoeller'):
     G = []
     P = set()
     for f in F:
-        G, P = update(G, P, f, strategy=elimination)
+        G, P = update(G, P, f.monic(), strategy=elimination)
 
     while P:
         i, j = select(G, P, strategy=selection)
@@ -121,7 +121,7 @@ def buchberger(F, selection='normal', elimination='gebauermoeller'):
         s = spoly(G[i], G[j])
         r, _ = reduce(s, G)
         if r != 0:
-            G, P = update(G, P, r, strategy=elimination)
+            G, P = update(G, P, r.monic(), strategy=elimination)
 
     return interreduce(minimalize(G))
 
@@ -144,7 +144,7 @@ class BuchbergerEnv:
         self.G = []
         self.P = set()
         for f in F:
-            self.G, self.P = update(self.G, self.P, f, strategy=self.elimination)
+            self.G, self.P = update(self.G, self.P, f.monic(), strategy=self.elimination)
         return self.G, self.P if self.P else self.reset()
 
     def step(self, action):
@@ -154,7 +154,7 @@ class BuchbergerEnv:
         s = spoly(self.G[i], self.G[j])
         r, _ = reduce(s, self.G)
         if r != 0:
-            self.G, self.P = update(self.G, self.P, r, strategy=self.elimination)
+            self.G, self.P = update(self.G, self.P, r.monic(), strategy=self.elimination)
         return (self.G, self.P), -1, len(self.P) == 0, {}
 
     def render(self):
