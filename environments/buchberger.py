@@ -7,15 +7,15 @@ import numpy as np
 import sympy as sp
 
 
-def spoly(f, g, lf=None, lg=None):
+def spoly(f, g, lmf=None, lmg=None):
     """Return the s-polynomial of monic polynomials f and g."""
     assert f.ring == g.ring, "polynomials must be in same ring"
-    lf = f.LM if lf is None else lf
-    lg = g.LM if lg is None else lg
+    lmf = f.LM if lmf is None else lmf
+    lmg = g.LM if lmg is None else lmg
     R = f.ring
-    lcm = R.monomial_lcm(lf, lg)
-    s1 = f.mul_monom(R.monomial_div(lcm, lf))
-    s2 = g.mul_monom(R.monomial_div(lcm, lg))
+    lcm = R.monomial_lcm(lmf, lmg)
+    s1 = f.mul_monom(R.monomial_div(lcm, lmf))
+    s2 = g.mul_monom(R.monomial_div(lcm, lmg))
     return s1 - s2
 
 
@@ -52,9 +52,10 @@ def select(G, P, strategy='normal'):
     return min(P, key=lambda p: tuple(strategy_key(p, s) for s in strategy))
 
 
-def update(G, P, f, strategy='gebauermoeller'):
+def update(G, P, f, lmG=None, strategy='gebauermoeller'):
     """Return the new list of polynomials and set of pairs when f is added to the basis G."""
-    lf = f.LM
+    lmf = f.LM
+    lmG = [g.LM for g in G] if lmG is None else lmG
     R = f.ring
     lcm = R.monomial_lcm
     mul = R.monomial_mul
@@ -63,21 +64,21 @@ def update(G, P, f, strategy='gebauermoeller'):
     if strategy == 'none':
         P_ = {(i, len(G)) for i in range(len(G))}
     elif strategy == 'lcm':
-        P_ = {(i, len(G)) for i in range(len(G)) if lcm(G[i].LM, lf) != mul(G[i].LM, lf)}
+        P_ = {(i, len(G)) for i in range(len(G)) if lcm(lmG[i], lmf) != mul(lmG[i], lmf)}
     elif strategy == 'gebauermoeller':
-        P = {p for p in P if (not div(lcm(G[p[0]].LM, G[p[1]].LM), lf) or
-                              lcm(G[p[0]].LM, G[p[1]].LM) == lcm(G[p[0]].LM, lf) or
-                              lcm(G[p[0]].LM, G[p[1]].LM) == lcm(G[p[1]].LM, lf))}
+        P = {p for p in P if (not div(lcm(lmG[p[0]], lmG[p[1]]), lmf) or
+                              lcm(lmG[p[0]], lmG[p[1]]) == lcm(lmG[p[0]], lmf) or
+                              lcm(lmG[p[0]], lmG[p[1]]) == lcm(lmG[p[1]], lmf))}
         lcm_dict = {}
         for i in range(len(G)):
-            lcm_dict.setdefault(lcm(G[i].LM, lf), []).append(i)
+            lcm_dict.setdefault(lcm(lmG[i], lmf), []).append(i)
         minimalized_lcms = []
         for L in sorted(lcm_dict.keys(), key=R.order):
             if all(not div(L, L_) for L_ in minimalized_lcms):
                 minimalized_lcms.append(L)
         P_ = set()
         for L in minimalized_lcms:
-            if not any(lcm(G[i].LM, lf) == mul(G[i].LM, lf) for i in lcm_dict[L]):
+            if not any(lcm(lmG[i], lmf) == mul(lmG[i], lmf) for i in lcm_dict[L]):
                 P_.add((min(lcm_dict[L]), len(G)))
     else:
         raise ValueError('unknown elimination strategy')
@@ -122,10 +123,10 @@ def buchberger(F, selection='normal', elimination='gebauermoeller'):
     while P:
         i, j = select(G, P, strategy=selection)
         P.remove((i, j))
-        s = spoly(G[i], G[j], lf=lmG[i], lg=lmG[j])
+        s = spoly(G[i], G[j], lmf=lmG[i], lmg=lmG[j])
         r, _ = reduce(s, G)
         if r != 0:
-            G, P = update(G, P, r.monic(), strategy=elimination)
+            G, P = update(G, P, r.monic(), lmG=lmG, strategy=elimination)
             lmG.append(r.LM)
 
     return interreduce(minimalize(G))
@@ -150,7 +151,7 @@ class BuchbergerEnv:
         self.lmG = []
         self.P = set()
         for f in F:
-            self.G, self.P = update(self.G, self.P, f.monic(), strategy=self.elimination)
+            self.G, self.P = update(self.G, self.P, f.monic(), lmG=self.lmG, strategy=self.elimination)
             self.lmG.append(f.LM)
         return self.G, self.P if self.P else self.reset()
 
@@ -158,10 +159,10 @@ class BuchbergerEnv:
         """Perform one reduction and return the new polynomial list and pair list."""
         i, j = action
         self.P.remove((i, j))
-        s = spoly(self.G[i], self.G[j], lf=self.lmG[i], lg=self.lmG[j])
+        s = spoly(self.G[i], self.G[j], lmf=self.lmG[i], lmg=self.lmG[j])
         r, _ = reduce(s, self.G)
         if r != 0:
-            self.G, self.P = update(self.G, self.P, r.monic(), strategy=self.elimination)
+            self.G, self.P = update(self.G, self.P, r.monic(), lmG=self.lmG, strategy=self.elimination)
             self.lmG.append(r.LM)
         return (self.G, self.P), -1, len(self.P) == 0, {}
 
