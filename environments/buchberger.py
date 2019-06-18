@@ -1,6 +1,6 @@
 # buchberger.py
 # Dylan Peifer
-# 16 May 2019
+# 18 Jun 2019
 """An environment for computing Groebner bases with Buchberger's algorithm."""
 
 import numpy as np
@@ -153,7 +153,7 @@ class BuchbergerEnv:
         for f in F:
             self.G, self.P = update(self.G, self.P, f.monic(), lmG=self.lmG, strategy=self.elimination)
             self.lmG.append(f.LM)
-        return self.G, self.P if self.P else self.reset()
+        return (self.G, self.P) if self.P else self.reset()
 
     def step(self, action):
         """Perform one reduction and return the new polynomial list and pair list."""
