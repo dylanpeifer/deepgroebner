@@ -47,4 +47,4 @@ with open(os.path.join(savedir,'params.txt'), 'w') as outfile:
 # run training
 
 agent.train(env, PARAMS['episodes_per_epoch'], epochs=100000//PARAMS['episodes_per_epoch'],
-            savedir=savedir, savefreq=25000//PARAMS['episodes_per_epoch'])
+            savedir=savedir, savefreq=25000//PARAMS['episodes_per_epoch'], tensorboard_dir=savedir)

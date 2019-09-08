@@ -90,6 +90,8 @@ class PGAgent:
         self.lam = lam
         self.normalize = normalize
         self.value_updates_per_epoch = value_updates_per_epoch
+        self.policy_learning_rate = policy_learning_rate
+        self.value_learning_rate = value_learning_rate
         self.action_dim_fn = action_dim_fn
 
     def act(self, state, greedy=False):
@@ -100,10 +102,13 @@ class PGAgent:
         else:
             return np.random.choice(len(probs), p=probs)
 
-    def train(self, env, episodes, epochs=1, verbose=0, savedir=None, savefreq=1):
+    def train(self, env, episodes, epochs=1, verbose=0, savedir=None, savefreq=1, tensorboard_dir=None):
         """Train the agent using policy gradients."""
         avg_rewards = np.zeros(epochs)
         buf = TrajectoryBuffer(self.gam, self.lam)
+        if tensorboard_dir is not None:
+            tb_writer = tf.summary.FileWriter(tensorboard_dir)
+
         for i in range(1, epochs + 1):
 
             buf.clear()
@@ -140,10 +145,15 @@ class PGAgent:
             if savedir is not None:
                 with open(savedir + '/rewards.txt', 'a') as f:
                     f.write(str(i) + ',' + str(avg_rewards[i-1]) + '\n')
+                if tensorboard_dir is not None:
+                    summary = tf.Summary(value=[tf.Summary.Value(tag='rewards',
+                                                         simple_value=avg_rewards[i-1])])
+                    tb_writer.add_summary(summary, i)
+                    tb_writer.flush()
                 if i % savefreq == 0:
                     self.savePolicyModel(savedir + "/policy-" + str(i) + ".h5")
                     self.saveValueModel(savedir + "/value-" + str(i) + ".h5")
-                    
+
         return avg_rewards
 
     def test(self, env, episodes=1, greedy=False):
