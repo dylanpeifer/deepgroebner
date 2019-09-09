@@ -16,16 +16,20 @@ PARAMS = {
     'episodes_per_epoch' : 100,
     'gam' : 0.95, # how much to trust value network
     'lam' : 1.0, # discount rate for future rewards
+    'k' : 2, # number of lead monomials to expose to the agent
+    'elimination' : 'gebauermoeller',
+    'gen_degree' : 6,
+    'gen_number' : 12,
     }
 
 LOG_DIR = 'data/test' # where to save results, will append time of run
 
 # create networks and environment
 
-f = lambda R: random_binomial_ideal(R, 2, 5, homogeneous=True)
-env = BuchbergerEnv(f, elimination='none')
-env = LeadMonomialsWrapper(env, k=1)
-network = ParallelMultilayerPerceptron(6, [24])
+f = lambda R: random_binomial_ideal(R, PARAMS['gen_degree'], PARAMS['gen_number'], homogeneous=False)
+env = BuchbergerEnv(f, elimination=PARAMS['elimination'])
+env = LeadMonomialsWrapper(env, k=PARAMS['k'])
+network = ParallelMultilayerPerceptron(2*3*PARAMS['k'], [48,96,48])
 agent = PGAgent(network, policy_learning_rate=PARAMS['learning_rate'],
                 value_network=PairsLeft(gam=PARAMS['gam']),
                 gam=PARAMS['gam'], lam=PARAMS['lam'])
