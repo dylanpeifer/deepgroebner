@@ -100,6 +100,8 @@ class PGAgent:
         if greedy:
             return np.argmax(probs)
         else:
+            assert np.abs(np.sum(probs)-1)<0.000001, "Probabilities sum to %f, not 1." %(np.sum(probs))
+            probs = probs / np.sum(probs)
             return np.random.choice(len(probs), p=probs)
 
     def train(self, env, episodes, epochs=1, verbose=0, savedir=None, savefreq=1, tensorboard_dir=None):
