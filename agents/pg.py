@@ -109,7 +109,7 @@ class PGAgent:
         avg_rewards = np.zeros(epochs)
         buf = TrajectoryBuffer(self.gam, self.lam)
         if tensorboard_dir is not None:
-            tb_writer = tf.summary.FileWriter(tensorboard_dir)
+            tb_writer = tf.compat.v1.summary.FileWriter(tensorboard_dir)
 
         for i in range(1, epochs + 1):
 
@@ -148,13 +148,14 @@ class PGAgent:
                 with open(savedir + '/rewards.txt', 'a') as f:
                     f.write(str(i) + ',' + str(avg_rewards[i-1]) + '\n')
                 if tensorboard_dir is not None:
-                    summary = tf.Summary(value=[tf.Summary.Value(tag='rewards',
+                    summary = tf.compat.v1.Summary(value=[tf.compat.v1.Summary.Value(tag='rewards',
                                                          simple_value=avg_rewards[i-1])])
                     tb_writer.add_summary(summary, i)
                     tb_writer.flush()
                 if i % savefreq == 0:
                     self.savePolicyModel(savedir + "/policy-" + str(i) + ".h5")
-                    self.saveValueModel(savedir + "/value-" + str(i) + ".h5")
+                    if self.valueModel is not None:
+                        self.saveValueModel(savedir + "/value-" + str(i) + ".h5")
 
         return avg_rewards
 
