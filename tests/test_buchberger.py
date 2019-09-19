@@ -221,6 +221,18 @@ def test_buchberger(F, G, s, e):
     assert buchberger(F, selection=s, elimination=e) == G
 
 
+@pytest.mark.parametrize("sort_reducers, r", [
+    (True, b**2*c**3 + b*c*d - c**2),
+    (False, b**2*c**3 + b**2*c**2 + b*d - c**2),
+])
+def test_BuchbergerEnv_0(sort_reducers, r):
+    ideal_fn = lambda R: [a**2*b*d - c**2, a*d - b*c**2 - d, a - c]
+    env = BuchbergerEnv(ideal_fn, sort_reducers=sort_reducers)
+    env.reset()
+    (G, P), _, _, _ = env.step((0, 1))
+    assert len(G) == 4 and G[3] == r
+
+
 def run_episode(agent, env):
     total_reward = 0
     state = env.reset()

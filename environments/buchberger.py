@@ -135,14 +135,18 @@ def buchberger(F, selection='normal', elimination='gebauermoeller'):
 class BuchbergerEnv:
     """An environment for computing a Groebner basis using Buchberger's algorithm."""
 
-    def __init__(self, ideal_fn,
+    def __init__(self,
+                 ideal_fn,
                  ring=sp.xring('x,y,z', sp.FF(32003), 'grevlex')[0],
-                 elimination='gebauermoeller'):
+                 elimination='gebauermoeller',
+                 sort_reducers=False):
         self.ideal_fn = ideal_fn
         self.ring = ring
         self.elimination = elimination
+        self.sort_reducers = sort_reducers
         self.G = []
         self.P = set()
+        self.reducers = []
 
     def reset(self):
         """Initialize the polynomial list and pair list for a new ideal from ideal_fn."""
@@ -153,6 +157,7 @@ class BuchbergerEnv:
         for f in F:
             self.G, self.P = update(self.G, self.P, f.monic(), lmG=self.lmG, strategy=self.elimination)
             self.lmG.append(f.LM)
+        self.reducers = sorted(F, key=lambda f: self.ring.order(f.LM)) if self.sort_reducers else F
         return (self.G, self.P) if self.P else self.reset()
 
     def step(self, action):
@@ -160,10 +165,14 @@ class BuchbergerEnv:
         i, j = action
         self.P.remove((i, j))
         s = spoly(self.G[i], self.G[j], lmf=self.lmG[i], lmg=self.lmG[j])
-        r, _ = reduce(s, self.G)
+        r, _ = reduce(s, self.reducers)
         if r != 0:
             self.G, self.P = update(self.G, self.P, r.monic(), lmG=self.lmG, strategy=self.elimination)
             self.lmG.append(r.LM)
+            if self.sort_reducers:
+                self.reducers = sorted(self.reducers + [r], key=lambda f: self.ring.order(f.LM))
+            else:
+                self.reducers.append(r)
         return (self.G, self.P), -1, len(self.P) == 0, {}
 
     def render(self):
