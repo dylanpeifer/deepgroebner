@@ -133,7 +133,38 @@ def buchberger(F, selection='normal', elimination='gebauermoeller'):
 
 
 class BuchbergerEnv:
-    """An environment for computing a Groebner basis using Buchberger's algorithm."""
+    """An environment for computing a Groebner basis using Buchberger's algorithm.
+    
+    Parameters
+    ----------
+    ideal_fn
+        A function with signature ring -> list that generates ideals.
+    ring
+        The polynomial ring which will contain the generated ideals. 
+    elimination : {'gebauermoeller', 'lcm', 'none'}, optional
+        The elimination strategy used when updating the pair set.
+    sort_reducers : bool, optional
+        Whether to choose reducers in sorted order when performing long division
+        on the s-polynomials.
+        
+    Examples
+    --------
+    >>> import sympy as sp
+    >>> R, x, y, z = sp.ring("x,y,z", sp.FF(32003), 'grevlex')
+    >>> ideal_fn = lambda R: [y - x**2, z - x**3]
+    >>> env = BuchbergerEnv(ideal_fn)
+    >>> env.reset()
+    ([x**2 + 32002 mod 32003*y, x**3 + 32002 mod 32003*z], {(0, 1)})
+    >>> env.step((0, 1))
+    (([x**2 + 32002 mod 32003*y,
+       x**3 + 32002 mod 32003*z,
+       x*y + 32002 mod 32003*z],
+      {(0, 2)}),
+     -1,
+     False,
+     {})
+    
+    """
 
     def __init__(self,
                  ideal_fn,
@@ -182,7 +213,13 @@ class BuchbergerEnv:
 
 
 class BuchbergerAgent:
-    """An agent that follows standard selection strategies."""
+    """An agent that follows standard selection strategies.
+    
+    Parameters
+    ----------
+    selection : {'normal', 'first', 'degree', 'random'}
+        The selection strategy used to pick pairs.
+    """
     
     def __init__(self, selection='normal'):
         self.strategy = selection
