@@ -29,6 +29,24 @@ def test_spoly(f, g, s):
     assert spoly(f, g) == s
 
 
+@pytest.mark.parametrize("g, F, r, s", [
+    (x**5*y**10*z**4 + 22982*x**3*y*z**2,
+     [x**5*y**12 + 25797*x*y**5*z**2, x*y**3*z + 27630*x**2*y, x**2*y**9*z + 8749*x**2],
+     2065*x**9*y**2 + 22982*x**3*y*z**2,
+     4),
+    (a**5*c + a**3*b + a**2*b**2 + a*b**2 + a,
+     [a**2*c - a, a*b**2 + c**5, a*c + c**3/4],
+     a**4 + a**3*b + a + c**7/4 - c**5,
+     4),
+    (a**3*b*c**2 + a**2*c,
+     [a**2 + b, a*b*c + c, a*c**2 + b**2],
+     b*c**2 - b*c,
+     3),
+])
+def test_reduce(g, F, r, s):
+    assert reduce(g, F) == (r, {'steps': s})
+
+
 @pytest.mark.parametrize("s, p", [
     ('degree', (0, 1)), ('normal', (0, 1)), ('first', (0, 1)),
 ])

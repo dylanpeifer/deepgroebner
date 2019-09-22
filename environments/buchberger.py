@@ -19,10 +19,36 @@ def spoly(f, g, lmf=None, lmg=None):
     return s1 - s2
 
 
-def reduce(g, F):
-    """Return the remainder when polynomial g is divided by polynomials F."""
-    # TODO: return dictionary of statistics
-    return g.rem(F), {}
+def reduce(g, F, lmF=None):
+    """Return remainder when g is divided by monic polynomials F."""
+    ring = g.ring
+    monomial_div = ring.monomial_div
+    lmF = [f.LM for f in F] if lmF is None else lmF
+
+    stats = {'steps': 0}
+    r = ring.zero
+    g = g.copy()
+
+    while g:
+        lmg, lcg = g.LT
+        found_divisor = False
+        
+        for f, lmf in zip(F, lmF):
+            m = monomial_div(lmg, lmf)
+            if m is not None:
+                g = g - f.mul_term((m, lcg))
+                found_divisor = True
+                stats['steps'] += 1
+                break
+
+        if not found_divisor:
+            if lmg in r:
+                r[lmg] += lcg
+            else:
+                r[lmg] = lcg
+            del g[lmg]
+
+    return r, stats
 
 
 def select(G, P, strategy='normal'):
@@ -188,7 +214,10 @@ class BuchbergerEnv:
         for f in F:
             self.G, self.P = update(self.G, self.P, f.monic(), lmG=self.lmG, strategy=self.elimination)
             self.lmG.append(f.LM)
-        self.reducers = sorted(F, key=lambda f: self.ring.order(f.LM)) if self.sort_reducers else F
+        if self.sort_reducers:
+            self.reducers = sorted([f.monic() for f in F], key=lambda f: self.ring.order(f.LM))
+        else:
+            self.reducers = [f.monic() for f in F]
         return (self.G, self.P) if self.P else self.reset()
 
     def step(self, action):
@@ -201,9 +230,9 @@ class BuchbergerEnv:
             self.G, self.P = update(self.G, self.P, r.monic(), lmG=self.lmG, strategy=self.elimination)
             self.lmG.append(r.LM)
             if self.sort_reducers:
-                self.reducers = sorted(self.reducers + [r], key=lambda f: self.ring.order(f.LM))
+                self.reducers = sorted(self.reducers + [r.monic()], key=lambda f: self.ring.order(f.LM))
             else:
-                self.reducers.append(r)
+                self.reducers.append(r.monic())
         return (self.G, self.P), -1, len(self.P) == 0, {}
 
     def render(self):
