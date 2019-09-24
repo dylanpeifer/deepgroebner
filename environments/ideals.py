@@ -55,3 +55,27 @@ def random_binomial_ideal(ring, degree, size, homogeneous=False, pure=False):
     """Return a random binomial ideal in ring as a list."""
     return [random_binomial(ring, degree, homogeneous=homogeneous, pure=pure)
             for _ in range(size)]
+
+
+def FixedIdealGenerator(F):
+    """Yield repeated copies of the list of polynomials F."""
+    while True:
+        yield [f.copy() for f in F]
+
+
+def FromFileIdealGenerator(filename, ring):
+    """Yield ideals from the given file."""
+    while True:
+        with open(filename, 'r') as f:
+            while True:
+                try:
+                    F = []
+                    size = int(next(f).split()[0])
+                    for _ in range(size):
+                        c, *expvs = [int(i) for i in next(f).split()]
+                        e1, e2 = expvs[:len(expvs)//2], expvs[len(expvs)//2:]
+                        m1, m2 = (np.product([x**k for x, k in zip(ring.gens, e)]) for e in [e1, e2])
+                        F.append(m1 + c * m2)
+                    yield F
+                except StopIteration:
+                    break
