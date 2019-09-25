@@ -1,0 +1,8 @@
+name: deepgroebner
+dependencies:
+  - jupyter
+  - numpy
+  - pytest
+  - sympy
+  - tensorflow
+
