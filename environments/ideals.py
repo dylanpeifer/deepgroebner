@@ -57,10 +57,17 @@ def random_binomial_ideal(ring, degree, size, homogeneous=False, pure=False):
             for _ in range(size)]
 
 
-def FixedIdealGenerator(F):
+class FixedIdealGenerator:
     """Yield repeated copies of the list of polynomials F."""
-    while True:
-        yield [f.copy() for f in F]
+    
+    def __init__(self, F):
+        self.F = [f.copy() for f in F]
+
+    def __next__(self):
+        return [f.copy() for f in self.F]
+
+    def __iter__(self):
+        return self
 
 
 def FromFileIdealGenerator(filename, ring):

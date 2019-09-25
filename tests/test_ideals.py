@@ -23,3 +23,11 @@ def test_FixedIdealGenerator_1():
     G = next(ideal_gen)
     G[0] = x
     assert [y - x**2, z - x**3] == next(ideal_gen)
+
+
+def test_FixedIdealGenerator_2():
+    R, x, y, z = sp.ring("x,y,z", sp.FF(32003), 'grevlex')
+    F = [y - x**2, z - x**3]
+    ideal_gen = FixedIdealGenerator(F)
+    F[0] = x
+    assert [y - x**2, z - x**3] == next(ideal_gen)
