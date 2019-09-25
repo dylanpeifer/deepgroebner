@@ -86,3 +86,34 @@ def FromFileIdealGenerator(filename, ring):
                     yield F
                 except StopIteration:
                     break
+
+
+class RandomBinomialIdealGenerator:
+    """Yield random examples of binomial ideals."""
+
+    def __init__(self, variables, degree, size,
+                 domain=sp.FF(32003),
+                 order='grevlex',
+                 homogeneous=False,
+                 pure=False,
+                 seed=None):
+        if isinstance(variables, int):
+            variables = 'x:' + str(variables)
+        R, _ = sp.xring(variables, domain, order)
+        self.ring = R
+        self.rand = np.random.RandomState(seed=seed)
+        self.degree = degree
+        self.size = size
+        self.homogeneous = homogeneous
+        self.pure = pure
+
+    def __next__(self):
+        return random_binomial_ideal(self.ring, self.degree, self.size,
+                                     homogeneous=self.homogeneous,
+                                     pure=self.pure)
+
+    def __iter__(self):
+        return self
+
+    def seed(self, seed=None):
+        self.rand.seed(seed)

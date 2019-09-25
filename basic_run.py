@@ -1,45 +1,42 @@
 # basic_run.py
-# Dan H-L
-# 7 September 2019
+# Dan H-L and Dylan Peifer
+# 25 Sep 2019
 """Basic entry point for training and testing the binomial model"""
 
 from datetime import datetime
 import os, errno, json
-import sympy as sp
 
 from environments.buchberger import BuchbergerEnv, LeadMonomialsWrapper
-from environments.ideals import random_binomial_ideal
+from environments.ideals import RandomBinomialIdealGenerator
 from agents.pg import PGAgent
 from agents.networks import ParallelMultilayerPerceptron, PairsLeft
 
 PARAMS = {
-    'learning_rate' : 0.0001, # learning rate
+    'learning_rate' : 0.0001,
     'episodes_per_epoch' : 100,
-    'gam' : 1.00, # how much to trust value network
-    'lam' : 1.0, # discount rate for future rewards
+    'gam' : 1.0, # discount rate for future rewards
+    'lam' : 1.0, # how much to trust value network
     'k' : 2, # number of lead monomials to expose to the agent
     'elimination' : 'gebauermoeller', # options: 'none', 'lcm', 'gebauermoeller'
     'homogeneous' : False,
-    'gen_degree' : 20,
-    'gen_number' : 10,
-    'hidden_layers' : [48,48],
-    'num_variables' : 3
+    'gen_degree' : 5,
+    'gen_number' : 5,
+    'hidden_layers' : [48, 48],
+    'num_variables' : 5
     }
 
 LOG_DIR = 'data/test' # where to save results, will append time of run
 
-# create ring
-assert PARAMS['num_variables']<=26
-variable_names = 'a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v,w,x,y,z'
-my_ring = sp.xring(variable_names[:(2*PARAMS['num_variables']-1)], sp.FF(32003), 'grevlex')[0]
-
 # create networks and environment
-f = lambda R: random_binomial_ideal(R, PARAMS['gen_degree'], PARAMS['gen_number'], homogeneous=PARAMS['homogeneous'])
-env = BuchbergerEnv(f, ring=my_ring, elimination=PARAMS['elimination'])
+ideal_gen = RandomBinomialIdealGenerator(PARAMS['num_variables'],
+                                         PARAMS['gen_degree'],
+                                         PARAMS['gen_number'],
+                                         homogeneous=PARAMS['homogeneous'])
+env = BuchbergerEnv(ideal_gen, elimination=PARAMS['elimination'])
 env = LeadMonomialsWrapper(env, k=PARAMS['k'])
-network = ParallelMultilayerPerceptron(2*PARAMS['num_variables']*PARAMS['k'], PARAMS['hidden_layers']) #[48,96,48]
+network = ParallelMultilayerPerceptron(2*PARAMS['num_variables']*PARAMS['k'], PARAMS['hidden_layers'])
 agent = PGAgent(network, policy_learning_rate=PARAMS['learning_rate'],
-                #value_network=PairsLeft(gam=PARAMS['gam']),
+                value_network=PairsLeft(gam=PARAMS['gam']),
                 gam=PARAMS['gam'], lam=PARAMS['lam'])
 
 # prepare to log results
