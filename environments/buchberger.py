@@ -1,6 +1,6 @@
 # buchberger.py
 # Dylan Peifer
-# 18 Jun 2019
+# 24 Sep 2019
 """An environment for computing Groebner bases with Buchberger's algorithm."""
 
 import numpy as np
@@ -193,21 +193,21 @@ class BuchbergerEnv:
     """
 
     def __init__(self,
-                 ideal_fn,
-                 ring=sp.xring('x,y,z', sp.FF(32003), 'grevlex')[0],
+                 ideal_gen,
                  elimination='gebauermoeller',
                  sort_reducers=False):
-        self.ideal_fn = ideal_fn
-        self.ring = ring
+        self.ideal_gen = ideal_gen
         self.elimination = elimination
         self.sort_reducers = sort_reducers
+        self.ring = None
         self.G = []
         self.P = set()
         self.reducers = []
 
     def reset(self):
         """Initialize the polynomial list and pair list for a new ideal from ideal_fn."""
-        F = self.ideal_fn(self.ring)
+        F = next(self.ideal_gen)
+        self.ring = F[0].ring
         self.G = []
         self.lmG = []
         self.P = set()

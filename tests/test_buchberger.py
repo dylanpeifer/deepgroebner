@@ -1,12 +1,13 @@
 # test_buchberger.py
 # Dylan Peifer
-# 05 May 2019
+# 24 Sep 2019
 """Tests for Buchberger environments."""
 
 import pytest
 import sympy as sp
 
 from environments.buchberger import *
+from environments.ideals import FixedIdealGenerator
 
 
 R1, x, y, z = sp.ring('x,y,z', sp.FF(32003), 'grevlex')
@@ -244,8 +245,9 @@ def test_buchberger(F, G, s, e):
     (False, b**2*c**3 + b**2*c**2 + b*d - c**2),
 ])
 def test_BuchbergerEnv_0(sort_reducers, r):
-    ideal_fn = lambda R: [a**2*b*d - c**2, a*d - b*c**2 - d, a - c]
-    env = BuchbergerEnv(ideal_fn, sort_reducers=sort_reducers)
+    F = [a**2*b*d - c**2, a*d - b*c**2 - d, a - c]
+    ideal_gen = FixedIdealGenerator(F)
+    env = BuchbergerEnv(ideal_gen, sort_reducers=sort_reducers)
     env.reset()
     (G, P), _, _, _ = env.step((0, 1))
     assert len(G) == 4 and G[3] == r
@@ -265,12 +267,13 @@ def run_episode(agent, env):
 @pytest.mark.parametrize("s", ['first', ['degree', 'first'], ['normal', 'first']])
 def test_episode_0(s):
     R, a, b, c, d, e = sp.ring('a,b,c,d,e', sp.FF(32003), 'grevlex')
-    f = lambda R: [a + 2*b + 2*c + 2*d + 2*e - 1,
-                   a**2 + 2*b**2 + 2*c**2 + 2*d**2 + 2*e**2 - a,
-                   2*a*b + 2*b*c + 2*c*d + 2*d*e - b,
-                   b**2 + 2*a*c + 2*b*d + 2*c*e - c,
-                   2*b*c + 2*a*d + 2*b*e - d]
-    env = BuchbergerEnv(f, ring=R)
+    F = [a + 2*b + 2*c + 2*d + 2*e - 1,
+         a**2 + 2*b**2 + 2*c**2 + 2*d**2 + 2*e**2 - a,
+         2*a*b + 2*b*c + 2*c*d + 2*d*e - b,
+         b**2 + 2*a*c + 2*b*d + 2*c*e - c,
+         2*b*c + 2*a*d + 2*b*e - d]
+    ideal_gen = FixedIdealGenerator(F)
+    env = BuchbergerEnv(ideal_gen)
     agent = BuchbergerAgent(selection=s)
     assert run_episode(agent, env) == -28
 
@@ -280,11 +283,12 @@ def test_episode_0(s):
 ])
 def test_episode_1(e, reward):
     R, a, b, c, d = sp.ring('a,b,c,d', sp.FF(32003), 'grevlex')
-    f = lambda R: [a + b + c + d,
-                   a*b + b*c + c*d + d*a,
-                   a*b*c + b*c*d + c*d*a + d*a*b,
-                   a*b*c*d - 1]
-    env = BuchbergerEnv(f, ring=R, elimination=e)
+    F = [a + b + c + d,
+         a*b + b*c + c*d + d*a,
+         a*b*c + b*c*d + c*d*a + d*a*b,
+         a*b*c*d - 1]
+    ideal_gen = FixedIdealGenerator(F)
+    env = BuchbergerEnv(ideal_gen, elimination=e)
     agent = BuchbergerAgent(selection=['normal', 'first'])
     assert run_episode(agent, env) == reward
 
@@ -294,8 +298,9 @@ def test_episode_1(e, reward):
 ])
 def test_episode_2(s, reward):
     R, x, y, z, t = sp.ring('x,y,z,t', sp.FF(32003), 'grlex')
-    f = lambda R: [x**31 - x**6 - x - y, x**8 - z, x**10 - t]
-    env = BuchbergerEnv(f, ring=R)
+    F = [x**31 - x**6 - x - y, x**8 - z, x**10 - t]
+    ideal_gen = FixedIdealGenerator(F)
+    env = BuchbergerEnv(ideal_gen)
     agent = BuchbergerAgent(selection=s)
     assert run_episode(agent, env) == reward
 
@@ -319,8 +324,9 @@ def test_lead_monomials_vector(g, k, v):
 
 def test_LeadMonomialsWrapper_0():
     R, x, y, z = sp.ring('x,y,z', sp.FF(101), 'grevlex')
-    f = lambda R: [y - x**2, z - x**3]
-    env = LeadMonomialsWrapper(BuchbergerEnv(f, ring=R, elimination='none'))
+    F = [y - x**2, z - x**3]
+    ideal_gen = FixedIdealGenerator(F)
+    env = LeadMonomialsWrapper(BuchbergerEnv(ideal_gen, elimination='none'))
     state = env.reset()
     assert np.array_equal(state, np.array([[2, 0, 0, 3, 0, 0]]))
     state, _, done, _ = env.step(0)
@@ -338,8 +344,9 @@ def test_LeadMonomialsWrapper_0():
 
 def test_LeadMonomialsWrapper_1():
     R, x, y, z = sp.ring('x,y,z', sp.FF(101), 'grevlex')
-    f = lambda R: [y - x**2, z - x**3]
-    env = LeadMonomialsWrapper(BuchbergerEnv(f, ring=R))
+    F = [y - x**2, z - x**3]
+    ideal_gen = FixedIdealGenerator(F)
+    env = LeadMonomialsWrapper(BuchbergerEnv(ideal_gen))
     state = env.reset()
     assert np.array_equal(state, np.array([[2, 0, 0, 3, 0, 0]]))
     state, _, done, _ = env.step(0)
