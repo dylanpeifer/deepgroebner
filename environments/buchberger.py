@@ -170,7 +170,7 @@ class BuchbergerEnv:
     sort_reducers : bool, optional
         Whether to choose reducers in sorted order when performing long division
         on the s-polynomials.
-        
+    
     Examples
     --------
     >>> import sympy as sp
@@ -264,7 +264,28 @@ def lead_monomials_vector(g, k=1):
 
 
 class LeadMonomialsWrapper():
-    """A wrapper for BuchbergerEnv with state a matrix of the pairs' lead monomials."""
+    """A wrapper for BuchbergerEnv with state a matrix of the pairs' lead monomials.
+    
+    Parameters
+    ----------
+    env : BuchbergerEnv
+        The environment that will be wrapped.
+    k : int, optional
+        The number of lead monomials used for each polynomial.
+    
+    Examples
+    --------
+    >>> import sympy as sp
+    >>> R, x, y, z = sp.ring("x,y,z", sp.FF(32003), 'grevlex')
+    >>> ideal_gen = FixedIdealGenerator([y - x**2, z - x**3])
+    >>> env = BuchbergerEnv(ideal_gen)
+    >>> wrapped_env = LeadMonomialsWrapper(env, k=2)
+    >>> wrapped_env.reset()
+    array([[2, 0, 0, 0, 1, 0, 3, 0, 0, 0, 0, 1]])
+    >>> wrapped_env.step(0)
+    (array([[2, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1]]), -1, False, {})
+    
+    """
 
     def __init__(self, env, k=1):
         self.env = env
