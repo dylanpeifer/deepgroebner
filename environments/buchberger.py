@@ -256,11 +256,11 @@ class BuchbergerAgent:
         return select(G, P, strategy=self.strategy)
 
 
-def lead_monomials_vector(g, k=1):
+def lead_monomials_vector(g, k=1, dtype=np.int):
     """Return the concatenated exponent vectors of the k lead monomials of g."""
     n = g.ring.ngens
     it = iter(g.monoms())
-    return np.array([next(it, (0,) * n) for _ in range(k)]).flatten()
+    return np.array([next(it, (0,) * n) for _ in range(k)]).flatten().astype(dtype)
 
 
 class LeadMonomialsWrapper():
@@ -272,6 +272,8 @@ class LeadMonomialsWrapper():
         The environment that will be wrapped.
     k : int, optional
         The number of lead monomials used for each polynomial.
+    dtype : data-type, optional
+        The data-type used for the state matrix.
     
     Examples
     --------
@@ -287,9 +289,10 @@ class LeadMonomialsWrapper():
     
     """
 
-    def __init__(self, env, k=1):
+    def __init__(self, env, k=1, dtype=np.int):
         self.env = env
         self.k = k
+        self.dtype = dtype
         self.pairs = []       # list of current pairs
         self.m = 0            # size of current basis
         self.leads = {}       # leads[i] = lead_monomials_vector(env.G[i])
@@ -299,7 +302,8 @@ class LeadMonomialsWrapper():
         G, P = self.env.reset()
         self.pairs = list(P)
         self.m = len(G)
-        self.leads = {i: lead_monomials_vector(G[i], k=self.k) for i in range(self.m)}
+        self.leads = {i: lead_monomials_vector(G[i], k=self.k, dtype=self.dtype)
+                      for i in range(self.m)}
         self.pair_leads = {(i, j): np.concatenate([self.leads[i], self.leads[j]])
                            for i in range(self.m) for j in range(i+1, self.m)}
         return self._matrix()
@@ -309,7 +313,7 @@ class LeadMonomialsWrapper():
         self.pairs = list(P)
         if len(G) > self.m:
             self.m += 1
-            self.leads[self.m-1] = lead_monomials_vector(G[self.m-1], k=self.k)
+            self.leads[self.m-1] = lead_monomials_vector(G[self.m-1], k=self.k, dtype=self.dtype)
             new_pairs = {(i, self.m-1): np.concatenate([self.leads[i], self.leads[self.m-1]])
                          for i in range(self.m-1)}
             self.pair_leads.update(new_pairs)
@@ -323,4 +327,4 @@ class LeadMonomialsWrapper():
             return np.array([self.pair_leads[p] for p in self.pairs])
         else:
             n = self.env.G[0].ring.ngens
-            return np.zeros((0, 2*n*self.k))
+            return np.zeros((0, 2*n*self.k), dtype=self.dtype)
