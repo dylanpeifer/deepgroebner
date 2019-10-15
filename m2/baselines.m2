@@ -8,9 +8,9 @@ needsPackage "SelectionStrategies"
 needsPackage "Ideals"
 
 n = value(scriptCommandLine#1);
+R = ZZ/32003[vars(0..n-1)];
 d = value(scriptCommandLine#2);
 s = value(scriptCommandLine#3);
-R = ZZ/32003[vars(0..n-1)];
 
 F = openOutAppend(n|"-"|d|"-"|s|".csv")
 
