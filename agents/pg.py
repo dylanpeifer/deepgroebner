@@ -104,7 +104,13 @@ class PGAgent:
             probs = probs / np.sum(probs)
             return np.random.choice(len(probs), p=probs)
 
-    def train(self, env, episodes, epochs=1, verbose=0, savedir=None, savefreq=1, tensorboard_dir=None):
+    def train(self, env, episodes,
+              epochs=1,
+              max_episode_length=None,
+              verbose=0,
+              savedir=None,
+              savefreq=1,
+              tensorboard_dir=None):
         """Train the agent using policy gradients."""
         avg_rewards = np.zeros(epochs)
         buf = TrajectoryBuffer(self.gam, self.lam)
@@ -117,6 +123,7 @@ class PGAgent:
             for _ in range(episodes):
                 state = env.reset()
                 done = False
+                episode_length = 0
                 while not done:
                     action = self.act(state)
                     next_state, reward, done, _ = env.step(action)
@@ -127,6 +134,11 @@ class PGAgent:
                     buf.store(state, action, reward, value)
                     avg_rewards[i-1] += reward
                     state = next_state
+                    episode_length += 1
+
+                    if max_episode_length is not None and episode_length > max_episode_length:
+                        break
+
                 buf.finish()
             avg_rewards[i-1] /= episodes
 
@@ -160,7 +172,7 @@ class PGAgent:
         return avg_rewards
 
     def test(self, env, episodes=1, greedy=False):
-        """Test the agent for episodes on env and return array of total rewards."""
+        """Test the agent on env and return array of total rewards."""
         rewards = np.zeros(episodes)
         for i in range(episodes):
             state = env.reset()
