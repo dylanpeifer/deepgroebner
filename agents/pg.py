@@ -171,16 +171,20 @@ class PGAgent:
 
         return avg_rewards
 
-    def test(self, env, episodes=1, greedy=False):
+    def test(self, env, episodes=1, greedy=False, max_episode_length=None):
         """Test the agent on env and return array of total rewards."""
         rewards = np.zeros(episodes)
         for i in range(episodes):
             state = env.reset()
             done = False
+            episode_length = 0
             while not done:
                 action = self.act(state, greedy=greedy)
                 state, reward, done, _ = env.step(action)
                 rewards[i] += reward
+                episode_length += 1
+                if max_episode_length is not None and episode_length > max_episode_length:
+                    break
         return rewards
 
     def loadPolicyModel(self, filename):
