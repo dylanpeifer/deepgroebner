@@ -4,6 +4,7 @@
 """Functions to generate ideals."""
 
 import numpy as np
+from os import listdir
 import sympy as sp
 
 
@@ -86,6 +87,41 @@ def FromFileIdealGenerator(filename, ring):
                     yield F
                 except StopIteration:
                     break
+
+
+class FromDirectoryIdealGenerator:
+    """Yield ideals from several different files."""
+    
+    def __init__(self, directory, ring, p='weighted'):
+        self.gens = [FromFileIdealGenerator(directory + '/' + f, ring)
+                     for f in listdir(directory)]
+        self.p = self._make_probability(directory, p)
+        self.current_gen = np.random.choice(self.gens, p=self.p)
+
+    def __next__(self):
+        return next(self.current_gen)
+
+    def __iter__(self):
+        return self
+    
+    def update(self):
+        """Randomly select a new file generator from the directory."""
+        self.current_gen = np.random.choice(self.gens, p=self.p)
+    
+    def _make_probability(self, directory, p):
+        filenames = listdir(directory)
+        n = len(filenames)
+        if p == 'uniform':
+            return np.full((n,), 1/n)
+        elif p == 'weighted':
+            weights = np.zeros((n,))
+            for i, filename in enumerate(filenames):
+                with open(directory + '/' + filename, 'r') as f:
+                    weights[i] = sum(1 for line in f)
+            return weights / np.sum(weights)
+        else:
+            assert len(p) == n and sum(p) == 1
+            return p
 
 
 class RandomBinomialIdealGenerator:

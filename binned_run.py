@@ -10,7 +10,7 @@ import numpy as np
 import sympy as sp
 
 from environments.buchberger import BuchbergerEnv, LeadMonomialsWrapper
-from environments.ideals import FromFileIdealGenerator, RandomBinomialIdealGenerator
+from environments.ideals import FromDirectoryIdealGenerator, RandomBinomialIdealGenerator
 from agents.pg import PGAgent
 from agents.networks import ParallelMultilayerPerceptron, PairsLeft
 
@@ -32,7 +32,7 @@ LOG_DIR = 'data/test' # where to save results, will append time of run
 
 # create networks and environment
 R = sp.ring('a,b,c,d,e', sp.FF(32003), 'grevlex')[0]
-train_ideal_gen = FromFileIdealGenerator('data/bins-5-10-5/bin36', R)
+train_ideal_gen = FromDirectoryIdealGenerator('data/bins-5-10-5', R)
 test_ideal_gen = RandomBinomialIdealGenerator(PARAMS['num_variables'],
                                               PARAMS['gen_degree'],
                                               PARAMS['gen_number'],
@@ -85,3 +85,4 @@ for i in range(100000):
                 max_episode_length=1000,
                 savedir=savedir,
                 savefreq=100)
+    train_ideal_gen.update()
