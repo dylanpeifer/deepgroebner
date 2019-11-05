@@ -1,6 +1,6 @@
 # pg.py
 # Dylan Peifer
-# 07 May 2019
+# 05 Nov 2019
 """Policy gradient agent that supports changing state shapes."""
 
 import numpy as np
@@ -115,7 +115,7 @@ class PGAgent:
         avg_rewards = np.zeros(epochs)
         buf = TrajectoryBuffer(self.gam, self.lam)
         if tensorboard_dir is not None:
-            tb_writer = tf.compat.v1.summary.FileWriter(tensorboard_dir)
+            tb_writer = tf.summary.create_file_writer(tensorboard_dir)
 
         for i in range(1, epochs + 1):
 
@@ -154,20 +154,21 @@ class PGAgent:
 
             if verbose == 1:
                 print("\rEpoch: {}/{} - avg_reward: {}"
-                      .format(i, epochs, avg_rewards[i-1]), end="")
+                      .format(i, epochs, avg_rewards[i-1]),
+                      end="")
 
             if savedir is not None:
                 with open(savedir + '/rewards.txt', 'a') as f:
                     f.write(str(i) + ',' + str(avg_rewards[i-1]) + '\n')
-                if tensorboard_dir is not None:
-                    summary = tf.compat.v1.Summary(value=[tf.compat.v1.Summary.Value(tag='rewards',
-                                                         simple_value=avg_rewards[i-1])])
-                    tb_writer.add_summary(summary, i)
-                    tb_writer.flush()
                 if i % savefreq == 0:
                     self.savePolicyModel(savedir + "/policy-" + str(i) + ".h5")
                     if self.valueModel is not None:
                         self.saveValueModel(savedir + "/value-" + str(i) + ".h5")
+
+            if tensorboard_dir is not None:
+                with tb_writer.as_default():
+                    tf.summary.scalar('avg_reward', avg_rewards[i-1], step=i)
+                    tb_writer.flush()
 
         return avg_rewards
 
