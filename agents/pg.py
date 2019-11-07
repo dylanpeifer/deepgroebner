@@ -146,7 +146,10 @@ class PGAgent:
             for shape in batches:
                 if self.action_dim_fn(shape) == 1:
                     continue
-                self.policyModel.fit(batches[shape][0], batches[shape][2], verbose=0)
+                advantages = batches[shape][2]
+                weights = advantages.sum(axis=1)
+                advantages = advantages / weights[:, np.newaxis]
+                self.policyModel.fit(batches[shape][0], advantages, sample_weight=weights, verbose=0)
             if self.valueModel is not None:
                 for _ in range(self.value_updates_per_epoch):
                     for shape in batches:
