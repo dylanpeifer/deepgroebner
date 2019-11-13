@@ -389,7 +389,7 @@ buchberger(Ideal) := Sequence => opts -> (I) -> (
     while #P > 0 do (
 	(p, P) = selectPair(P, Strategy => opts.SelectionStrategy);
 	s := spoly(p, G);
-	(r, stats) := reduce(s, G, Strategy => opts.ReductionStrategy);
+	(r, stats) := reduce(s, reducers, Strategy => opts.ReductionStrategy);
 	polynomialSubtractions = polynomialSubtractions + stats#"polynomialSubtractions";
 	monomialAdditions = monomialAdditions + stats#"monomialAdditions";
 	if r != 0 then (

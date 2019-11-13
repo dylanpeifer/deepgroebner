@@ -22,7 +22,7 @@ for i from 1 to 10000 do (
                                 SelectionStrategy => sel,
                                 Minimalize => false,
                                 Interreduce => false);
-        F << stats#"zeroReductions" + stats#"nonzeroReductions" << ",";
+        F << stats#"polynomialSubtractions" << ",";
     );
     F << length first entries gens gb I << endl;
 );
