@@ -1,7 +1,7 @@
 newPackage(
         "SelectionStrategies",
         Version => "0.0.1", 
-        Date => "September 10, 2019",
+        Date => "November 13, 2019",
         Authors => {{Name => "Dylan Peifer", 
                      Email => "djp282@cornell.edu", 
                      HomePage => "https://www.math.cornell.edu/~djp282"}},
@@ -11,31 +11,8 @@ newPackage(
 
 export {"SugarPolynomial", "sugarPolynomial", "polynomial", "sugar",
         "reduce", "minimalize", "interreduce", "spoly",
-        "buchberger", "SelectionStrategy", "EliminationStrategy",
-	"ReductionStrategy", "Homogenize", "Minimalize", "Interreduce"}
-
--------------------------------------------------------------------------------
---- utility functions
--------------------------------------------------------------------------------
-argmax = method()
-argmax(List) := ZZ => (x) -> (
-    -- x = a list
-    -- returns the index of the max element of x (or the first index if there are multiple)
-    if #x === 0 then null else first fold((i,j) -> if i#1 >= j#1 then i else j, pairs x)
-    )
-argmax(List, Function) := ZZ => (x, f) -> (
-    argmax(apply(x, f))
-    )
-
-argmin = method()
-argmin(List) := ZZ => (x) -> (
-    -- x = a list
-    -- returns the index of the min element of x (or the first index if there are multiple)
-    if #x === 0 then null else first fold((i,j) -> if i#1 <= j#1 then i else j, pairs x)
-    )
-argmin(List, Function) := ZZ => (x, f) -> (
-    argmin(apply(x, f))
-    )
+        "buchberger", "SelectionStrategy", "EliminationStrategy", "SortReducers",
+	"ReductionStrategy", "Homogenize", "Minimalize", "Interreduce", "SortInput"}
 
 -------------------------------------------------------------------------------
 --- sugar polynomials
@@ -60,6 +37,7 @@ polynomial SugarPolynomial := f -> f#1
 polynomial RingElement     := f -> f
 polynomial Number          := f -> f
 
+terms SugarPolynomial           := f -> terms polynomial f
 leadTerm SugarPolynomial        := f -> leadTerm polynomial f
 leadMonomial SugarPolynomial    := f -> leadMonomial polynomial f
 leadCoefficient SugarPolynomial := f -> leadCoefficient polynomial f
@@ -109,7 +87,10 @@ SugarPolynomial ? SugarPolynomial := (f, g) -> polynomial f ? polynomial g
 -------------------------------------------------------------------------------
 --- reduction
 -------------------------------------------------------------------------------
-reduce = method(Options => {Strategy => "Regular", Reduce => "Full"})
+reduce = method(Options => {
+	Strategy => "Regular",
+	Reduce => "Full",
+	SortReducers => false})
 reduce(RingElement, List) := RingElement =>
 reduce(SugarPolynomial, List) := SugarPolynomial => opts -> (g, F) -> (
     -- g = a polynomial
@@ -124,7 +105,12 @@ reduce(SugarPolynomial, List) := SugarPolynomial => opts -> (g, F) -> (
 	g = g - leadTerm g;
 	);
     
+    if opts.SortReducers then F = sort F;
+
     doubleSugar := opts.Strategy === "DoubleSugar" or opts.Strategy === "Saccharine";
+
+    polynomialSubtractions := 0;
+    monomialAdditions := 0;
 
     while g != 0 do (
 	lg := leadTerm g;
@@ -140,6 +126,8 @@ reduce(SugarPolynomial, List) := SugarPolynomial => opts -> (g, F) -> (
 		    )
 		else (
 		    g = g - reducer;
+		    polynomialSubtractions = polynomialSubtractions + 1;
+		    monomialAdditions = monomialAdditions + length terms reducer;
 		    foundDivisor = true;
 		    break;
 		    );
@@ -167,9 +155,12 @@ reduce(SugarPolynomial, List) := SugarPolynomial => opts -> (g, F) -> (
     	-- make sure doubleSugar is back on if Saccharine might have turned it off
 	if opts.Strategy === "Saccharine" then doubleSugar = true;
 	);
+    
+    stats := hashTable {"polynomialSubtractions" => polynomialSubtractions,
+	                "monomialAdditions" => monomialAdditions};
 
     -- r holds remainder and g holds sugar degree and/or unreduced tail terms
-    r + g
+    (r + g, stats)
     )
 
 minimalize = method()
@@ -193,10 +184,33 @@ interreduce(List) := List => (F) -> (
 
     G := {};
     for f in F do (
-	g := reduce(f, F, Reduce => "Tail");
+	(g, stats) := reduce(f, F, Reduce => "Tail");
 	G = append(G, 1/(leadCoefficient g) * g);
 	);
     G
+    )
+
+-------------------------------------------------------------------------------
+--- utility functions
+-------------------------------------------------------------------------------
+argmax = method()
+argmax(List) := ZZ => (x) -> (
+    -- x = a list
+    -- returns the index of the max element of x (or the first index if there are multiple)
+    if #x === 0 then null else first fold((i,j) -> if i#1 >= j#1 then i else j, pairs x)
+    )
+argmax(List, Function) := ZZ => (x, f) -> (
+    argmax(apply(x, f))
+    )
+
+argmin = method()
+argmin(List) := ZZ => (x) -> (
+    -- x = a list
+    -- returns the index of the min element of x (or the first index if there are multiple)
+    if #x === 0 then null else first fold((i,j) -> if i#1 <= j#1 then i else j, pairs x)
+    )
+argmin(List, Function) := ZZ => (x, f) -> (
+    argmin(apply(x, f))
     )
 
 -------------------------------------------------------------------------------
@@ -339,21 +353,22 @@ updatePairs(List, List, SugarPolynomial) := List => opts -> (P, F, f) -> (
 -------------------------------------------------------------------------------
 --- main algorithm
 -------------------------------------------------------------------------------
-BuchbergerHistory = new Type of HashTable
-
 buchberger = method(Options => {
 	SelectionStrategy => "Sugar",
 	EliminationStrategy => "GebauerMoeller",
 	ReductionStrategy => "Regular",
+	SortInput => false,
+	SortReducers => true,
 	Homogenize => false,
 	Minimalize => true,
 	Interreduce => true
 	})
-buchberger(Ideal) := BuchbergerHistory => opts -> (I) -> (
+buchberger(Ideal) := Sequence => opts -> (I) -> (
     -- I = an ideal in a polynomial ring
     -- returns number of pairs processed in computing a Groebner basis of I
 
     F := first entries gens I;
+    if opts.SortInput then F = sort F;
     if opts.SelectionStrategy === "Sugar" then F = apply(F, sugarPolynomial);
 
     P := {};
@@ -361,18 +376,27 @@ buchberger(Ideal) := BuchbergerHistory => opts -> (I) -> (
     for f in F do (
 	(P, G) = updatePairs(P, G, f, Strategy => opts.EliminationStrategy);
 	);
+    
+    reducers := G;
+    if opts.SortReducers then reducers = sort reducers;
 
     zeroReductions := 0;
     nonzeroReductions := 0;
+    polynomialSubtractions := 0;
+    monomialAdditions := 0;
     p := 0;
 
     while #P > 0 do (
 	(p, P) = selectPair(P, Strategy => opts.SelectionStrategy);
 	s := spoly(p, G);
-	r := reduce(s, G, Strategy => opts.ReductionStrategy);
+	(r, stats) := reduce(s, G, Strategy => opts.ReductionStrategy);
+	polynomialSubtractions = polynomialSubtractions + stats#"polynomialSubtractions";
+	monomialAdditions = monomialAdditions + stats#"monomialAdditions";
 	if r != 0 then (
 	    (P, G) = updatePairs(P, G, r, Strategy => opts.EliminationStrategy);
 	    nonzeroReductions = nonzeroReductions + 1;
+	    reducers = G;
+	    if opts.SortReducers then reducers = sort reducers;
 	    )
 	else (
 	    zeroReductions = zeroReductions + 1;
@@ -382,8 +406,12 @@ buchberger(Ideal) := BuchbergerHistory => opts -> (I) -> (
     if opts.SelectionStrategy === "Sugar" then G = apply(G, polynomial);
     if opts.Minimalize then G = minimalize(G);
     if opts.Interreduce then G = interreduce(G);
-
-    (zeroReductions, nonzeroReductions, G)
+    
+    stats = hashTable {"zeroReductions" => zeroReductions,
+	               "nonzeroReductions" => nonzeroReductions,
+		       "polynomialSubtractions" => polynomialSubtractions,
+		       "monomialAdditions" => monomialAdditions};
+    (G, stats)
     )
 
 beginDocumentation()
@@ -413,9 +441,12 @@ TEST /// -- reduce (Full/Head/Tail with regular polynomials)
 R = QQ[x,y,z, MonomialOrder => Lex]
 g = x^5*z + x^3*y + x^2*y^2 + x*y^2 + x
 F = {x^2*z - x, x*y^2 + z^5, 4*x*z + z^3}
-assert(reduce(g, F) == x^4 + x^3*y + x + (1/4)*z^7 - z^5)
-assert(reduce(g, F, Reduce => "Head") == x^4 + x^3*y + x^2*y^2 + x*y^2 + x)
-assert(reduce(g, F, Reduce => "Tail") == x^5*z + x^3*y + x + (1/4)*z^7 - z^5)
+(r1, stats) = reduce(g, F)
+(r2, stats) = reduce(g, F, Reduce => "Head")
+(r3, stats) = reduce(g, F, Reduce => "Tail")
+assert(r1 == x^4 + x^3*y + x + (1/4)*z^7 - z^5)
+assert(r2 == x^4 + x^3*y + x^2*y^2 + x*y^2 + x)
+assert(r3 == x^5*z + x^3*y + x + (1/4)*z^7 - z^5)
 ///
 
 TEST /// -- reduce (Full/Head/Tail with sugar polynomials)
@@ -424,9 +455,9 @@ g = sugarPolynomial(x^5*z + x^3*y + x^2*y^2 + x*y^2 + x)
 F = {sugarPolynomial(x^2*z - x),
      sugarPolynomial(x*y^2 + z^5),
      sugarPolynomial(4*x*z + z^3)}
-g1 = reduce(g, F)
-g2 = reduce(g, F, Reduce => "Head")
-g3 = reduce(g, F, Reduce => "Tail")
+(g1, stats) = reduce(g, F)
+(g2, stats) = reduce(g, F, Reduce => "Head")
+(g3, stats) = reduce(g, F, Reduce => "Tail")
 assert(polynomial g1 == x^4 + x^3*y + x + (1/4)*z^7 - z^5)
 assert(sugar g1 == 7)
 assert(polynomial g2 == x^4 + x^3*y + x^2*y^2 + x*y^2 + x)
@@ -441,9 +472,9 @@ g = sugarPolynomial(x^3*y*z^2 + x^2*z)
 F = {sugarPolynomial(6, x^2 + y),
      sugarPolynomial(10, x*y*z + z),
      sugarPolynomial(3, x*z^2 + y^2)}
-g1 = reduce(g, F)
-g2 = reduce(g, F, Strategy => "DoubleSugar")
-g3 = reduce(g, F, Strategy => "Saccharine")
+(g1, stats) = reduce(g, F)
+(g2, stats) = reduce(g, F, Strategy => "DoubleSugar")
+(g3, stats) = reduce(g, F, Strategy => "Saccharine")
 assert(polynomial g1 == y*z^2 - y*z)
 assert(sugar g1 == 12)
 assert(polynomial g2 == -x^2*y^3 + x^2*z)
@@ -523,13 +554,13 @@ I = ideal(a + 2*b + 2*c + 2*d - 1,
           a^2 + 2*b^2 + 2*c^2 + 2*d^2 - a,
 	  2*a*b + 2*b*c + 2*c*d - b,
 	  b^2 + 2*a*c + 2*b*d - c)
-(i, j, G1) = buchberger(I,
+(G1, stats) = buchberger(I,
     SelectionStrategy => "First", EliminationStrategy => "LCM")
-(i, j, G2) = buchberger(I,
+(G2, stats) = buchberger(I,
     SelectionStrategy => "Random", EliminationStrategy => "LCM")
-(i, j, G3) = buchberger(I,
+(G3, stats) = buchberger(I,
     SelectionStrategy => "Normal", EliminationStrategy => "LCM")
-(i, j, G4) = buchberger(I,
+(G4, stats) = buchberger(I,
     SelectionStrategy => "Sugar", EliminationStrategy => "LCM")
 G5 = first entries gens gb I
 assert(isSubset(G1, G5) and isSubset(G5, G1))
@@ -545,13 +576,13 @@ I = ideal(a + b + c + d + e,
           a*b*c + b*c*d + a*b*e + a*d*e + c*d*e,
 	  a*b*c*d + a*b*c*e + a*b*d*e + a*c*d*e + b*c*d*e,
 	  a*b*c*d*e - 1)
-(i, j, G1) = buchberger(I,
+(G1, stats) = buchberger(I,
     SelectionStrategy => "First", EliminationStrategy => "GebauerMoeller")
-(i, j, G2) = buchberger(I,
+(G2, stats) = buchberger(I,
     SelectionStrategy => "Random", EliminationStrategy => "GebauerMoeller")
-(i, j, G3) = buchberger(I,
+(G3, stats) = buchberger(I,
     SelectionStrategy => "Normal", EliminationStrategy => "GebauerMoeller")
-(i, j, G4) = buchberger(I,
+(G4, stats) = buchberger(I,
     SelectionStrategy => "Sugar", EliminationStrategy => "GebauerMoeller")
 G5 = first entries gens gb I
 assert(isSubset(G1, G5) and isSubset(G5, G1))
@@ -563,7 +594,7 @@ assert(isSubset(G4, G5) and isSubset(G5, G4))
 TEST /// -- full Groebner basis
 R = QQ[x,y,z,t]
 I = ideal(x^31 - x^6 - x - y, x^8 - z, x^10 - t)
-(i, j, G1) = buchberger(I,
+(G1, stats) = buchberger(I,
     SelectionStrategy => "Sugar", EliminationStrategy => "GebauerMoeller")
 G2 = first entries gens gb I
 assert(isSubset(G1, G2) and isSubset(G2, G1))

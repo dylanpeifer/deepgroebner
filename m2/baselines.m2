@@ -1,6 +1,6 @@
 -- baselines.m2
 -- Dylan Peifer
--- 11 Oct 2019
+-- 13 Nov 2019
 
 -- Generate CSV file of reduction steps per strategy.
 
@@ -18,11 +18,11 @@ F << "Random,First,Degree,Normal,Sugar,Size" << endl;
 for i from 1 to 10000 do (
     I = randomBinomialIdeal(R, d, s);
     for sel in {"Random", "First", "Degree", "Normal", "Sugar"} do (
-        (i, j, G) = buchberger(I,
-                               SelectionStrategy => sel,
-                               Minimalize => false,
-                               Interreduce => false);
-        F << i+j << ",";
+        (G, stats) = buchberger(I,
+                                SelectionStrategy => sel,
+                                Minimalize => false,
+                                Interreduce => false);
+        F << stats#"zeroReductions" + stats#"nonzeroReductions" << ",";
     );
     F << length first entries gens gb I << endl;
 );
