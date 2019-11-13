@@ -170,6 +170,8 @@ class BuchbergerEnv:
     sort_reducers : bool, optional
         Whether to choose reducers in sorted order when performing long division
         on the s-polynomials.
+    rewards : {'steps', 'subtractions'}, optional
+        The reward value for each step.
     
     Examples
     --------
@@ -193,10 +195,12 @@ class BuchbergerEnv:
     def __init__(self,
                  ideal_gen,
                  elimination='gebauermoeller',
-                 sort_reducers=True):
+                 sort_reducers=True,
+                 rewards='steps'):
         self.ideal_gen = ideal_gen
         self.elimination = elimination
         self.sort_reducers = sort_reducers
+        self.rewards = rewards
         self.ring = None
         self.G = []
         self.P = set()
@@ -223,7 +227,7 @@ class BuchbergerEnv:
         i, j = action
         self.P.remove((i, j))
         s = spoly(self.G[i], self.G[j], lmf=self.lmG[i], lmg=self.lmG[j])
-        r, _ = reduce(s, self.reducers)
+        r, stats = reduce(s, self.reducers)
         if r != 0:
             self.G, self.P = update(self.G, self.P, r.monic(), lmG=self.lmG, strategy=self.elimination)
             self.lmG.append(r.LM)
@@ -231,7 +235,8 @@ class BuchbergerEnv:
                 self.reducers = sorted(self.reducers + [r.monic()], key=lambda f: self.ring.order(f.LM))
             else:
                 self.reducers.append(r.monic())
-        return (self.G, self.P), -1, len(self.P) == 0, {}
+        reward = -stats['steps'] if self.rewards == 'subtractions' else -1
+        return (self.G, self.P), reward, len(self.P) == 0, {}
 
     def render(self):
         print(self.G)
