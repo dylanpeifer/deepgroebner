@@ -1,6 +1,6 @@
 # buchberger.py
 # Dylan Peifer
-# 24 Sep 2019
+# 13 Nov 2019
 """An environment for computing Groebner bases with Buchberger's algorithm."""
 
 import numpy as np
@@ -193,7 +193,7 @@ class BuchbergerEnv:
     def __init__(self,
                  ideal_gen,
                  elimination='gebauermoeller',
-                 sort_reducers=False):
+                 sort_reducers=True):
         self.ideal_gen = ideal_gen
         self.elimination = elimination
         self.sort_reducers = sort_reducers
