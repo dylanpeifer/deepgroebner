@@ -242,6 +242,19 @@ class BuchbergerEnv:
         print(self.G)
         print(self.P)
         print()
+        
+    def copy(self):
+        """Return a copy of this environment with the same state."""
+        copy = BuchbergerEnv(self.ideal_gen)
+        copy.elimination = self.elimination
+        copy.sort_reducers = self.sort_reducers
+        copy.rewards = self.rewards
+        copy.ring = self.ring
+        copy.G = [g.copy() for g in self.G]
+        copy.lmG = self.lmG[:]
+        copy.P = self.P.copy()
+        copy.reducers = [r.copy() for r in self.reducers]
+        return copy
 
 
 class BuchbergerAgent:

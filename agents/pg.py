@@ -1,11 +1,12 @@
 # pg.py
 # Dylan Peifer
-# 05 Nov 2019
+# 13 Nov 2019
 """Policy gradient agent that supports changing state shapes."""
 
 import numpy as np
 import tensorflow as tf
 
+from .networks import AgentBaseline
 
 def discount_rewards(rewards, gamma):
     """Discount the list or array of rewards by gamma in-place."""
@@ -125,10 +126,14 @@ class PGAgent:
                 done = False
                 episode_length = 0
                 while not done:
+                    if isinstance(self.valueModel, AgentBaseline):
+                        value = self.valueModel.predict(env.env)
                     action = self.act(state)
                     next_state, reward, done, _ = env.step(action)
                     if self.valueModel is None:
                         value = 0
+                    elif isinstance(self.valueModel, AgentBaseline):
+                        pass
                     else:
                         value = self.valueModel.predict(np.expand_dims(state, axis=0))[0][0]
                     buf.store(state, action, reward, value)

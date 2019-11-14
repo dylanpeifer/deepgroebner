@@ -94,6 +94,39 @@ class PairsLeft():
         pass
 
 
+class AgentBaseline():
+    """A Buchberger value network that returns an agent's performance."""
+
+    def __init__(self, agent, gam=0.99):
+        self.agent = agent
+        self.gam = gam
+
+    def predict(self, env):
+        env = env.copy()
+        R = 0.0
+        discount = 1.0
+        state = (env.G, env.P)
+        done = False
+        while not done:
+            action = self.agent.act(state)
+            state, reward, done, _ = env.step(action)
+            R += reward * discount
+            discount *= self.gam
+        return R
+
+    def fit(self, *args, **kwargs):
+        pass
+
+    def compile(self, *args, **kwargs):
+        pass
+
+    def save_weights(self, filename):
+        pass
+
+    def load_weights(self, filename):
+        pass
+
+
 def ValueRNN(input_dim, size, cell='lstm', final_activation='linear', gpu=False):
     model = tf.keras.models.Sequential()
     if gpu:
