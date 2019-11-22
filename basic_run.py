@@ -16,13 +16,13 @@ PARAMS = {
     'episodes_per_epoch' : 100,
     'gam' : 1.0, # discount rate for future rewards
     'lam' : 1.0, # how much to trust value network
-    'k' : 2, # number of lead monomials to expose to the agent
+    'k' : 1, # number of lead monomials to expose to the agent
     'elimination' : 'gebauermoeller', # options: 'none', 'lcm', 'gebauermoeller'
-    'homogeneous' : False,
+    'homogeneous' : True,
     'gen_degree' : 5,
     'gen_number' : 5,
-    'hidden_layers' : [48, 48],
-    'num_variables' : 5
+    'hidden_layers' : [48],
+    'num_variables' : 3
     }
 
 LOG_DIR = 'data/test' # where to save results, will append time of run
@@ -55,5 +55,5 @@ with open(os.path.join(savedir,'params.txt'), 'w') as outfile:
 
 # run training
 print('Beginning training for ' + run_name)
-agent.train(env, PARAMS['episodes_per_epoch'], epochs=1000,
+agent.train(env, PARAMS['episodes_per_epoch'], epochs=100,
             savedir=savedir, savefreq=25, tensorboard_dir=savedir)
