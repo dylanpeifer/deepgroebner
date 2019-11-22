@@ -1,7 +1,7 @@
 newPackage(
         "Ideals",
         Version => "0.0.0",
-        Date => "September 9, 2019",
+        Date => "November 19, 2019",
         Authors => {{Name => "Dylan Peifer", 
                      Email => "djp282@cornell.edu", 
                      HomePage => "https://www.math.cornell.edu/~djp282"}},
@@ -9,16 +9,15 @@ newPackage(
         DebuggingMode => true
         )
 
-export {"commats", "cyclic", "eco", "extcyc", "hcyclic", "katsura", "noon",
-        "perms", "redcyc", "reimer",
-        "chemkin", "haas", "jason210", "kotsireas", "lichtblau", "virasoro",
-        "randomBinomialIdeal", "Pure"}
+export {"commutingMatrices", "cyclic", "eco", "katsura", "noon", "reimer",
+        "chemkin", "haas", "jason210", "kotsireas", "lichtblau", "twistedCubic", "virasoro",
+        "randomBinomialIdeal", "degreeDistribution", "Pure"}
 
 -------------------------------------------------------------------------------
 --- ideal families
 -------------------------------------------------------------------------------
-commats = method(Options => {CoefficientRing => ZZ/32003, MonomialOrder => GRevLex})
-commats ZZ := Ideal => opts -> n -> (
+commutingMatrices = method(Options => {CoefficientRing => ZZ/32003, MonomialOrder => GRevLex})
+commutingMatrices ZZ := Ideal => opts -> n -> (
     R := (opts.CoefficientRing)(monoid[vars(0..2*n*n-1), MonomialOrder => opts.MonomialOrder]);
     A := genericMatrix(R, R_0, n, n);
     B := genericMatrix(R, R_(n*n), n, n);
@@ -41,22 +40,6 @@ eco ZZ := Ideal => opts -> n -> (
     ideal F
     )
 
-extcyc = method(Options => {CoefficientRing => ZZ/32003, MonomialOrder => GRevLex})
-extcyc ZZ := Ideal => opts -> n -> (
-    R := (opts.CoefficientRing)[vars(0..n), MonomialOrder => opts.MonomialOrder];
-    F := toList apply(1..n-1, d -> R_0^d + sum(0..n-1, i -> product(d, k -> R_((i+k)%n+1))))
-         | {product(1..n, i -> R_i) - 1, R_0^n + 1};
-    ideal F
-    )
-
-hcyclic = method(Options => {CoefficientRing => ZZ/32003, MonomialOrder => GRevLex})
-hcyclic ZZ := Ideal => opts -> n -> (
-    R := (opts.CoefficientRing)(monoid[vars(0..n), MonomialOrder => opts.MonomialOrder]);
-    F := toList apply(1..n-1, d -> sum(0..n-1, i -> product(d, k -> R_((i+k)%n))))
-         | {product(n, i -> R_i) - R_n^n};
-    ideal F
-    )
-
 katsura = method(Options => {CoefficientRing => ZZ/32003, MonomialOrder => GRevLex})
 katsura ZZ := Ideal => opts -> n -> (
     n = n - 1;
@@ -74,21 +57,6 @@ noon = method(Options => {CoefficientRing => ZZ/32003, MonomialOrder => GRevLex}
 noon ZZ := Ideal => opts -> n -> (
     R := (opts.CoefficientRing)[vars(0..n-1), MonomialOrder => opts.MonomialOrder];
     F := apply(0..n-1, i -> 10 * R_i * (sum(0..n-1, j -> R_j^2) - R_i^2) - 11 * R_i + 10);
-    ideal F
-    )
-
-perms = method(Options => {CoefficientRing => ZZ/32003, MonomialOrder => GRevLex})
-perms(ZZ, ZZ, ZZ) := Ideal => opts -> (m, n, s) -> (
-    R := (opts.CoefficientRing)[vars(0..m*n-1), MonomialOrder => opts.MonomialOrder];
-    permanents(s, genericMatrix(R, m, n))
-    )
-
-redcyc = method(Options => {CoefficientRing => ZZ/32003, MonomialOrder => GRevLex})
-redcyc ZZ := Ideal => opts -> n -> (
-    R := (opts.CoefficientRing)[vars(0..n), MonomialOrder => opts.MonomialOrder];
-    F := toList apply(1..n-1, d -> sum(0..n-1, i -> product(d, k -> R_((i+k)%n))));
-    F = apply(F, f -> sub(f, R_(n-1) => 1));
-    F = append(F, sub(product(n, i -> R_i), R_(n-1) => R_(n-1)^n) - 1);
     ideal F
     )
 
@@ -151,7 +119,14 @@ installMethod(lichtblau, Ideal => opts -> () -> (
     R := (opts.CoefficientRing)[vars(0..2), MonomialOrder => opts.MonomialOrder];
     ideal "b-110a2+495a3-1320a4+2772a5-5082a6+7590a7-8085a8+5555a9-2189a10+374a11,
            c-22a+110a2-330a3+1848a5-3696a6+3300a7-1650a8+550a9-88a10-22a11"
-    ))	
+    ))
+
+twistedCubic = method(Options => {CoefficientRing => ZZ/32003, MonomialOrder => GRevLex})
+installMethod(twistedCubic, Ideal => opts -> () -> (
+    R := (opts.CoefficientRing)[vars(0..2), MonomialOrder => opts.MonomialOrder];
+    ideal "b-a2,
+           c-a3"
+    ))
 
 virasoro = method(Options => {CoefficientRing => ZZ/32003, MonomialOrder => GRevLex})
 installMethod(virasoro, Ideal => opts -> () -> (
@@ -242,8 +217,8 @@ randomBinomial(List, PolynomialRing) := RingElement => opts -> (D, R) -> (
     )
 
 degreeDistribution = method(Options => {Constants => false, Degrees => "Uniform"})
-degreeDistribution(PolynomialRing, ZZ) := List => opts -> (R, d) -> (
-    -- R = a polynomial ring
+degreeDistribution(ZZ, ZZ) := List => opts -> (n, d) -> (
+    -- n = the number of variables
     -- d = the maximal degree
     -- return a probability distribution on degrees less than or equal to d
 
@@ -251,12 +226,18 @@ degreeDistribution(PolynomialRing, ZZ) := List => opts -> (R, d) -> (
     D := if opts.Degrees === "Uniform" then (
              {p} | toList(d:1)
          ) else if opts.Degrees === "Weighted" then (
-	     n := numgens R;
              {p} | for i from 1 to d list binomial(n + i - 1, n - 1)
          ) else if opts.Degrees === "Maximum" then (
              toList(d:0) | {1}
          );
     D / (1.0 * sum D)
+    )
+degreeDistribution(PolynomialRing, ZZ) := List => opts -> (R, d) -> (
+    -- R = a polynomial ring
+    -- d = the maximal degree
+    -- return a probability distribution on degrees less than or equal to d
+
+    degreeDistribution(numgens R, d, opts)
     )
 
 randomBinomialIdeal = method(Options => {
@@ -326,12 +307,12 @@ Description
     virasoro()
   Text
     and random ideals.
-    
-    Ideals are generated in new rings (except for @TO randomBinomialIdeal@, which can take in
-    a ring).
   Example
     setRandomSeed(12345);
     randomBinomialIdeal(5, 3, 10)
+  Text
+    Ideals are generated in new rings (except for @TO randomBinomialIdeal@, which can take in
+    a ring).
 ///
 
 doc ///
@@ -353,6 +334,69 @@ Description
     The cyclic-n ideal is a classical benchmarking problem.
   Example
     I = cyclic 5
+///
+
+doc ///
+Key
+  degreeDistribution
+  (degreeDistribution, ZZ, ZZ)
+  (degreeDistribution, PolynomialRing, ZZ)
+Headline
+  return a distribution on degrees of monomials
+Usage
+  D = degreeDistribution(n, d)
+  D = degreeDistribution(R, d)
+Inputs
+  n: ZZ
+     the number of variables
+  R: PolynomialRing
+     the polynomial ring
+  d: ZZ
+     the maximal degree
+Outputs
+  D: List
+     a list of probabilities
+Description
+  Text
+    A distribution on degrees of monomials.
+  Example
+    D = degreeDistribution(3, 5)
+SeeAlso
+  randomBinomialIdeal
+///
+
+doc ///
+Key
+  [degreeDistribution, Degrees]
+Headline
+  the model for degree distribution
+Usage
+  D = degreeDistribution(n, d, Degrees => "Weighted")
+Description
+  Text
+    Choose the particular model for degree distribution. Options are "Uniform",
+    "Weighted", and "Maximum".
+  Example
+    D = degreeDistribution(3, 5, Degrees => "Weighted")
+SeeAlso
+  degreeDistribution
+///
+
+doc ///
+Key
+  [degreeDistribution, Constants]
+Headline
+  if the distribution should have nonzero value for constants
+Usage
+  D = degreeDistribution(n, d, Constants => true)
+Description
+  Text
+    Choose whether the degree distribution should allow constants.
+  Example
+    D = degreeDistribution(3, 5, Constants => true)
+    D = degeeeDistribution(3, 5, Constants => false)
+SeeAlso
+  degreeDistribution
 ///
 
 doc ///
@@ -390,17 +434,22 @@ Description
     
     First we need a polynomial ring. If R is given then it is used. Otherwise,
     a new polynomial ring is constructed with n variables over the given
-    coefficient ring and with the given monomial order.
+    coefficient ring and with the given monomial order. If generating many
+    examples it is more efficient to provide R, as then intermediate calculations
+    can be stored in it.
     
     Next we need a distribution on degrees. If D is given then it is used.
     Otherwise, a distribution is constructed on 0..d using the values of
     Constants and Degrees.
     
     Now a list of s binomials is generated by first randomly selecting a degree
-    and then randomly picking monomials of that degree.
+    and then randomly picking monomials of that degree. Monomials are regenerated
+    until two unequal monomials are generated, and coefficients are all nonzero.
   Example
     setRandomSeed(12345);
     I = randomBinomialIdeal(5, 3, 10)
+SeeAlso
+  degreeDistribution
 ///
 
 doc ///
@@ -442,13 +491,6 @@ assert(I == ideal(R_0 + R_1 + R_2, R_0*R_1 + R_1*R_2 + R_2*R_0, R_0*R_1*R_2 - 1)
 ///
 
 TEST ///
-I = hcyclic 3
-R = ring I
-assert(I == ideal(R_0 + R_1 + R_2, R_0*R_1 + R_1*R_2 + R_2*R_0, R_0*R_1*R_2 - R_3^3))
-///
-
-TEST ///
-debug needsPackage "Ideals"
 R = ZZ/32003[x,y,z]
 assert(degreeDistribution(R, 1) == {0, 1})
 assert(degreeDistribution(R, 1, Constants => true) == {0.5, 0.5})
