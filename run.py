@@ -110,4 +110,4 @@ if __name__ == '__main__':
     env = make_env(args)
     agent = make_agent(args)
     logdir = make_logdir(args)
-    agent.train(env, args.episodes, epochs=args.epochs, savefreq=args.save_freq, tensorboard_dir=logdir)
+    agent.train(env, args.episodes, epochs=args.epochs, savefreq=args.save_freq, savedir=logdir, tensorboard_dir=logdir)
