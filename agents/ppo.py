@@ -459,7 +459,8 @@ class PPOAgent:
         return history
 
     def _fit_policy_model(self, batches, epochs=1):
-        """Fit policy model with one update per epoch."""
+        """Fit policy model with one gradient update per epoch."""
+        history = {'loss': np.zeros(epochs)}
         for epoch in range(epochs):
             with tf.GradientTape() as tape:
                 losses = []
@@ -469,8 +470,11 @@ class PPOAgent:
                     probs = self.policy_model(data['states'])
                     losses.append(self.policy_loss(probs, data['probas'], data['actions'], data['advants']))
                 loss = tf.reduce_mean(tf.concat(losses, axis=0))
-            grads = tape.gradient(loss, self.policy_model.trainable_variables)
-            self.policy_optimizer.apply_gradients(zip(grads, self.policy_model.trainable_variables))
+            varis = self.policy_model.trainable_variables
+            grads = tape.gradient(loss, varis)
+            self.policy_optimizer.apply_gradients(zip(grads, varis))
+            history['loss'][epoch] = loss
+        return history
 
     def load_policy_weights(self, filename):
         """Load weights from filename into the policy model."""
@@ -481,17 +485,22 @@ class PPOAgent:
         self.policy_model.save_weights(filename)
 
     def _fit_value_model(self, batches, epochs=1):
-        """Fit value model with one update per epoch."""
-        if self.value_model is not None:
-            for epoch in range(epochs):
-                with tf.GradientTape() as tape:
-                    losses = []
-                    for shape, data in batches.items():
-                        values = self.value_model(data['states'])
-                        losses.append(self.value_loss(values, data['values']))
-                    loss = tf.reduce_mean(tf.concat(losses, axis=0))
-                grads = tape.gradient(loss, self.value_model.trainable_variables)
-                self.value_optimizer.apply_gradients(zip(grads, self.value_model.trainable_variables))
+        """Fit value model with one gradient update per epoch."""
+        if self.value_model is None:
+            epochs = 0
+        history = {'loss': np.zeros(epochs)}
+        for epoch in range(epochs):
+            with tf.GradientTape() as tape:
+                losses = []
+                for shape, data in batches.items():
+                    values = self.value_model(data['states'])
+                    losses.append(self.value_loss(values, data['values']))
+                loss = tf.reduce_mean(tf.concat(losses, axis=0))
+            varis = self.value_model.trainable_variables
+            grads = tape.gradient(loss, varis)
+            self.value_optimizer.apply_gradients(zip(grads, varis))
+            history['loss'][epoch] = loss
+        return history
 
     def load_value_weights(self, filename):
         """Load weights from filename into the value model."""
