@@ -198,7 +198,7 @@ class TrajectoryBuffer:
 
 
 @tf.function(experimental_relax_shapes=True)
-def pg_surrogate_loss(new_probs, old_prob, actions, advantages):
+def pg_surrogate_loss(new_prob, old_prob, actions, advantages):
     """Return loss with gradient for policy gradient.
 
     Parameters
@@ -218,9 +218,7 @@ def pg_surrogate_loss(new_probs, old_prob, actions, advantages):
         The loss for each interaction.
 
     """
-    action_dim = tf.shape(new_probs)[1]
-    new_pi = tf.reduce_sum(tf.one_hot(actions, action_dim) * new_probs, axis=1)
-    return -tf.math.log(new_pi) * advantages
+    return -tf.math.log(new_prob) * advantages
 
 
 def ppo_surrogate_loss(eps=0.2):
@@ -233,7 +231,7 @@ def ppo_surrogate_loss(eps=0.2):
 
     """
     @tf.function(experimental_relax_shapes=True)
-    def loss(new_probs, old_prob, actions, advantages):
+    def loss(new_prob, old_prob, actions, advantages):
         """Return loss with gradient for proximal policy optimization.
 
         Parameters
@@ -252,10 +250,8 @@ def ppo_surrogate_loss(eps=0.2):
         loss : Tensor (batch_dim,)
             The loss for each interaction.
         """
-        action_dim = tf.shape(new_probs)[1]
-        pi_new = tf.reduce_sum(tf.one_hot(actions, action_dim) * new_probs, axis=1)
         min_adv = tf.where(advantages > 0, (1 + eps) * advantages, (1 - eps) * advantages)
-        return -tf.minimum(pi_new / old_prob * advantages, min_adv)
+        return -tf.minimum(new_prob / old_prob * advantages, min_adv)
     return loss
 
 
@@ -294,13 +290,15 @@ class PPOAgent:
         The clip ratio for PPO.
     action_dim_fn : function, optional
         The function that maps state shape to action dimension.
+    kld_limit : float, optional
+        The limit on KL divergence for early stopping policy updates.
     """
 
     def __init__(self,
                  policy_network, policy_lr=1e-4, policy_updates=1,
                  value_network=None, value_lr=1e-3, value_updates=25,
                  gam=0.99, lam=0.97, normalize_advantages=True, eps=0.2,
-                 action_dim_fn=lambda s: s[0]):
+                 action_dim_fn=lambda s: s[0], kld_limit=0.01):
         self.policy_model = policy_network
         self.policy_loss = ppo_surrogate_loss(eps)
         self.policy_optimizer = tf.keras.optimizers.Adam(lr=policy_lr)
@@ -314,6 +312,7 @@ class PPOAgent:
         self.buffer = TrajectoryBuffer(gam=gam, lam=lam)
         self.normalize_advantages = normalize_advantages
         self.action_dim_fn = action_dim_fn
+        self.kld_limit = kld_limit
 
     def act(self, state, greedy=False, return_probs=False):
         """Return an action for the given state using the policy model.
@@ -459,20 +458,33 @@ class PPOAgent:
 
     def _fit_policy_model(self, batches, epochs=1):
         """Fit policy model with one gradient update per epoch."""
-        history = {'loss': np.zeros(epochs)}
+        history = {'loss': np.zeros(epochs),
+                   'kld': np.zeros(epochs),
+                   'ent': np.zeros(epochs)}
         for epoch in range(epochs):
             with tf.GradientTape() as tape:
-                losses = []
+                losses, klds, ents = [], [], []
                 for shape, data in batches.items():
-                    if self.action_dim_fn(shape) == 1:
+                    action_dim = self.action_dim_fn(shape)
+                    if action_dim == 1:
                         continue
                     probs = self.policy_model(data['states'])
-                    losses.append(self.policy_loss(probs, data['probas'], data['actions'], data['advants']))
+                    new_prob = tf.reduce_sum(tf.one_hot(data['actions'], action_dim) * probs, axis=1)
+                    losses.append(self.policy_loss(new_prob, data['probas'], data['actions'], data['advants']))
+                    klds.append(tf.math.log(data['probas'] / new_prob))
+                    ents.append(tf.math.log(new_prob))
                 loss = tf.reduce_mean(tf.concat(losses, axis=0))
+                kld = tf.reduce_mean(tf.concat(klds, axis=0))
+                ent = tf.reduce_mean(tf.concat(ents, axis=0))
             varis = self.policy_model.trainable_variables
             grads = tape.gradient(loss, varis)
             self.policy_optimizer.apply_gradients(zip(grads, varis))
             history['loss'][epoch] = loss
+            history['kld'][epoch] = kld
+            history['ent'][epoch] = ent
+            if self.kld_limit is not None and kld > self.kld_limit:
+                break
+                print('early stop at ', epoch)
         return history
 
     def load_policy_weights(self, filename):
