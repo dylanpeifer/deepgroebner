@@ -80,11 +80,11 @@ class TrajectoryBuffer:
     Examples
     --------
     >>> buffer = TrajectoryBuffer()
-    >>> tau = [(np.array([3]), np.array([0.4, 0.3, 0.3]), 3, 1, 1),
-    ...        (np.array([1, 3, 7]), np.array([0.1, 0.9]), 2, 0, 0),
-    ...        (np.array([1, 4, 2]), np.array([0.3, 0.7]), 1, 2, 2),
-    ...        (np.array([2, 5]), np.array([0.4, 0.6]), 2, 1, 1),
-    ...        (np.array([1, 7]), np.array([0.9, 0.1]), 0, 0, 1)]
+    >>> tau = [(np.array([3]), 0.4, 3, 1, 1),
+    ...        (np.array([1, 3, 7]), 0.1, 2, 0, 0),
+    ...        (np.array([1, 4, 2]), 0.7, 1, 2, 2),
+    ...        (np.array([2, 5]), 0.6, 2, 1, 1),
+    ...        (np.array([1, 7]), 0.3, 0, 0, 1)]
     >>> for t in tau:
     ...     buffer.store(*t)
     >>> buffer.finish()
@@ -110,8 +110,8 @@ class TrajectoryBuffer:
         ----------
         state : ndarray
            The observation of the state.
-        proba : ndarray
-           The agent's computed probability distribution on actions.
+        proba : float
+           The agent's previous probability of picking the chosen action.
         value : float
            The agent's computed value of the state.
         action : int
@@ -198,15 +198,15 @@ class TrajectoryBuffer:
 
 
 @tf.function(experimental_relax_shapes=True)
-def pg_surrogate_loss(new_probs, old_probs, actions, advantages):
+def pg_surrogate_loss(new_probs, old_prob, actions, advantages):
     """Return loss with gradient for policy gradient.
 
     Parameters
     ----------
     new_probs : Tensor (batch_dim, action_dim)
         The output of the current model.
-    old_probs : Tensor (batch_dim, action_dim)
-        The stored output from interaction.
+    old_prob : Tensor (batch_dim,)
+        The previous probability of picking the given action.
     actions : Tensor (batch_dim,)
         The chosen actions.
     advantages : Tensor (batch_dim,)
@@ -233,15 +233,15 @@ def ppo_surrogate_loss(eps=0.2):
 
     """
     @tf.function(experimental_relax_shapes=True)
-    def loss(new_probs, old_probs, actions, advantages):
+    def loss(new_probs, old_prob, actions, advantages):
         """Return loss with gradient for proximal policy optimization.
 
         Parameters
         ----------
         new_probs : Tensor (batch_dim, action_dim)
             The output of the current model.
-        old_probs : Tensor (batch_dim, action_dim)
-            The stored output from interaction.
+        old_probs : Tensor (batch_dim,)
+            The old model probability of choosing the given action.
         actions : Tensor (batch_dim,)
             The chosen actions.
         advantages : Tensor (batch_dim,)
@@ -254,9 +254,8 @@ def ppo_surrogate_loss(eps=0.2):
         """
         action_dim = tf.shape(new_probs)[1]
         pi_new = tf.reduce_sum(tf.one_hot(actions, action_dim) * new_probs, axis=1)
-        pi_old = tf.reduce_sum(tf.one_hot(actions, action_dim) * old_probs, axis=1)
         min_adv = tf.where(advantages > 0, (1 + eps) * advantages, (1 - eps) * advantages)
-        return -tf.minimum(pi_new / pi_old * advantages, min_adv)
+        return -tf.minimum(pi_new / old_prob * advantages, min_adv)
     return loss
 
 
@@ -330,7 +329,7 @@ class PPOAgent:
         """
         probs = self.policy_model.predict(state[np.newaxis])[0]
         action = np.argmax(probs) if greedy else np.random.choice(len(probs), p=probs)
-        return (action, probs) if return_probs else action
+        return (action, probs[action]) if return_probs else action
 
     def train(self, env, episodes=10, epochs=1,
               max_episode_length=None, verbose=0, save_freq=1, logdir=None):
@@ -417,11 +416,11 @@ class PPOAgent:
         episode_length = 0
         total_reward = 0
         while not done:
-            action, probs = self.act(state, return_probs=True)
+            action, prob = self.act(state, return_probs=True)
             next_state, reward, done, _ = env.step(action)
             value = 0 if self.value_model is None else self.value_model.predict(state[np.newaxis])[0][0]
             if store:
-                self.buffer.store(state, probs, value, action, reward)
+                self.buffer.store(state, prob, value, action, reward)
             episode_length += 1
             total_reward += reward
             if max_episode_length is not None and episode_length > max_episode_length:
