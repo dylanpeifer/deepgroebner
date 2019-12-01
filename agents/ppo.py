@@ -485,6 +485,7 @@ class PPOAgent:
             if self.kld_limit is not None and kld > self.kld_limit:
                 break
                 print('early stop at ', epoch)
+        self.policy_model.get_weights()  # for fast wrappers
         return history
 
     def load_policy_weights(self, filename):
@@ -511,6 +512,8 @@ class PPOAgent:
             grads = tape.gradient(loss, varis)
             self.value_optimizer.apply_gradients(zip(grads, varis))
             history['loss'][epoch] = loss
+        if self.value_model is not None:
+            self.value_model.get_weights()  # for fast wrappers
         return history
 
     def load_value_weights(self, filename):

@@ -1,12 +1,21 @@
-# test_networks.py
-# Dylan Peifer
-# 12 May 2019
 """Tests for agent networks."""
 
 import numpy as np
 import pytest
 
 from agents.networks import *
+
+
+def test_MultilayerPerceptron_0():
+    policy = MultilayerPerceptron(4, [128], 2, final_activation='softmax')
+    X = np.random.randn(10, 4)
+    assert np.allclose(policy.predict(X), policy.network.predict(X))
+
+
+def test_MultilayerPerceptron_1():
+    policy = MultilayerPerceptron(4, [128], 2, final_activation='linear')
+    X = np.random.randn(10, 4)
+    assert np.allclose(policy.predict(X), policy.network.predict(X))
 
 
 def test_ParallelMultilayerPerceptron():
