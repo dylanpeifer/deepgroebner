@@ -2,7 +2,10 @@ name: deepgroebner
 dependencies:
   - jupyter
   - numpy
-  - pytest
+  - scipy
   - sympy
-  - tensorflow
-
+  - pytest
+  - pip
+  - pip:
+    - tf-nightly
+    - gym[box2d]
