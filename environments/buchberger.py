@@ -256,6 +256,10 @@ class BuchbergerEnv:
         copy.reducers = [r.copy() for r in self.reducers]
         return copy
 
+    @property
+    def actions(self):
+        return list(self.P)
+
 
 class BuchbergerAgent:
     """An agent that follows standard selection strategies.
