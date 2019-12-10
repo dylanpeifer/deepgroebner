@@ -21,7 +21,7 @@ def _predict(X,weights):
         else:
             X = np.maximum(X, 0, X)
 
-class MultilayerPerceptron():
+class MultilayerPerceptron:
     """A multilayer perceptron network with fast predict calls."""
 
     def __init__(self, input_dim, hidden_layers, output_dim, final_activation='softmax'):
@@ -61,7 +61,7 @@ class MultilayerPerceptron():
         return model
 
 
-class ParallelMultilayerPerceptron():
+class ParallelMultilayerPerceptron:
     """A parallel multilayer perceptron network with fast predict calls."""
 
     def __init__(self, input_dim, hidden_layers):
@@ -108,31 +108,31 @@ class ParallelMultilayerPerceptron():
         return model
 
 
-class PairsLeft():
+class PairsLeft:
     """A Buchberger value network that returns discounted pairs left."""
 
     def __init__(self, gam=0.99):
         self.gam = gam
+        self.trainable_variables = []
 
-    def predict(self, tensor):
-        states = tensor.shape[0]
-        pairs = tensor.shape[1]
+    def predict(self, X, **kwargs):
+        states, pairs, *_ = X.shape
         if self.gam == 1:
             fill_value = - pairs
         else:
             fill_value = - (1 - self.gam ** pairs) / (1 - self.gam)
         return np.full((states, 1), fill_value)
 
-    def fit(self, *args, **kwargs):
-        pass
-
-    def compile(self, *args, **kwargs):
-        pass
+    def __call__(self, inputs):
+        return self.predict(inputs)
 
     def save_weights(self, filename):
         pass
 
     def load_weights(self, filename):
+        pass
+
+    def get_weights(self):
         pass
 
 
@@ -153,7 +153,7 @@ class PairsLeftBaseline(tf.keras.Model):
         return tf.fill([states, 1], value)
 
 
-class AgentBaseline():
+class AgentBaseline:
     """A Buchberger value network that returns an agent's performance."""
 
     def __init__(self, agent, gam=0.99):

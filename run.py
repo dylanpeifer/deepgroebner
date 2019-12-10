@@ -8,10 +8,10 @@ import json
 
 import gym
 
-from environments.buchberger_cy import BuchbergerEnv, LeadMonomialsWrapper
+from environments.buchberger import BuchbergerEnv, LeadMonomialsWrapper
 from environments.ideals import RandomBinomialIdealGenerator
 from agents.ppo import PPOAgent
-from agents.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, PairsLeftBaseline
+from agents.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, PairsLeft
 
 def make_parser():
     """Return the command line argument parser for this script."""
@@ -129,7 +129,7 @@ def make_agent(args):
             'RandomBinomialIdeal': (2 * args.variables * args.k, 1)}[args.environment]
     if args.environment == 'RandomBinomialIdeal':
         policy_network = ParallelMultilayerPerceptron(dims[0], args.hidden_layers)
-        value_network = PairsLeftBaseline(gam=args.gam)
+        value_network = PairsLeft(gam=args.gam)
         action_dim_fn = lambda s: s[0]
     else:
         policy_network = MultilayerPerceptron(dims[0], args.hidden_layers, dims[1])
