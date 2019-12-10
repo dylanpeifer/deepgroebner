@@ -6,10 +6,20 @@ pure NumPy, which in testing is at least on order of magnitude faster than
 TensorFlow when called repeatedly.
 """
 
+import numba
 import numpy as np
-from scipy.special import softmax
+import scipy.special as sc
+import numba_special
 import tensorflow as tf
 
+def _predict(X,weights):
+    for i, (m, b) in enumerate(weights):
+        X = np.dot(X, m) + b
+        if i == len(weights)-1:
+            if self.final_activation == 'softmax':
+                X = sc.softmax(X, axis=1)
+        else:
+            X = np.maximum(X, 0, X)
 
 class MultilayerPerceptron():
     """A multilayer perceptron network with fast predict calls."""
@@ -21,14 +31,7 @@ class MultilayerPerceptron():
         self.final_activation = final_activation
 
     def predict(self, X, **kwargs):
-        for i, (m, b) in enumerate(self.weights):
-            X = np.dot(X, m) + b
-            if i == len(self.weights)-1:
-                if self.final_activation == 'softmax':
-                    X = softmax(X, axis=1)
-            else:
-                X = np.maximum(X, 0, X)
-        return X
+        return _predict(X,self.weights)
 
     def __call__(self, inputs):
         return self.network(inputs)
@@ -70,7 +73,7 @@ class ParallelMultilayerPerceptron():
         for i, (m, b) in enumerate(self.weights):
             X = np.dot(X, m) + b
             if i == len(self.weights)-1:
-                X = softmax(X, axis=1).squeeze(axis=-1)
+                X = sc.softmax(X, axis=1).squeeze(axis=-1)
             else:
                 X = np.maximum(X, 0, X)
         return X
