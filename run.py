@@ -4,14 +4,14 @@
 import argparse
 import datetime
 import os
+import json
 
 import gym
 
-from environments.buchberger import BuchbergerEnv, LeadMonomialsWrapper
+from environments.buchberger_cy import BuchbergerEnv, LeadMonomialsWrapper
 from environments.ideals import RandomBinomialIdealGenerator
 from agents.ppo import PPOAgent
 from agents.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, PairsLeftBaseline
-
 
 def make_parser():
     """Return the command line argument parser for this script."""
@@ -81,8 +81,11 @@ def make_parser():
                         type=float,
                         default=0.1,
                         help='the clip ratio for PPO')
-    
+
     # training parameters
+    parser.add_argument('--name',
+                        type=str,
+                        help='run name, required')
     parser.add_argument('--episodes',
                         type=int,
                         default=100,
@@ -143,7 +146,13 @@ def make_logdir(args):
     time_string = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     param_string = "".join([k + '=' + str(v) + ',' for k, v in vars(args).items()])
     logdir = os.path.join(args.logdir, str(abs(hash(param_string + time_string))))
+    os.makedirs(logdir)
     return logdir
+
+
+def save_args(logdir,args):
+    with open(os.path.join(logdir,'args.txt'), 'w') as outfile:
+        json.dump(vars(args), outfile)
 
 
 if __name__ == '__main__':
@@ -151,5 +160,7 @@ if __name__ == '__main__':
     env = make_env(args)
     agent = make_agent(args)
     logdir = make_logdir(args)
+    save_args(logdir,args)
+    print(logdir)
     agent.train(env, episodes=args.episodes, epochs=args.epochs,
                 save_freq=args.save_freq, logdir=logdir, verbose=args.verbose)
