@@ -110,26 +110,26 @@ class PairsLeft:
 
     def __init__(self, gam=0.99):
         self.gam = gam
+        self.trainable_variables = []
 
-    def predict(self, tensor):
-        states = tensor.shape[0]
-        pairs = tensor.shape[1]
+    def predict(self, X, **kwargs):
+        states, pairs, *_ = X.shape
         if self.gam == 1:
             fill_value = - pairs
         else:
             fill_value = - (1 - self.gam ** pairs) / (1 - self.gam)
         return np.full((states, 1), fill_value)
 
-    def fit(self, *args, **kwargs):
-        pass
-
-    def compile(self, *args, **kwargs):
-        pass
+    def __call__(self, inputs):
+        return self.predict(inputs)
 
     def save_weights(self, filename):
         pass
 
     def load_weights(self, filename):
+        pass
+
+    def get_weights(self):
         pass
 
 
