@@ -11,7 +11,7 @@ from scipy.special import softmax
 import tensorflow as tf
 
 
-class MultilayerPerceptron():
+class MultilayerPerceptron:
     """A multilayer perceptron network with fast predict calls."""
 
     def __init__(self, input_dim, hidden_layers, output_dim, final_activation='softmax'):
@@ -58,7 +58,7 @@ class MultilayerPerceptron():
         return model
 
 
-class ParallelMultilayerPerceptron():
+class ParallelMultilayerPerceptron:
     """A parallel multilayer perceptron network with fast predict calls."""
 
     def __init__(self, input_dim, hidden_layers):
@@ -105,7 +105,7 @@ class ParallelMultilayerPerceptron():
         return model
 
 
-class PairsLeft():
+class PairsLeft:
     """A Buchberger value network that returns discounted pairs left."""
 
     def __init__(self, gam=0.99):
@@ -150,7 +150,7 @@ class PairsLeftBaseline(tf.keras.Model):
         return tf.fill([states, 1], value)
 
 
-class AgentBaseline():
+class AgentBaseline:
     """A Buchberger value network that returns an agent's performance."""
 
     def __init__(self, agent, gam=0.99):
