@@ -3,8 +3,10 @@
 """
 
 import numpy as np
+import multiprocessing as mp
 import tensorflow as tf
 
+PARALLEL = True
 
 def discount_rewards(rewards, gam):
     """Discount the list or array of rewards by gamma in-place.
@@ -197,6 +199,21 @@ class TrajectoryBuffer:
         return len(self.states)
 
 
+def _merge_buffers(bufferlist):
+    output = bufferlist[0]
+    assert output.start==output.end, "Must apply self.finish() before merging buffers"
+    for b in bufferlist[1:]:
+        assert b.start==b.end, "Must apply self.finish() before merging buffers"
+        output.states += b.states
+        output.probas += b.probas
+        output.values += b.values
+        output.actions += b.actions
+        output.rewards += b.rewards
+    output.end = len(output.states)
+    output.start = output.end
+    return output
+
+
 @tf.function(experimental_relax_shapes=True)
 def pg_surrogate_loss(new_prob, old_prob, actions, advantages):
     """Return loss with gradient for policy gradient.
@@ -309,6 +326,8 @@ class PPOAgent:
         self.value_optimizer = tf.keras.optimizers.Adam(lr=value_lr)
         self.value_updates = value_updates
 
+        self.lam=lam
+        self.gam=gam
         self.buffer = TrajectoryBuffer(gam=gam, lam=lam)
         self.normalize_advantages = normalize_advantages
         self.action_dim_fn = action_dim_fn
@@ -388,8 +407,9 @@ class PPOAgent:
                 tb_writer.flush()
             if verbose > 0:
                 print_status_bar(i, epochs, history, verbose=verbose)
-    
-    def run_episode(self, env, max_episode_length=None, greedy=False, store=False):
+
+
+    def run_episode(self, env, max_episode_length=None, greedy=False, buffer=None):
         """Run an episode and return total reward and episode length.
 
         Parameters
@@ -400,8 +420,8 @@ class PPOAgent:
             The maximum number of interactions before the episode ends.
         greedy : bool, optional
             Whether to choose the maximum probability or sample.
-        store : bool, optional
-            Whether to store the interactions in the agent's buffer.
+        buffer : TrajectoryBuffer object, optional
+            If included, it will store the whole rollout in the given buffer.
 
         Returns
         -------
@@ -418,15 +438,22 @@ class PPOAgent:
             action, prob = self.act(state, return_probs=True)
             next_state, reward, done, _ = env.step(action)
             value = 0 if self.value_model is None else self.value_model.predict(state[np.newaxis])[0][0]
-            if store:
-                self.buffer.store(state, prob, value, action, reward)
+            if buffer is not None:
+                buffer.store(state, prob, value, action, reward)
             episode_length += 1
             total_reward += reward
             if max_episode_length is not None and episode_length > max_episode_length:
                 break
             state = next_state
-        self.buffer.finish()
+        if buffer is not None:
+            buffer.finish()
         return total_reward, episode_length
+
+    def _parallel_run_episode(self, env, max_episode_length, greedy, random_seed, output):
+        np.random.seed(random_seed)
+        buff = TrajectoryBuffer(gam=self.gam, lam=self.lam)
+        R,L = self.run_episode(env, max_episode_length=max_episode_length, greedy=greedy, buffer=buff)
+        output.put((R,L,buff))
 
     def run_episodes(self, env, episodes=100, max_episode_length=None, greedy=False, store=False):
         """Run several episodes, store interaction in buffer, and return history.
@@ -439,9 +466,11 @@ class PPOAgent:
             The number of episodes to perform.
         max_episode_length : int, optional
             The maximum number of steps before the episode is terminated.
-        verbose : int, optional
-            The amount of information to print.
-        
+        greedy: bool, optional
+            Whether to choose the maximum probability or sample.
+        store: bool, optional
+            Whether or not to store the rollout in self.buffer
+
         Returns
         -------
         history : dict
@@ -450,10 +479,23 @@ class PPOAgent:
         """
         history = {'returns': np.zeros(episodes),
                    'lengths': np.zeros(episodes)}
-        for i in range(episodes):
-            R, L = self.run_episode(env, max_episode_length=max_episode_length, greedy=greedy, store=store)
-            history['returns'][i] = R
-            history['lengths'][i] = L
+        if PARALLEL:
+            output = mp.Queue()
+            processes = [mp.Process(target = self._parallel_run_episode,args=(env, max_episode_length, greedy, seed, output)) for seed in np.random.randint(0,4294967295,episodes)]
+            for p in processes:
+                p.start()
+            results = [output.get() for p in processes]
+            for p in processes:
+                p.join()
+            self.buffer=_merge_buffers([b for (_,_,b) in results])
+            for i in range(episodes):
+                (history['returns'][i],history['lengths'][i],_) = results[i]
+        else:
+            for i in range(episodes):
+                R, L = self.run_episode(env,max_episode_length=max_episode_length, greedy=greedy, buffer=self.buffer)
+                history['returns'][i] = R
+                history['lengths'][i] = L
+
         return history
 
     def _fit_policy_model(self, batches, epochs=1):
