@@ -6,12 +6,13 @@ pure NumPy, which in testing is at least on order of magnitude faster than
 TensorFlow when called repeatedly.
 """
 
-import numba
+#import numba
 import numpy as np
 import scipy.special as sc
-import numba_special
+#import numba_special
 import tensorflow as tf
 
+#@numba.jit
 def _predict(X,weights):
     for i, (m, b) in enumerate(weights):
         X = np.dot(X, m) + b
