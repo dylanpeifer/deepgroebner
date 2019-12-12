@@ -10,7 +10,6 @@ import numpy as np
 import scipy.special as sc
 import tensorflow as tf
 
-
 class MultilayerPerceptron:
     """A multilayer perceptron network with fast predict calls."""
 

@@ -7,6 +7,7 @@ import multiprocessing as mp
 import tensorflow as tf
 
 PARALLEL = True
+PACKET_SIZE = 10 # this must divide the number of episodes, and ideally should divide (episodes)/(number of cores)
 
 def discount_rewards(rewards, gam):
     """Discount the list or array of rewards by gamma in-place.
@@ -449,11 +450,13 @@ class PPOAgent:
             buffer.finish()
         return total_reward, episode_length
 
-    def _parallel_run_episode(self, env, max_episode_length, greedy, random_seed, output):
+    def _parallel_run_episode(self, env, max_episode_length, greedy, random_seed, output, packet_size):
         np.random.seed(random_seed)
         buff = TrajectoryBuffer(gam=self.gam, lam=self.lam)
-        R,L = self.run_episode(env, max_episode_length=max_episode_length, greedy=greedy, buffer=buff)
-        output.put((R,L,buff))
+        results =[]
+        for i in range(packet_size):
+            results.append(self.run_episode(env, max_episode_length=max_episode_length, greedy=greedy, buffer=buff))
+        output.put((results,buff))
 
     def run_episodes(self, env, episodes=100, max_episode_length=None, greedy=False, store=False):
         """Run several episodes, store interaction in buffer, and return history.
@@ -481,15 +484,18 @@ class PPOAgent:
                    'lengths': np.zeros(episodes)}
         if PARALLEL:
             output = mp.Queue()
-            processes = [mp.Process(target = self._parallel_run_episode,args=(env, max_episode_length, greedy, seed, output)) for seed in np.random.randint(0,4294967295,episodes)]
+            assert episodes % PACKET_SIZE == 0, "PACKET_SIZE must divide the number of episodes"
+            num_processes = int(episodes / PACKET_SIZE)
+            processes = [mp.Process(target = self._parallel_run_episode,args=(env, max_episode_length, greedy, seed, output, PACKET_SIZE)) for seed in np.random.randint(0,4294967295,num_processes)]
             for p in processes:
                 p.start()
             results = [output.get() for p in processes]
             for p in processes:
                 p.join()
-            self.buffer=_merge_buffers([b for (_,_,b) in results])
+            self.buffer=_merge_buffers([b for (_,b) in results])
+            returns = [x for (t,_) in results for x in t]
             for i in range(episodes):
-                (history['returns'][i],history['lengths'][i],_) = results[i]
+                (history['returns'][i],history['lengths'][i]) = returns[i]
         else:
             for i in range(episodes):
                 R, L = self.run_episode(env,max_episode_length=max_episode_length, greedy=greedy, buffer=self.buffer)
