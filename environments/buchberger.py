@@ -205,6 +205,7 @@ class BuchbergerEnv:
         self.G = []
         self.P = set()
         self.reducers = []
+        self.lmReducers = []
 
     def reset(self):
         """Initialize the polynomial list and pair list for a new ideal from ideal_fn."""
@@ -220,6 +221,7 @@ class BuchbergerEnv:
             self.reducers = sorted([f.monic() for f in F], key=lambda f: self.ring.order(f.LM))
         else:
             self.reducers = [f.monic() for f in F]
+        self.lmReducers = [f.LM for f in self.reducers]
         return (self.G, self.P) if self.P else self.reset()
 
     def step(self, action):
@@ -227,14 +229,16 @@ class BuchbergerEnv:
         i, j = action
         self.P.remove((i, j))
         s = spoly(self.G[i], self.G[j], lmf=self.lmG[i], lmg=self.lmG[j])
-        r, stats = reduce(s, self.reducers)
+        r, stats = reduce(s, self.reducers, lmF=self.lmReducers)
         if r != 0:
             self.G, self.P = update(self.G, self.P, r.monic(), lmG=self.lmG, strategy=self.elimination)
             self.lmG.append(r.LM)
             if self.sort_reducers:
                 self.reducers = sorted(self.reducers + [r.monic()], key=lambda f: self.ring.order(f.LM))
+                self.lmReducers = [f.LM for f in self.reducers]
             else:
                 self.reducers.append(r.monic())
+                self.lmReducers.append(r.LM)
         reward = -stats['steps'] if self.rewards == 'subtractions' else -1
         return (self.G, self.P), reward, len(self.P) == 0, {}
 
