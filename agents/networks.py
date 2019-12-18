@@ -104,7 +104,7 @@ class ParallelMultilayerPerceptron:
         return model
 
 
-class PairsLeft:
+class PairsLeftBaseline:
     """A Buchberger value network that returns discounted pairs left."""
 
     def __init__(self, gam=0.99):
@@ -132,29 +132,13 @@ class PairsLeft:
         pass
 
 
-class PairsLeftBaseline(tf.keras.Model):
-    """A value network for BuchbergerEnv."""
-
-    def __init__(self, gam=0.99, **kwargs):
-        super().__init__(**kwargs)
-        self.gam = gam
-
-    def call(self, inputs):
-        states = tf.shape(inputs)[0]
-        pairs = tf.cast(tf.shape(inputs)[1], tf.float32)
-        if self.gam == 1:
-            value = -pairs
-        else:
-            value = -(1 - self.gam ** pairs) / (1 - self.gam)
-        return tf.fill([states, 1], value)
-
-
 class AgentBaseline:
     """A Buchberger value network that returns an agent's performance."""
 
     def __init__(self, agent, gam=0.99):
         self.agent = agent
         self.gam = gam
+        self.trainable_variables = []
 
     def predict(self, env):
         env = env.copy()
@@ -169,16 +153,16 @@ class AgentBaseline:
             discount *= self.gam
         return R
 
-    def fit(self, *args, **kwargs):
-        pass
-
-    def compile(self, *args, **kwargs):
-        pass
+    def __call__(self, inputs):
+        return self.predict(inputs)
 
     def save_weights(self, filename):
         pass
 
     def load_weights(self, filename):
+        pass
+
+    def get_weights(self):
         pass
 
 

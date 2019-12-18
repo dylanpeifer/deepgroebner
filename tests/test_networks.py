@@ -28,7 +28,7 @@ def test_ParallelMultilayerPerceptron():
     (1.0, np.zeros((10, 5, 6)), np.full((10, 1), -5)),
     (0.9, np.zeros((10, 5, 6)), np.full((10, 1), -4.0951)),
 ])
-def test_PairsLeft(gam, states, values):
-    value = PairsLeft(gam=gam)
+def test_PairsLeftBaseline(gam, states, values):
+    value = PairsLeftBaseline(gam=gam)
     assert np.allclose(value.predict(states), values)
     
