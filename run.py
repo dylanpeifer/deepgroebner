@@ -8,10 +8,10 @@ import json
 
 import gym
 
-from environments.buchberger import BuchbergerEnv, LeadMonomialsWrapper
-from environments.ideals import RandomBinomialIdealGenerator
-from agents.ppo import PPOAgent
-from agents.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, PairsLeftBaseline
+from deepgroebner.buchberger import BuchbergerEnv, LeadMonomialsWrapper
+from deepgroebner.ideals import RandomBinomialIdealGenerator
+from deepgroebner.ppo import PPOAgent
+from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, PairsLeftBaseline
 
 def make_parser():
     """Return the command line argument parser for this script."""

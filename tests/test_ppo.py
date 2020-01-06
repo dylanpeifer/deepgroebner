@@ -1,11 +1,9 @@
-"""Tests for the proximal policy optimization agent.
-
-"""
+"""Tests for the proximal policy optimization agent."""
 
 import numpy as np
 import pytest
 
-from agents.ppo import *
+from deepgroebner.ppo import *
 
 
 @pytest.mark.parametrize("r, gam, r_", [

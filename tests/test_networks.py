@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from agents.networks import *
+from deepgroebner.networks import *
 
 
 def test_MultilayerPerceptron_0():

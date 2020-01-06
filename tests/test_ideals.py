@@ -1,12 +1,9 @@
-# test_ideals.py
-# Dylan Peifer
-# 24 Sep 2019
-"""Tests for ideal generators."""
+"""Tests for ideals."""
 
 import pytest
 import sympy as sp
 
-from environments.ideals import *
+from deepgroebner.ideals import *
 
 
 def test_FixedIdealGenerator_0():

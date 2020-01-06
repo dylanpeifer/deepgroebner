@@ -1,12 +1,9 @@
-# test_pg.py
-# Dylan Peifer
-# 07 May 2019
 """Tests for policy gradient agent."""
 
 import numpy as np
 import pytest
 
-from agents.pg import *
+from deepgroebner.pg import *
 
 
 @pytest.mark.parametrize("r, gamma, r_", [

@@ -1,13 +1,10 @@
-# test_buchberger.py
-# Dylan Peifer
-# 24 Sep 2019
 """Tests for Buchberger environments."""
 
 import pytest
 import sympy as sp
 
-from environments.buchberger import *
-from environments.ideals import FixedIdealGenerator
+from deepgroebner.buchberger import *
+from deepgroebner.ideals import FixedIdealGenerator
 
 
 R1, x, y, z = sp.ring('x,y,z', sp.FF(32003), 'grevlex')
