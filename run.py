@@ -18,11 +18,13 @@ def make_parser():
     parser = argparse.ArgumentParser(description="Train a new model",
                                      fromfile_prefix_chars='@')
 
-    # environment parameters
+    # environment type
     parser.add_argument('--environment',
                         choices=['RandomBinomialIdeal', 'CartPole-v0', 'CartPole-v1', 'LunarLander-v2'],
                         default='RandomBinomialIdeal',
                         help='the training environment')
+    
+    # RandomBinomialIdeal parameters
     parser.add_argument('--variables',
                         type=int,
                         default=3,
@@ -39,6 +41,18 @@ def make_parser():
                         choices=['uniform', 'weighted', 'maximum'],
                         default='uniform',
                         help='the distribution of degrees')
+    parser.add_argument('--constants',
+                        type=bool,
+                        default=False,
+                        help='whether the generators can have constants')
+    parser.add_argument('--homogeneous',
+                        type=bool,
+                        default=False,
+                        help='whether the ideals are homogeneous')
+    parser.add_argument('--pure',
+                        type=bool,
+                        default=False,
+                        help='whether the ideals are pure')
     parser.add_argument('--elimination',
                         choices=['gebauermoeller', 'lcm', 'none'],
                         default='gebauermoeller',
@@ -46,13 +60,17 @@ def make_parser():
     parser.add_argument('--k',
                         type=int,
                         default=2,
-                        help='the number of monomials visible')
+                        help='the number of lead monomials visible')
 
     # agent parameters
-    parser.add_argument('--hidden_layers',
+    parser.add_argument('--algorithm',
+                        choices=['ppo', 'pg'],
+                        default='ppo',
+                        help='the training algorithm')
+    parser.add_argument('--policy_hl',
                         type=int, nargs='*',
                         default=[48, 48],
-                        help='the hidden layers in the models')
+                        help='the hidden layers in the policy model')
     parser.add_argument('--policy_lr',
                         type=float,
                         default=1e-4,
@@ -61,6 +79,18 @@ def make_parser():
                         type=int,
                         default=40,
                         help='policy model gradient updates per epoch')
+    parser.add_argument('--policy_kld_limit',
+                        type=float,
+                        default=0.01,
+                        help='the KL divergence limit')
+    parser.add_argument('--value_model',
+                        choices=['none', 'mlp', 'pairsleft'],
+                        default='none',
+                        help='the value network type')
+    parser.add_argument('--value_hl',
+                        type=int, nargs='*',
+                        default=[48, 48],
+                        help='the hidden layers in the policy model')
     parser.add_argument('--value_lr',
                         type=float,
                         default=1e-4,
@@ -85,7 +115,8 @@ def make_parser():
     # training parameters
     parser.add_argument('--name',
                         type=str,
-                        help='run name, required')
+                        default='run',
+                        help='name of training run')
     parser.add_argument('--episodes',
                         type=int,
                         default=100,
@@ -94,18 +125,26 @@ def make_parser():
                         type=int,
                         default=1000,
                         help='the number of epochs')
-    parser.add_argument('--save_freq',
+    parser.add_argument('--max_episode_length',
                         type=int,
-                        default=25,
-                        help='how often to save the weights')
+                        default=None,
+                        help='the max number of interactions per episode')
     parser.add_argument('--verbose',
                         type=int,
                         default=0,
                         help='how much information to print')
+    parser.add_argument('--save_freq',
+                        type=int,
+                        default=25,
+                        help='how often to save the weights')
     parser.add_argument('--logdir',
                         type=str,
                         default='data/runs',
-                        help='the top level directory for training runs')
+                        help='the base directory for training runs')
+    parser.add_argument('--binned',
+                        type=bool,
+                        default=False,
+                        help='whether to train on binned ideals')
 
     return parser
 
@@ -128,14 +167,14 @@ def make_agent(args):
             'LunarLander-v2': (8, 4),
             'RandomBinomialIdeal': (2 * args.variables * args.k, 1)}[args.environment]
     if args.environment == 'RandomBinomialIdeal':
-        policy_network = ParallelMultilayerPerceptron(dims[0], args.hidden_layers)
+        policy_network = ParallelMultilayerPerceptron(dims[0], args.policy_hl)
         value_network = PairsLeftBaseline(gam=args.gam)
         action_dim_fn = lambda s: s[0]
     else:
-        policy_network = MultilayerPerceptron(dims[0], args.hidden_layers, dims[1])
-        value_network = None
+        policy_network = MultilayerPerceptron(dims[0], args.policy_hl, dims[1])
+        value_network = MultilayerPerceptron(dims[0], args.value_hl, 1, final_activation='linear')
         action_dim_fn = lambda s: dims[1]
-    agent = PPOAgent(policy_network, policy_lr=args.policy_lr, policy_updates=args.policy_updates,
+    agent = PPOAgent(policy_network=policy_network, policy_lr=args.policy_lr, policy_updates=args.policy_updates,
                      value_network=value_network, value_lr=args.value_lr, value_updates=args.value_updates,
                      gam=args.gam, lam=args.lam, eps=args.eps, action_dim_fn=action_dim_fn)
     return agent
@@ -150,9 +189,11 @@ def make_logdir(args):
     return logdir
 
 
-def save_args(logdir,args):
-    with open(os.path.join(logdir,'args.txt'), 'w') as outfile:
-        json.dump(vars(args), outfile)
+def save_args(logdir, args):
+    with open(os.path.join(logdir,'args.txt'), 'w') as f:
+        for arg, value in vars(args).items():
+            f.write('--' + arg +'\n')
+            f.write(str(value) + '\n')
 
 
 if __name__ == '__main__':
@@ -160,7 +201,7 @@ if __name__ == '__main__':
     env = make_env(args)
     agent = make_agent(args)
     logdir = make_logdir(args)
-    save_args(logdir,args)
+    save_args(logdir, args)
     print(logdir)
     agent.train(env, episodes=args.episodes, epochs=args.epochs,
                 save_freq=args.save_freq, logdir=logdir, verbose=args.verbose)
