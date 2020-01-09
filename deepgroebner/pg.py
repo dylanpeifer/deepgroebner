@@ -218,12 +218,12 @@ def _merge_buffers(bufferlist):
     return output
 
 
-def print_status_bar(i, total, history, verbose=1):
+def print_status_bar(i, epochs, history, verbose=1):
     """Print a formatted status line."""
     metrics = "".join([" - {}: {:.4f}".format(m, history[m][i])
                        for m in history])
-    end = "\n" if verbose == 2 or i == total else ""
-    print("\rEpoch {}/{}".format(i, total) + metrics, end=end)
+    end = "\n" if verbose == 2 or i+1 == epochs else ""
+    print("\rEpoch {}/{}".format(i+1, epochs) + metrics, end=end)
 
 
 class Agent:
