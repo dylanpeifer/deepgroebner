@@ -10,7 +10,7 @@ import gym
 
 from deepgroebner.buchberger import BuchbergerEnv, LeadMonomialsWrapper
 from deepgroebner.ideals import RandomBinomialIdealGenerator
-from deepgroebner.ppo import PGAgent, PPOAgent
+from deepgroebner.pg import PGAgent, PPOAgent
 from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, PairsLeftBaseline
 
 def make_parser():
