@@ -1,5 +1,8 @@
-"""A proximal policy optimization agent that supports changing state shapes.
+"""Policy gradient agents that support changing state shapes.
 
+Currently includes policy gradient agent (i.e., Monte Carlo policy
+gradient or vanilla policy gradient) and proximal policy optimization
+agent.
 """
 
 import numpy as np
@@ -215,64 +218,6 @@ def _merge_buffers(bufferlist):
     return output
 
 
-@tf.function(experimental_relax_shapes=True)
-def pg_surrogate_loss(new_prob, old_prob, actions, advantages):
-    """Return loss with gradient for policy gradient.
-
-    Parameters
-    ----------
-    new_probs : Tensor (batch_dim, action_dim)
-        The output of the current model.
-    old_prob : Tensor (batch_dim,)
-        The previous probability of picking the given action.
-    actions : Tensor (batch_dim,)
-        The chosen actions.
-    advantages : Tensor (batch_dim,)
-        The computed advantages.
-
-    Returns
-    -------
-    loss : Tensor (batch_dim,)
-        The loss for each interaction.
-
-    """
-    return -tf.math.log(new_prob) * advantages
-
-
-def ppo_surrogate_loss(eps=0.2):
-    """Return loss function with gradient for proximal policy optimization.
-
-    Parameters
-    ----------
-    eps : float
-        The clip ratio for PPO.
-
-    """
-    @tf.function(experimental_relax_shapes=True)
-    def loss(new_prob, old_prob, actions, advantages):
-        """Return loss with gradient for proximal policy optimization.
-
-        Parameters
-        ----------
-        new_probs : Tensor (batch_dim, action_dim)
-            The output of the current model.
-        old_probs : Tensor (batch_dim,)
-            The old model probability of choosing the given action.
-        actions : Tensor (batch_dim,)
-            The chosen actions.
-        advantages : Tensor (batch_dim,)
-            The computed advantages.
-
-        Returns
-        -------
-        loss : Tensor (batch_dim,)
-            The loss for each interaction.
-        """
-        min_adv = tf.where(advantages > 0, (1 + eps) * advantages, (1 - eps) * advantages)
-        return -tf.minimum(new_prob / old_prob * advantages, min_adv)
-    return loss
-
-
 def print_status_bar(i, total, history, verbose=1):
     """Print a formatted status line."""
     metrics = "".join([" - {}: {:.4f}".format(m, history[m][i])
@@ -281,8 +226,12 @@ def print_status_bar(i, total, history, verbose=1):
     print("\rEpoch {}/{}".format(i, total) + metrics, end=end)
 
 
-class PPOAgent:
-    """A proximal policy optimization agent.
+class Agent:
+    """Abstract base class for policy gradient agents.
+    
+    All functionality for policy gradient is implemented in this
+    class. Derived classes must define the property `policy_loss`
+    which is used to train the policy.
 
     Parameters
     ----------
@@ -304,8 +253,6 @@ class PPOAgent:
         The parameter for generalized advantage estimation.
     normalize : bool, optional
         Whether to normalize advantages.
-    eps : float, optional
-        The clip ratio for PPO.
     action_dim_fn : function, optional
         The function that maps state shape to action dimension.
     kld_limit : float, optional
@@ -318,7 +265,7 @@ class PPOAgent:
                  gam=0.99, lam=0.97, normalize_advantages=True, eps=0.2,
                  action_dim_fn=lambda s: s[0], kld_limit=0.01):
         self.policy_model = policy_network
-        self.policy_loss = ppo_surrogate_loss(eps)
+        self.policy_loss = NotImplementedError
         self.policy_optimizer = tf.keras.optimizers.Adam(lr=policy_lr)
         self.policy_updates = policy_updates
 
@@ -327,8 +274,8 @@ class PPOAgent:
         self.value_optimizer = tf.keras.optimizers.Adam(lr=value_lr)
         self.value_updates = value_updates
 
-        self.lam=lam
-        self.gam=gam
+        self.lam = lam
+        self.gam = gam
         self.buffer = TrajectoryBuffer(gam=gam, lam=lam)
         self.normalize_advantages = normalize_advantages
         self.action_dim_fn = action_dim_fn
@@ -352,7 +299,7 @@ class PPOAgent:
 
     def train(self, env, episodes=10, epochs=1,
               max_episode_length=None, verbose=0, save_freq=1, logdir=None):
-        """Train the agent.
+        """Train the agent on env.
 
         Parameters
         ----------
@@ -573,3 +520,93 @@ class PPOAgent:
         """Save the current weights in the value model to filename."""
         if self.value_model is not None:
             self.value_model.save_weights(filename)
+
+
+@tf.function(experimental_relax_shapes=True)
+def pg_surrogate_loss(new_prob, old_prob, actions, advantages):
+    """Return loss with gradient for policy gradient.
+
+    Parameters
+    ----------
+    new_probs : Tensor (batch_dim, action_dim)
+        The output of the current model.
+    old_prob : Tensor (batch_dim,)
+        The previous probability of picking the given action.
+    actions : Tensor (batch_dim,)
+        The chosen actions.
+    advantages : Tensor (batch_dim,)
+        The computed advantages.
+
+    Returns
+    -------
+    loss : Tensor (batch_dim,)
+        The loss for each interaction.
+
+    """
+    return -tf.math.log(new_prob) * advantages
+
+
+class PGAgent(Agent):
+    """A policy gradient agent.
+    
+    Parameters
+    ----------
+    policy_network : network
+        The network for the policy model.
+    
+    """
+
+    def __init__(self, policy_network, **kwargs):
+        super().__init__(policy_network, **kwargs)
+        self.policy_loss = pg_surrogate_loss
+
+
+def ppo_surrogate_loss(eps=0.2):
+    """Return loss function with gradient for proximal policy optimization.
+
+    Parameters
+    ----------
+    eps : float
+        The clip ratio for PPO.
+
+    """
+    @tf.function(experimental_relax_shapes=True)
+    def loss(new_prob, old_prob, actions, advantages):
+        """Return loss with gradient for proximal policy optimization.
+
+        Parameters
+        ----------
+        new_probs : Tensor (batch_dim, action_dim)
+            The output of the current model.
+        old_probs : Tensor (batch_dim,)
+            The old model probability of choosing the given action.
+        actions : Tensor (batch_dim,)
+            The chosen actions.
+        advantages : Tensor (batch_dim,)
+            The computed advantages.
+
+        Returns
+        -------
+        loss : Tensor (batch_dim,)
+            The loss for each interaction.
+        """
+        min_adv = tf.where(advantages > 0, (1 + eps) * advantages, (1 - eps) * advantages)
+        return -tf.minimum(new_prob / old_prob * advantages, min_adv)
+    return loss
+
+
+class PPOAgent(Agent):
+    """A proximal policy optimization agent.
+
+    Parameters
+    ----------
+    policy_network : network
+        The network for the policy model.
+    eps : float, optional
+        The clip ratio for PPO.
+        
+    """
+
+    def __init__(self, policy_network, eps=0.2, **kwargs):
+        super().__init__(policy_network, **kwargs)
+        self.policy_loss = ppo_surrogate_loss(eps)

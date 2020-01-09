@@ -10,7 +10,7 @@ import gym
 
 from deepgroebner.buchberger import BuchbergerEnv, LeadMonomialsWrapper
 from deepgroebner.ideals import RandomBinomialIdealGenerator
-from deepgroebner.ppo import PPOAgent
+from deepgroebner.ppo import PGAgent, PPOAgent
 from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, PairsLeftBaseline
 
 def make_parser():
@@ -21,7 +21,7 @@ def make_parser():
     # environment type
     parser.add_argument('--environment',
                         choices=['RandomBinomialIdeal', 'CartPole-v0', 'CartPole-v1', 'LunarLander-v2'],
-                        default='RandomBinomialIdeal',
+                        default='CartPole-v0',
                         help='the training environment')
     
     # RandomBinomialIdeal parameters
@@ -69,7 +69,7 @@ def make_parser():
                         help='the training algorithm')
     parser.add_argument('--policy_hl',
                         type=int, nargs='*',
-                        default=[48, 48],
+                        default=[128],
                         help='the hidden layers in the policy model')
     parser.add_argument('--policy_lr',
                         type=float,
@@ -89,7 +89,7 @@ def make_parser():
                         help='the value network type')
     parser.add_argument('--value_hl',
                         type=int, nargs='*',
-                        default=[48, 48],
+                        default=[128],
                         help='the hidden layers in the policy model')
     parser.add_argument('--value_lr',
                         type=float,
@@ -123,7 +123,7 @@ def make_parser():
                         help='the number of episodes per epoch')
     parser.add_argument('--epochs',
                         type=int,
-                        default=1000,
+                        default=25,
                         help='the number of epochs')
     parser.add_argument('--max_episode_length',
                         type=int,
@@ -174,9 +174,14 @@ def make_agent(args):
         policy_network = MultilayerPerceptron(dims[0], args.policy_hl, dims[1])
         value_network = MultilayerPerceptron(dims[0], args.value_hl, 1, final_activation='linear')
         action_dim_fn = lambda s: dims[1]
-    agent = PPOAgent(policy_network=policy_network, policy_lr=args.policy_lr, policy_updates=args.policy_updates,
-                     value_network=value_network, value_lr=args.value_lr, value_updates=args.value_updates,
-                     gam=args.gam, lam=args.lam, eps=args.eps, action_dim_fn=action_dim_fn)
+    if args.algorithm == 'pg':
+        agent = PGAgent(policy_network=policy_network, policy_lr=args.policy_lr, policy_updates=args.policy_updates,
+                        value_network=value_network, value_lr=args.value_lr, value_updates=args.value_updates,
+                        gam=args.gam, lam=args.lam, action_dim_fn=action_dim_fn)
+    else:
+        agent = PPOAgent(policy_network=policy_network, policy_lr=args.policy_lr, policy_updates=args.policy_updates,
+                         value_network=value_network, value_lr=args.value_lr, value_updates=args.value_updates,
+                         gam=args.gam, lam=args.lam, eps=args.eps, action_dim_fn=action_dim_fn)
     return agent
 
 
@@ -190,6 +195,7 @@ def make_logdir(args):
 
 
 def save_args(logdir, args):
+    """Save args as a text file in logdir."""
     with open(os.path.join(logdir,'args.txt'), 'w') as f:
         for arg, value in vars(args).items():
             f.write('--' + arg +'\n')
