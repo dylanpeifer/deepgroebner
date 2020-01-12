@@ -1,7 +1,7 @@
 newPackage(
         "Ideals",
         Version => "0.0.0",
-        Date => "November 19, 2019",
+        Date => "January 6, 2020",
         Authors => {{Name => "Dylan Peifer", 
                      Email => "djp282@cornell.edu", 
                      HomePage => "https://www.math.cornell.edu/~djp282"}},
@@ -312,7 +312,29 @@ Description
     randomBinomialIdeal(5, 3, 10)
   Text
     Ideals are generated in new rings (except for @TO randomBinomialIdeal@, which can take in
-    a ring).
+    a ring). The coefficient ring and monomial order can be changed with optional MonomialOrder
+    and CoefficientRing arguments.
+///
+
+doc ///
+Key
+  commutingMatrices
+  (commutingMatrices, ZZ)
+Headline
+  return the ideal given by commuting nxn matrices
+Usage
+  I = commutingMatrices(n)
+Inputs
+  n: ZZ
+     the size of the matrices
+Outputs
+  I: Ideal
+     the ideal given by commuting nxn matrices
+Description
+  Text
+    Two generic nxn matrices will commute if the equations are satisfied.
+  Example
+    I = commutingMatrices 3
 ///
 
 doc ///
@@ -334,6 +356,90 @@ Description
     The cyclic-n ideal is a classical benchmarking problem.
   Example
     I = cyclic 5
+///
+
+doc ///
+Key
+  eco
+  (eco, ZZ)
+Headline
+  return the eco-n ideal
+Usage
+  I = eco(n)
+Inputs
+  n: ZZ
+     the number of variables
+Outputs
+  I: Ideal
+     the eco-n ideal
+Description
+  Text
+    The eco-n ideal is a classical benchmarking problem.
+  Example
+    I = eco 5
+///
+
+doc ///
+Key
+  katsura
+  (katsura, ZZ)
+Headline
+  return the katsura-n ideal
+Usage
+  I = katsura(n)
+Inputs
+  n: ZZ
+     the number of variables
+Outputs
+  I: Ideal
+     the katsura-n ideal
+Description
+  Text
+    The katsura-n ideal is a classical benchmarking problem.
+  Example
+    I = katsura 5
+///
+
+doc ///
+Key
+  noon
+  (noon, ZZ)
+Headline
+  return the noon-n ideal
+Usage
+  I = noon(n)
+Inputs
+  n: ZZ
+     the number of variables
+Outputs
+  I: Ideal
+     the noon-n ideal
+Description
+  Text
+    The noon-n ideal is a classical benchmarking problem.
+  Example
+    I = noon 5
+///
+
+doc ///
+Key
+  reimer
+  (reimer, ZZ)
+Headline
+  return the reimer-n ideal
+Usage
+  I = reimer(n)
+Inputs
+  n: ZZ
+     the number of variables
+Outputs
+  I: Ideal
+     the reimer-n ideal
+Description
+  Text
+    The reimer-n ideal is a classical benchmarking problem.
+  Example
+    I = reimer 5
 ///
 
 doc ///
@@ -394,7 +500,7 @@ Description
     Choose whether the degree distribution should allow constants.
   Example
     D = degreeDistribution(3, 5, Constants => true)
-    D = degeeeDistribution(3, 5, Constants => false)
+    D = degreeDistribution(3, 5, Constants => false)
 SeeAlso
   degreeDistribution
 ///
