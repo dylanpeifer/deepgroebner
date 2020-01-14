@@ -1,7 +1,7 @@
 newPackage(
         "Ideals",
-        Version => "0.0.0",
-        Date => "January 6, 2020",
+        Version => "0.0.1",
+        Date => "January 14, 2020",
         Authors => {{Name => "Dylan Peifer", 
                      Email => "djp282@cornell.edu", 
                      HomePage => "https://www.math.cornell.edu/~djp282"}},

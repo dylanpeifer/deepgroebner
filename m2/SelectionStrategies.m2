@@ -1,7 +1,7 @@
 newPackage(
         "SelectionStrategies",
         Version => "0.0.1", 
-        Date => "November 13, 2019",
+        Date => "January 14, 2020",
         Authors => {{Name => "Dylan Peifer", 
                      Email => "djp282@cornell.edu", 
                      HomePage => "https://www.math.cornell.edu/~djp282"}},
@@ -109,7 +109,7 @@ reduce(SugarPolynomial, List) := SugarPolynomial => opts -> (g, F) -> (
 
     doubleSugar := opts.Strategy === "DoubleSugar" or opts.Strategy === "Saccharine";
 
-    polynomialSubtractions := 0;
+    polynomialAdditions := 0;
     monomialAdditions := 0;
 
     while g != 0 do (
@@ -126,7 +126,7 @@ reduce(SugarPolynomial, List) := SugarPolynomial => opts -> (g, F) -> (
 		    )
 		else (
 		    g = g - reducer;
-		    polynomialSubtractions = polynomialSubtractions + 1;
+		    polynomialAdditions = polynomialAdditions + 1;
 		    monomialAdditions = monomialAdditions + length terms reducer;
 		    foundDivisor = true;
 		    break;
@@ -134,7 +134,7 @@ reduce(SugarPolynomial, List) := SugarPolynomial => opts -> (g, F) -> (
 	        );
 	    );
 
-    	-- if first pass didn't find a divisor then we
+    	-- if first pass didn't find a divisor then we:
 	--    try again without doubleSugar if using Saccharine
 	--    are done if only head reducing
 	--    otherwise remove lead term of g and add it to the remainder
@@ -156,7 +156,7 @@ reduce(SugarPolynomial, List) := SugarPolynomial => opts -> (g, F) -> (
 	if opts.Strategy === "Saccharine" then doubleSugar = true;
 	);
     
-    stats := hashTable {"polynomialSubtractions" => polynomialSubtractions,
+    stats := hashTable {"polynomialAdditions" => polynomialAdditions,
 	                "monomialAdditions" => monomialAdditions};
 
     -- r holds remainder and g holds sugar degree and/or unreduced tail terms
@@ -236,19 +236,19 @@ degree  SPair := ZZ          => p -> first degree lcm p
 SPair ? SPair := (s1, s2) -> indices s1 ? indices s2
 
 spoly = method()
-spoly(RingElement, RingElement) := RingElement =>
-spoly(SugarPolynomial, SugarPolynomial) := SugarPolynomial => (f, g) -> (
+spoly(RingElement, RingElement) := Sequence =>
+spoly(SugarPolynomial, SugarPolynomial) := Sequence => (f, g) -> (
     -- f = a polynomial
     -- g = a polynomial
-    -- returns the s-polynomial of f and g
+    -- returns the s-polynomial of f and g and stats
 
     gamma := lcm(leadMonomial f, leadMonomial g);
-    (gamma // leadTerm f) * f - (gamma // leadTerm g) * g
+    ((gamma // leadTerm f) * f - (gamma // leadTerm g) * g, min({f, g}/terms/length))
     )
 spoly(SPair, List) := (p, F) -> (
     -- p = an SPair
     -- F = a list of polynomials
-    -- returns the s-polynomial given by p
+    -- returns the s-polynomial given by p and stats
 
     (i, j) := indices p;
     spoly(F#i, F#j)
@@ -363,7 +363,7 @@ buchberger = method(Options => {
 	Minimalize => true,
 	Interreduce => true
 	})
-buchberger(Ideal) := Sequence => opts -> (I) -> (
+buchberger(Ideal) := Sequence => opts -> I -> (
     -- I = an ideal in a polynomial ring
     -- returns number of pairs processed in computing a Groebner basis of I
 
@@ -376,22 +376,25 @@ buchberger(Ideal) := Sequence => opts -> (I) -> (
     for f in F do (
 	(P, G) = updatePairs(P, G, f, Strategy => opts.EliminationStrategy);
 	);
-    
+
     reducers := G;
     if opts.SortReducers then reducers = sort reducers;
 
     zeroReductions := 0;
     nonzeroReductions := 0;
-    polynomialSubtractions := 0;
+    polynomialAdditions := 0;
     monomialAdditions := 0;
     p := 0;
+    s := 0;
+    adds := 0;
 
     while #P > 0 do (
 	(p, P) = selectPair(P, Strategy => opts.SelectionStrategy);
-	s := spoly(p, G);
+	(s, adds) = spoly(p, G);
 	(r, stats) := reduce(s, reducers, Strategy => opts.ReductionStrategy);
-	polynomialSubtractions = polynomialSubtractions + stats#"polynomialSubtractions";
-	monomialAdditions = monomialAdditions + stats#"monomialAdditions";
+	polynomialAdditions = polynomialAdditions + stats#"polynomialAdditions" + 1;
+	monomialAdditions = monomialAdditions + stats#"monomialAdditions" + adds;
+
 	if r != 0 then (
 	    (P, G) = updatePairs(P, G, r, Strategy => opts.EliminationStrategy);
 	    nonzeroReductions = nonzeroReductions + 1;
@@ -406,10 +409,10 @@ buchberger(Ideal) := Sequence => opts -> (I) -> (
     if opts.SelectionStrategy === "Sugar" then G = apply(G, polynomial);
     if opts.Minimalize then G = minimalize(G);
     if opts.Interreduce then G = interreduce(G);
-    
+
     stats = hashTable {"zeroReductions" => zeroReductions,
 	               "nonzeroReductions" => nonzeroReductions,
-		       "polynomialSubtractions" => polynomialSubtractions,
+		       "polynomialAdditions" => polynomialAdditions,
 		       "monomialAdditions" => monomialAdditions};
     (G, stats)
     )
@@ -508,44 +511,52 @@ TEST /// -- spoly (basic example)
 R = QQ[x,y]
 f = x^2 + x*y
 g = y^2 + x*y
-assert(spoly(f, g) == 0)
+assert(spoly(f, g) == (0, 2))
 fs = sugarPolynomial f
 gs = sugarPolynomial g
-assert(sugar spoly(fs, gs) == 3)
-assert(polynomial spoly(fs, gs) == 0)
+(s, adds) = spoly(fs, gs)
+assert(sugar s == 3)
+assert(polynomial s == 0)
+assert(adds == 2)
 ///
 
 TEST /// -- spoly (division by lead coefficient over rationals)
 R = QQ[x,y]
 f = x^3*y^2 - x^2*y^3
 g = 3*x^4*y + y^2
-assert(spoly(f, g) == -x^3*y^3 - (1/3)*y^3)
+assert(spoly(f, g) == (-x^3*y^3 - (1/3)*y^3, 2))
 fs = sugarPolynomial f
 gs = sugarPolynomial g
-assert(sugar spoly(fs, gs) == 6)
-assert(polynomial spoly(fs, gs) == -x^3*y^3 - (1/3)*y^3)
+(s, adds) = spoly(fs, gs)
+assert(sugar s == 6)
+assert(polynomial s == -x^3*y^3 - (1/3)*y^3)
+assert(adds == 2)
 ///
 
 TEST /// -- spoly (division by lead coefficient over finite field)
 R = ZZ/32003[x,y]
 f = x^3*y^2 - x^2*y^3
 g = 3*x^4*y + y^2
-assert(spoly(f, g) == -x^3*y^3 - (1/3)*y^3)
+assert(spoly(f, g) == (-x^3*y^3 - (1/3)*y^3, 2))
 fs = sugarPolynomial f
 gs = sugarPolynomial g
-assert(sugar spoly(fs, gs) == 6)
-assert(polynomial spoly(fs, gs) == -x^3*y^3 - (1/3)*y^3)
+(s, adds) = spoly(fs, gs)
+assert(sugar s == 6)
+assert(polynomial s == -x^3*y^3 - (1/3)*y^3)
+assert(adds == 2)
 ///
 
 TEST /// -- spoly (lex order)
 R = ZZ/32003[x,y, MonomialOrder => Lex]
 f = x^2 - y^3
 g = x*y^2 + x
-assert(spoly(f, g) == -y^5 - x^2)
+assert(spoly(f, g) == (-y^5 - x^2, 2))
 fs = sugarPolynomial f
 gs = sugarPolynomial g
-assert(sugar spoly(fs, gs) == 5)
-assert(polynomial spoly(fs, gs) == -y^5 - x^2)
+(s, adds) = spoly(fs, gs)
+assert(sugar s == 5)
+assert(polynomial s == -y^5 - x^2)
+assert(adds == 2)
 ///
 
 TEST /// -- Groebner basis of katsura4 (LCM elimination)
