@@ -21,7 +21,7 @@ def make_parser():
     # environment type
     parser.add_argument('--environment',
                         choices=['RandomBinomialIdeal', 'CartPole-v0', 'CartPole-v1', 'LunarLander-v2'],
-                        default='CartPole-v0',
+                        default='RandomBinomialIdeal',
                         help='the training environment')
     
     # RandomBinomialIdeal parameters
@@ -37,26 +37,30 @@ def make_parser():
                         type=int,
                         default=5,
                         help='the number of generators')
+    parser.add_argument('--constants',
+                        type=lambda x: str(x).lower() == 'true',
+                        default=False,
+                        help='whether the generators can have constants')
     parser.add_argument('--degree_distribution',
                         choices=['uniform', 'weighted', 'maximum'],
                         default='uniform',
-                        help='the distribution of degrees')
-    parser.add_argument('--constants',
-                        type=bool,
-                        default=False,
-                        help='whether the generators can have constants')
+                        help='the probability distribution on degrees')
     parser.add_argument('--homogeneous',
-                        type=bool,
+                        type=lambda x: str(x).lower() == 'true',
                         default=False,
                         help='whether the ideals are homogeneous')
     parser.add_argument('--pure',
-                        type=bool,
+                        type=lambda x: str(x).lower() == 'true',
                         default=False,
                         help='whether the ideals are pure')
     parser.add_argument('--elimination',
                         choices=['gebauermoeller', 'lcm', 'none'],
                         default='gebauermoeller',
                         help='the elimination strategy')
+    parser.add_argument('--rewards',
+                        choices=['steps', 'subtractions'],
+                        default='steps',
+                        help='the reward given for each step')
     parser.add_argument('--k',
                         type=int,
                         default=2,
@@ -117,6 +121,10 @@ def make_parser():
                         type=str,
                         default='run',
                         help='name of training run')
+    parser.add_argument('--datetag',
+                        type=lambda x: str(x).lower() == 'true',
+                        default=True,
+                        help='whether to append current time to run name')
     parser.add_argument('--episodes',
                         type=int,
                         default=100,
@@ -126,7 +134,7 @@ def make_parser():
                         default=25,
                         help='the number of epochs')
     parser.add_argument('--max_episode_length',
-                        type=int,
+                        type=lambda x: int(x) if x.lower() != 'none' else None,
                         default=None,
                         help='the max number of interactions per episode')
     parser.add_argument('--verbose',
@@ -142,7 +150,7 @@ def make_parser():
                         default='data/runs',
                         help='the base directory for training runs')
     parser.add_argument('--binned',
-                        type=bool,
+                        type=lambda x: str(x).lower() == 'true',
                         default=False,
                         help='whether to train on binned ideals')
 
@@ -154,8 +162,10 @@ def make_env(args):
     if args.environment in ['CartPole-v0', 'CartPole-v1', 'LunarLander-v2']:
         env = gym.make(args.environment)
     else:
-        ideal_gen = RandomBinomialIdealGenerator(args.variables, args.degree, args.generators)
-        env = BuchbergerEnv(ideal_gen, elimination=args.elimination)
+        ideal_gen = RandomBinomialIdealGenerator(args.variables, args.degree, args.generators,
+                                                 constants=args.constants, degrees=args.degree_distribution,
+                                                 homogeneous=args.homogeneous, pure=args.pure)
+        env = BuchbergerEnv(ideal_gen, elimination=args.elimination, rewards=args.rewards)
         env = LeadMonomialsWrapper(env, k=args.k)
     return env
 
@@ -188,8 +198,11 @@ def make_agent(args):
 def make_logdir(args):
     """Return the directory name for this run."""
     time_string = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-    param_string = "".join([k + '=' + str(v) + ',' for k, v in vars(args).items()])
-    logdir = os.path.join(args.logdir, args.name + '_' + time_string + '_' + str(abs(hash(param_string))))
+    if args.datetag:
+        run_name = args.name + "_" + time_string
+    else:
+        run_name = args.name
+    logdir = os.path.join(args.logdir, run_name)
     os.makedirs(logdir)
     return logdir
 
@@ -199,7 +212,10 @@ def save_args(logdir, args):
     with open(os.path.join(logdir,'args.txt'), 'w') as f:
         for arg, value in vars(args).items():
             f.write('--' + arg +'\n')
-            f.write(str(value) + '\n')
+            if isinstance(value, list):
+                f.write("\n".join(str(v) for v in value) + "\n")
+            else:
+                f.write(str(value) + '\n')
 
 
 if __name__ == '__main__':
@@ -210,4 +226,5 @@ if __name__ == '__main__':
     save_args(logdir, args)
     print(logdir)
     agent.train(env, episodes=args.episodes, epochs=args.epochs,
-                save_freq=args.save_freq, logdir=logdir, verbose=args.verbose)
+                save_freq=args.save_freq, logdir=logdir, verbose=args.verbose,
+                max_episode_length=args.max_episode_length)
