@@ -8,18 +8,21 @@ from deepgroebner.networks import *
 
 def test_MultilayerPerceptron_0():
     policy = MultilayerPerceptron(4, [128], 2, final_activation='softmax')
+    np.random.seed(123)
     X = np.random.randn(10, 4)
     assert np.allclose(policy.predict(X), policy.network.predict(X))
 
 
 def test_MultilayerPerceptron_1():
     policy = MultilayerPerceptron(4, [128], 2, final_activation='linear')
+    np.random.seed(123)
     X = np.random.randn(10, 4)
     assert np.allclose(policy.predict(X), policy.network.predict(X))
 
 
 def test_ParallelMultilayerPerceptron():
     policy = ParallelMultilayerPerceptron(6, [24])
+    np.random.seed(123)
     X = np.random.randn(10, 15, 6)
     assert np.allclose(policy.predict(X), policy.network.predict(X))
 
