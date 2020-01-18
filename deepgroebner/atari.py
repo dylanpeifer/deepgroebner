@@ -1,6 +1,3 @@
-# atari.py
-# Dylan Peifer
-# 22 Feb 2019
 """A wrapper for Atari environments from OpenAI gym."""
 
 from collections import deque

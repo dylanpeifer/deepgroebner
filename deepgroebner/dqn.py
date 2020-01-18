@@ -1,6 +1,3 @@
-# dqn.py
-# Dylan Peifer
-# 21 Feb 2019
 """A deep Q-Network agent."""
 
 import numpy as np

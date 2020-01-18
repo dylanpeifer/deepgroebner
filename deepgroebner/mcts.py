@@ -1,6 +1,4 @@
-"""A Monte Carlo tree search agent.
-
-"""
+"""A Monte Carlo tree search agent."""
 
 import numpy as np
 

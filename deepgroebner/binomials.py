@@ -1,7 +1,3 @@
-# binomial_buchberger.py
-# Dan Halpern-Leistner
-# 7 Mar 2019
-
 import numpy as np
 
 # for now, the characteristic is fixed
