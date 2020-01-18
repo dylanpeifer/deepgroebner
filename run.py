@@ -58,8 +58,8 @@ def make_parser():
                         default='gebauermoeller',
                         help='the elimination strategy')
     parser.add_argument('--rewards',
-                        choices=['steps', 'subtractions'],
-                        default='steps',
+                        choices=['additions', 'reductions'],
+                        default='additions',
                         help='the reward given for each step')
     parser.add_argument('--k',
                         type=int,

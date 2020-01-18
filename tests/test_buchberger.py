@@ -270,7 +270,7 @@ def test_episode_0(s):
          b**2 + 2*a*c + 2*b*d + 2*c*e - c,
          2*b*c + 2*a*d + 2*b*e - d]
     ideal_gen = FixedIdealGenerator(F)
-    env = BuchbergerEnv(ideal_gen)
+    env = BuchbergerEnv(ideal_gen, rewards='reductions')
     agent = BuchbergerAgent(selection=s)
     assert run_episode(agent, env) == -28
 
@@ -285,7 +285,7 @@ def test_episode_1(e, reward):
          a*b*c + b*c*d + c*d*a + d*a*b,
          a*b*c*d - 1]
     ideal_gen = FixedIdealGenerator(F)
-    env = BuchbergerEnv(ideal_gen, elimination=e)
+    env = BuchbergerEnv(ideal_gen, elimination=e, rewards='reductions')
     agent = BuchbergerAgent(selection=['normal', 'first'])
     assert run_episode(agent, env) == reward
 
@@ -297,7 +297,7 @@ def test_episode_2(s, reward):
     R, x, y, z, t = sp.ring('x,y,z,t', sp.FF(32003), 'grlex')
     F = [x**31 - x**6 - x - y, x**8 - z, x**10 - t]
     ideal_gen = FixedIdealGenerator(F)
-    env = BuchbergerEnv(ideal_gen)
+    env = BuchbergerEnv(ideal_gen, rewards='reductions')
     agent = BuchbergerAgent(selection=s)
     assert run_episode(agent, env) == reward
 

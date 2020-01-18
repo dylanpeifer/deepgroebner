@@ -1,6 +1,3 @@
-# buchberger.py
-# Dylan Peifer
-# 13 Nov 2019
 """An environment for computing Groebner bases with Buchberger's algorithm."""
 
 import numpy as np
@@ -170,7 +167,7 @@ class BuchbergerEnv:
     sort_reducers : bool, optional
         Whether to choose reducers in sorted order when performing long division
         on the s-polynomials.
-    rewards : {'steps', 'subtractions'}, optional
+    rewards : {'reductions', 'additions'}, optional
         The reward value for each step.
     
     Examples
@@ -196,7 +193,7 @@ class BuchbergerEnv:
                  ideal_gen,
                  elimination='gebauermoeller',
                  sort_reducers=True,
-                 rewards='steps'):
+                 rewards='additions'):
         self.ideal_gen = ideal_gen
         self.elimination = elimination
         self.sort_reducers = sort_reducers
@@ -239,7 +236,7 @@ class BuchbergerEnv:
             else:
                 self.reducers.append(r.monic())
                 self.lmReducers.append(r.LM)
-        reward = -stats['steps'] if self.rewards == 'subtractions' else -1
+        reward = -(1 + stats['steps']) if self.rewards == 'additions' else -1
         return (self.G, self.P), reward, len(self.P) == 0, {}
 
     def render(self):
