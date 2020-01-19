@@ -319,7 +319,6 @@ class LeadMonomialsWrapper():
         self.pairs = []       # list of current pairs
         self.m = 0            # size of current basis
         self.leads = {}       # leads[i] = lead_monomials_vector(env.G[i])
-        self.pair_leads = {}  # pair_leads[(i, j)] = np.concatenate([leads[i], leads[j]])
 
     def reset(self):
         G, P = self.env.reset()
@@ -327,8 +326,6 @@ class LeadMonomialsWrapper():
         self.m = len(G)
         self.leads = {i: lead_monomials_vector(G[i], k=self.k, dtype=self.dtype)
                       for i in range(self.m)}
-        self.pair_leads = {(i, j): np.concatenate([self.leads[i], self.leads[j]])
-                           for i in range(self.m) for j in range(i+1, self.m)}
         return self._matrix()
 
     def step(self, action):
@@ -337,9 +334,6 @@ class LeadMonomialsWrapper():
         if len(G) > self.m:
             self.m += 1
             self.leads[self.m-1] = lead_monomials_vector(G[self.m-1], k=self.k, dtype=self.dtype)
-            new_pairs = {(i, self.m-1): np.concatenate([self.leads[i], self.leads[self.m-1]])
-                         for i in range(self.m-1)}
-            self.pair_leads.update(new_pairs)
         return self._matrix(), reward, done, info
 
     def render(self):
@@ -347,7 +341,8 @@ class LeadMonomialsWrapper():
 
     def _matrix(self):
         if self.pairs:
-            return np.array([self.pair_leads[p] for p in self.pairs])
+            return np.array([np.concatenate([self.leads[p[0]], self.leads[p[1]]])
+                                             for p in self.pairs])
         else:
             n = self.env.G[0].ring.ngens
             return np.zeros((0, 2*n*self.k), dtype=self.dtype)
