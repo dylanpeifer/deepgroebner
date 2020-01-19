@@ -24,7 +24,7 @@ def test_ParallelMultilayerPerceptron():
     policy = ParallelMultilayerPerceptron(6, [24])
     np.random.seed(123)
     X = np.random.randn(10, 15, 6)
-    assert np.allclose(policy.predict(X), policy.network.predict(X))
+    assert np.allclose(policy.predict(X), policy.network.predict(X)[0])
 
 
 @pytest.mark.parametrize("gam, states, values", [

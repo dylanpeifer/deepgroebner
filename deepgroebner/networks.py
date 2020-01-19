@@ -75,7 +75,10 @@ class ParallelMultilayerPerceptron:
         return X
 
     def __call__(self, inputs):
-        return self.network(inputs)
+        return self.network(inputs)[0]
+
+    def get_logits(self,inputs):
+        return self.network(inputs)[1]
 
     def save_weights(self, filename):
         self.network.save_weights(filename)
@@ -94,14 +97,14 @@ class ParallelMultilayerPerceptron:
         return self.weights
 
     def _build_network(self, input_dim, hidden_layers):
-        model = tf.keras.models.Sequential()
-        model.add(tf.keras.layers.InputLayer(input_shape=(None, input_dim)))
+        inputs = tf.keras.Input(shape=(None, input_dim))
+        x = inputs
         for hidden in hidden_layers:
-            model.add(tf.keras.layers.Conv1D(hidden, 1, activation='relu'))
-        model.add(tf.keras.layers.Conv1D(1, 1, activation='linear'))
-        model.add(tf.keras.layers.Flatten())
-        model.add(tf.keras.layers.Activation('softmax'))
-        return model
+            x = tf.keras.layers.Conv1D(hidden, 1, activation='relu')(x)
+        outputs = tf.keras.layers.Conv1D(1, 1, activation='linear')(x)
+        x = tf.keras.layers.Flatten()(outputs)
+        probs = tf.keras.layers.Activation('softmax')(x)
+        return tf.keras.Model(inputs=inputs, outputs=[probs, outputs])
 
 
 class PairsLeftBaseline:
