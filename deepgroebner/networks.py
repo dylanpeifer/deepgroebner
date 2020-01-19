@@ -77,7 +77,7 @@ class ParallelMultilayerPerceptron:
     def __call__(self, inputs):
         return self.network(inputs)[0]
 
-    def get_logits(self,inputs):
+    def get_logits(self, inputs):
         return self.network(inputs)[1]
 
     def save_weights(self, filename):
