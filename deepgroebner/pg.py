@@ -415,7 +415,7 @@ class Agent:
         return (action, probs[action]) if return_probs else action
 
     def train(self, env, episodes=10, epochs=1, max_episode_length=None, stacked=False,
-              stack_size=-1, pad=False, verbose=0, save_freq=1, logdir=None):
+              stack_size=-1, pad=False, verbose=0, save_freq=1, logdir=None, test_env=None):
         """Train the agent on env.
 
         Parameters
@@ -440,6 +440,8 @@ class Agent:
             How often to save the model weights, measured in epochs.
         logdir : str, optional
             The directory to store Tensorboard logs and model weights.
+        test_env : environment, optional
+            The environment to report performance on.
 
         Returns
         -------
@@ -464,6 +466,13 @@ class Agent:
                                           normalize_advantages=self.normalize_advantages)
             policy_history = self._fit_policy_model(batches, epochs=self.policy_updates, stacked=stacked)
             value_history = self._fit_value_model(batches, epochs=self.value_updates, stacked=stacked)
+
+            if test_env is not None:
+                return_history = self.run_episodes(test_env, max_episode_length=max_episode_length, store=False)
+                try:
+                    env.env.ideal_gen.update()  # for binned training using FromDirectoryIdealGenerator
+                except AttributeError:
+                    pass
 
             history['mean_returns'][i] = np.mean(return_history['returns'])
             history['min_returns'][i] = np.min(return_history['returns'])
