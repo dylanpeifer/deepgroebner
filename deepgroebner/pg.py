@@ -10,7 +10,6 @@ import multiprocessing as mp
 import tensorflow as tf
 
 
-PARALLEL = True
 PACKET_SIZE = 10 # this must divide the number of episodes, and ideally should divide (episodes)/(number of cores)
 
 
@@ -415,7 +414,8 @@ class Agent:
         return (action, probs[action]) if return_probs else action
 
     def train(self, env, episodes=10, epochs=1, max_episode_length=None, stacked=False,
-              stack_size=-1, pad=False, verbose=0, save_freq=1, logdir=None, test_env=None):
+              stack_size=-1, pad=False, verbose=0, save_freq=1, logdir=None, test_env=None,
+              parallel=True):
         """Train the agent on env.
 
         Parameters
@@ -457,7 +457,8 @@ class Agent:
 
         for i in range(epochs):
             self.buffer.clear()
-            return_history = self.run_episodes(env, max_episode_length=max_episode_length, store=True)
+            return_history = self.run_episodes(env, max_episode_length=max_episode_length,
+                                               store=True, parallel=parallel)
             if stacked:
                 batches = self.buffer.get(method='stacked', stack_size=stack_size, pad=pad,
                                           normalize_advantages=self.normalize_advantages)
@@ -468,7 +469,8 @@ class Agent:
             value_history = self._fit_value_model(batches, epochs=self.value_updates, stacked=stacked)
 
             if test_env is not None:
-                return_history = self.run_episodes(test_env, max_episode_length=max_episode_length, store=False)
+                return_history = self.run_episodes(test_env, max_episode_length=max_episode_length,
+                                                   store=False, parallel=parallel)
                 try:
                     env.env.ideal_gen.update()  # for binned training using FromDirectoryIdealGenerator
                 except AttributeError:
@@ -542,7 +544,7 @@ class Agent:
             results.append(self.run_episode(env, max_episode_length=max_episode_length, greedy=greedy, buffer=buff))
         output.put((results,buff))
 
-    def run_episodes(self, env, episodes=100, max_episode_length=None, greedy=False, store=False):
+    def run_episodes(self, env, episodes=100, max_episode_length=None, greedy=False, store=False, parallel=True):
         """Run several episodes, store interaction in buffer, and return history.
 
         Parameters
@@ -566,7 +568,7 @@ class Agent:
         """
         history = {'returns': np.zeros(episodes),
                    'lengths': np.zeros(episodes)}
-        if PARALLEL:
+        if parallel:
             output = mp.Queue()
             assert episodes % PACKET_SIZE == 0, "PACKET_SIZE must divide the number of episodes"
             num_processes = int(episodes / PACKET_SIZE)

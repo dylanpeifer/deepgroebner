@@ -166,6 +166,10 @@ def make_parser():
                         type=lambda x: str(x).lower() == 'true',
                         default=False,
                         help='whether to pad stacks')
+    parser.add_argument('--parallel',
+                        type=lambda x: str(x).lower() == 'true',
+                        default=True,
+                        help='whether to parallelize rollouts')
 
     return parser
 
@@ -267,4 +271,5 @@ if __name__ == '__main__':
     agent.train(env, episodes=args.episodes, epochs=args.epochs,
                 stacked=args.stacked, stack_size=args.stack_size, pad=args.pad,
                 save_freq=args.save_freq, logdir=logdir, verbose=args.verbose,
-                max_episode_length=args.max_episode_length, test_env=test_env)
+                max_episode_length=args.max_episode_length, test_env=test_env,
+                parallel=args.parallel)
