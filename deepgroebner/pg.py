@@ -481,9 +481,9 @@ class Agent:
             history['max_returns'][i] = np.max(return_history['returns'])
             history['std_returns'][i] = np.std(return_history['returns'])
 
-            if logdir is not None and i % save_freq == 0:
-                self.save_policy_weights(logdir + "/policy-" + str(i) + ".h5")
-                self.save_value_weights(logdir + "/value-" + str(i) + ".h5")
+            if logdir is not None and (i+1) % save_freq == 0:
+                self.save_policy_weights(logdir + "/policy-" + str(i+1) + ".h5")
+                self.save_value_weights(logdir + "/value-" + str(i+1) + ".h5")
             if tb_writer is not None:
                 with tb_writer.as_default():
                     tf.summary.scalar('mean_returns', history['mean_returns'][i], step=i)
