@@ -82,7 +82,7 @@ def make_parser():
                         help='the policy model learning rate')
     parser.add_argument('--policy_updates',
                         type=int,
-                        default=40,
+                        default=80,
                         help='policy model gradient updates per epoch')
     parser.add_argument('--policy_kld_limit',
                         type=float,
@@ -102,7 +102,7 @@ def make_parser():
                         help='the value model learning rate')
     parser.add_argument('--value_updates',
                         type=int,
-                        default=40,
+                        default=1,
                         help='value model gradient updates per epoch')
     parser.add_argument('--gam',
                         type=float,
@@ -114,7 +114,7 @@ def make_parser():
                         help='the generalized advantage parameter')
     parser.add_argument('--eps',
                         type=float,
-                        default=0.1,
+                        default=0.2,
                         help='the clip ratio for PPO')
 
     # training parameters
@@ -229,11 +229,13 @@ def make_agent(args):
     if args.algorithm == 'pg':
         agent = PGAgent(policy_network=policy_network, policy_lr=args.policy_lr, policy_updates=args.policy_updates,
                         value_network=value_network, value_lr=args.value_lr, value_updates=args.value_updates,
-                        gam=args.gam, lam=args.lam, action_dim_fn=action_dim_fn)
+                        gam=args.gam, lam=args.lam, action_dim_fn=action_dim_fn,
+                        kld_limit=args.policy_kld_limit)
     else:
         agent = PPOAgent(policy_network=policy_network, policy_lr=args.policy_lr, policy_updates=args.policy_updates,
                          value_network=value_network, value_lr=args.value_lr, value_updates=args.value_updates,
-                         gam=args.gam, lam=args.lam, eps=args.eps, action_dim_fn=action_dim_fn)
+                         gam=args.gam, lam=args.lam, eps=args.eps, action_dim_fn=action_dim_fn,
+                         kld_limit=args.policy_kld_limit)
     return agent
 
 
