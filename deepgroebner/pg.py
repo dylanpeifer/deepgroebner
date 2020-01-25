@@ -337,7 +337,7 @@ def _merge_buffers(bufferlist):
 def print_status_bar(i, epochs, history, verbose=1):
     """Print a formatted status line."""
     metrics = "".join([" - {}: {:.4f}".format(m, history[m][i])
-                       for m in history])
+                       for m in ['mean_returns']])
     end = "\n" if verbose == 2 or i+1 == epochs else ""
     print("\rEpoch {}/{}".format(i+1, epochs) + metrics, end=end)
 
@@ -453,7 +453,15 @@ class Agent:
         history = {'mean_returns': np.zeros(epochs),
                    'min_returns': np.zeros(epochs),
                    'max_returns': np.zeros(epochs),
-                   'std_returns': np.zeros(epochs)}
+                   'std_returns': np.zeros(epochs),
+                   'mean_ep_lens': np.zeros(epochs),
+                   'min_ep_lens': np.zeros(epochs),
+                   'max_ep_lens': np.zeros(epochs),
+                   'std_ep_lens': np.zeros(epochs),
+                   'policy_updates': np.zeros(epochs),
+                   'delta_policy_loss': np.zeros(epochs),
+                   'policy_ent': np.zeros(epochs),
+                   'policy_kld': np.zeros(epochs)}
 
         for i in range(epochs):
             self.buffer.clear()
@@ -480,6 +488,14 @@ class Agent:
             history['min_returns'][i] = np.min(return_history['returns'])
             history['max_returns'][i] = np.max(return_history['returns'])
             history['std_returns'][i] = np.std(return_history['returns'])
+            history['mean_ep_lens'][i] = np.mean(return_history['lengths'])
+            history['min_ep_lens'][i] = np.min(return_history['lengths'])
+            history['max_ep_lens'][i] = np.max(return_history['lengths'])
+            history['std_ep_lens'][i] = np.std(return_history['lengths'])
+            history['policy_updates'][i] = len(policy_history['loss'])
+            history['delta_policy_loss'][i] = policy_history['loss'][-1] - policy_history['loss'][0]
+            history['policy_ent'][i] = policy_history['ent'][-1]
+            history['policy_kld'][i] = policy_history['kld'][-1]
 
             if logdir is not None and (i+1) % save_freq == 0:
                 self.save_policy_weights(logdir + "/policy-" + str(i+1) + ".h5")
@@ -490,7 +506,16 @@ class Agent:
                     tf.summary.scalar('min_returns', history['min_returns'][i], step=i)
                     tf.summary.scalar('max_returns', history['max_returns'][i], step=i)
                     tf.summary.scalar('std_returns', history['std_returns'][i], step=i)
+                    tf.summary.scalar('mean_ep_lens', history['mean_ep_lens'][i], step=i)
+                    tf.summary.scalar('min_ep_lens', history['min_ep_lens'][i], step=i)
+                    tf.summary.scalar('max_ep_lens', history['max_ep_lens'][i], step=i)
+                    tf.summary.scalar('std_ep_lens', history['std_ep_lens'][i], step=i)
                     tf.summary.histogram('returns', return_history['returns'], step=i)
+                    tf.summary.histogram('lengths', return_history['lengths'], step=i)
+                    tf.summary.scalar('policy_updates', history['policy_updates'][i], step=i)
+                    tf.summary.scalar('delta_policy_loss', history['delta_policy_loss'][i], step=i)
+                    tf.summary.scalar('policy_ent', history['policy_ent'][i], step=i)
+                    tf.summary.scalar('policy_kld', history['policy_kld'][i], step=i)
                 tb_writer.flush()
             if verbose > 0:
                 print_status_bar(i, epochs, history, verbose=verbose)
@@ -592,9 +617,7 @@ class Agent:
 
     def _fit_policy_model(self, batches, epochs=1, stacked=False):
         """Fit policy model with one gradient update per epoch."""
-        history = {'loss': np.zeros(epochs),
-                   'kld': np.zeros(epochs),
-                   'ent': np.zeros(epochs)}
+        history = {'loss': [], 'kld': [], 'ent': []}
         if stacked:
             for epoch in range(epochs):
                 for datum in batches:
@@ -606,18 +629,17 @@ class Agent:
                         new_prob = unnormalized / tf.math.segment_sum(exp_logits, datum['seg_id'])
                         loss = tf.reduce_mean(self.policy_loss(new_prob, datum['probas'], datum['advants']))
                         kld = tf.reduce_mean(tf.math.log(datum['probas'] / new_prob))
-                        ent = tf.reduce_mean(tf.math.log(new_prob))
+                        ent = tf.reduce_mean(-tf.math.log(new_prob))
                     varis = self.policy_model.trainable_variables
                     grads = tape.gradient(loss, varis)
                     self.policy_optimizer.apply_gradients(zip(grads, varis))
-                    history['loss'][epoch] = loss
-                    history['kld'][epoch] = kld
-                    history['ent'][epoch] = ent
+                    history['loss'].append(loss)
+                    history['kld'].append(kld)
+                    history['ent'].append(ent)
                     if self.kld_limit is not None and kld > self.kld_limit:
                         break
                         print('early stop at ', epoch)
             self.policy_model.get_weights()  # for fast wrappers
-            return history
         else:
             for epoch in range(epochs):
                 with tf.GradientTape() as tape:
@@ -630,20 +652,21 @@ class Agent:
                         new_prob = tf.reduce_sum(tf.one_hot(data['actions'], action_dim) * probs, axis=1)
                         losses.append(self.policy_loss(new_prob, data['probas'], data['advants']))
                         klds.append(tf.math.log(data['probas'] / new_prob))
-                        ents.append(tf.math.log(new_prob))
+                        ents.append(-tf.math.log(new_prob))
                     loss = tf.reduce_mean(tf.concat(losses, axis=0))
                     kld = tf.reduce_mean(tf.concat(klds, axis=0))
                     ent = tf.reduce_mean(tf.concat(ents, axis=0))
                 varis = self.policy_model.trainable_variables
                 grads = tape.gradient(loss, varis)
                 self.policy_optimizer.apply_gradients(zip(grads, varis))
-                history['loss'][epoch] = loss
-                history['kld'][epoch] = kld
-                history['ent'][epoch] = ent
+                history['loss'].append(loss)
+                history['kld'].append(kld)
+                history['ent'].append(ent)
                 if self.kld_limit is not None and kld > self.kld_limit:
                     break
                     print('early stop at ', epoch)
             self.policy_model.get_weights()  # for fast wrappers
+        history = {k: np.array(v) for k, v in history.items()}
         return history
 
     def load_policy_weights(self, filename):
