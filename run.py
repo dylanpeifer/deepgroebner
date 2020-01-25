@@ -241,7 +241,7 @@ def make_logdir(args):
     """Return the directory name for this run."""
     time_string = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     if args.datetag:
-        run_name = args.name + "_" + time_string
+        run_name = time_string + '_' + args.name
     else:
         run_name = args.name
     logdir = os.path.join(args.logdir, run_name)
