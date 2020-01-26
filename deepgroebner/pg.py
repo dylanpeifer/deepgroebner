@@ -633,12 +633,12 @@ class Agent:
                     varis = self.policy_model.trainable_variables
                     grads = tape.gradient(loss, varis)
                     self.policy_optimizer.apply_gradients(zip(grads, varis))
-                    history['loss'].append(loss)
-                    history['kld'].append(kld)
-                    history['ent'].append(ent)
-                    if self.kld_limit is not None and kld > self.kld_limit:
-                        break
-                        print('early stop at ', epoch)
+                # these are just the values from the last batch in batches
+                history['loss'].append(loss)
+                history['kld'].append(kld)
+                history['ent'].append(ent)
+                if self.kld_limit is not None and kld > self.kld_limit:
+                    break
             self.policy_model.get_weights()  # for fast wrappers
         else:
             for epoch in range(epochs):
@@ -664,7 +664,6 @@ class Agent:
                 history['ent'].append(ent)
                 if self.kld_limit is not None and kld > self.kld_limit:
                     break
-                    print('early stop at ', epoch)
             self.policy_model.get_weights()  # for fast wrappers
         history = {k: np.array(v) for k, v in history.items()}
         return history
