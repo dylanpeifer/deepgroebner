@@ -218,14 +218,21 @@ def make_agent(args):
             'CartPole-v1': (4, 2),
             'LunarLander-v2': (8, 4),
             'RandomBinomialIdeal': (2 * args.variables * args.k, 1)}[args.environment]
+
     if args.environment == 'RandomBinomialIdeal':
         policy_network = ParallelMultilayerPerceptron(dims[0], args.policy_hl)
-        value_network = PairsLeftBaseline(gam=args.gam)
         action_dim_fn = lambda s: s[0]
     else:
         policy_network = MultilayerPerceptron(dims[0], args.policy_hl, dims[1])
-        value_network = MultilayerPerceptron(dims[0], args.value_hl, 1, final_activation='linear')
         action_dim_fn = lambda s: dims[1]
+
+    if args.value_model == 'none':
+        value_network = None
+    elif args.environment == 'RandomBinomialIdeal':
+        value_network = PairsLeftBaseline(gam=args.gam)
+    else:
+        value_network = MultilayerPerceptron(dims[0], args.value_hl, 1, final_activation='linear')
+
     if args.algorithm == 'pg':
         agent = PGAgent(policy_network=policy_network, policy_lr=args.policy_lr, policy_updates=args.policy_updates,
                         value_network=value_network, value_lr=args.value_lr, value_updates=args.value_updates,
