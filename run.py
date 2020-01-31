@@ -32,11 +32,11 @@ def make_parser():
                         help='the number of variables')
     parser.add_argument('--degree',
                         type=int,
-                        default=5,
+                        default=20,
                         help='the maximal degree of monomials')
     parser.add_argument('--generators',
                         type=int,
-                        default=5,
+                        default=10,
                         help='the number of generators')
     parser.add_argument('--constants',
                         type=lambda x: str(x).lower() == 'true',
@@ -98,19 +98,19 @@ def make_parser():
                         help='the hidden layers in the policy model')
     parser.add_argument('--value_lr',
                         type=float,
-                        default=1e-4,
+                        default=1e-3,
                         help='the value model learning rate')
     parser.add_argument('--value_updates',
                         type=int,
-                        default=1,
+                        default=80,
                         help='value model gradient updates per epoch')
     parser.add_argument('--gam',
                         type=float,
-                        default=1.0,
+                        default=0.99,
                         help='the discount rate')
     parser.add_argument('--lam',
                         type=float,
-                        default=1.0,
+                        default=0.97,
                         help='the generalized advantage parameter')
     parser.add_argument('--eps',
                         type=float,
@@ -132,11 +132,11 @@ def make_parser():
                         help='the number of episodes per epoch')
     parser.add_argument('--epochs',
                         type=int,
-                        default=25,
+                        default=2500,
                         help='the number of epochs')
     parser.add_argument('--max_episode_length',
                         type=lambda x: int(x) if x.lower() != 'none' else None,
-                        default=None,
+                        default=500,
                         help='the max number of interactions per episode')
     parser.add_argument('--verbose',
                         type=int,
@@ -144,7 +144,7 @@ def make_parser():
                         help='how much information to print')
     parser.add_argument('--save_freq',
                         type=int,
-                        default=25,
+                        default=100,
                         help='how often to save the weights')
     parser.add_argument('--logdir',
                         type=str,
