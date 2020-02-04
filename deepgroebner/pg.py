@@ -548,8 +548,13 @@ class Agent:
         total_reward = 0
         while not done:
             action, prob = self.act(state, return_probs=True)
+            if self.value_model is None:
+                value = 0
+            elif hasattr(self.value_model, 'agent'):  # this is an AgentBaseline
+                value = self.value_model.predict(env.env)
+            else:
+                value = self.value_model.predict(state[np.newaxis])[0][0]
             next_state, reward, done, _ = env.step(action)
-            value = 0 if self.value_model is None else self.value_model.predict(state[np.newaxis])[0][0]
             if buffer is not None:
                 buffer.store(state, prob, value, action, reward)
             episode_length += 1
@@ -678,7 +683,7 @@ class Agent:
 
     def _fit_value_model(self, batches, epochs=1, stacked=False):
         """Fit value model with one gradient update per epoch."""
-        if stacked or self.value_model is None:
+        if stacked or self.value_model is None or hasattr(self.value_model, 'agent'):
             epochs = 0
         history = {'loss': np.zeros(epochs)}
         for epoch in range(epochs):

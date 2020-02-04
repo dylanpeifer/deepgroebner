@@ -9,10 +9,10 @@ import json
 import gym
 import sympy as sp
 
-from deepgroebner.buchberger import BuchbergerEnv, LeadMonomialsWrapper
+from deepgroebner.buchberger import BuchbergerEnv, LeadMonomialsWrapper, BuchbergerAgent
 from deepgroebner.ideals import RandomBinomialIdealGenerator, FromDirectoryIdealGenerator
 from deepgroebner.pg import PGAgent, PPOAgent
-from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, PairsLeftBaseline
+from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, PairsLeftBaseline, AgentBaseline
 
 def make_parser():
     """Return the command line argument parser for this script."""
@@ -89,7 +89,7 @@ def make_parser():
                         default=0.01,
                         help='the KL divergence limit')
     parser.add_argument('--value_model',
-                        choices=['none', 'mlp', 'pairsleft'],
+                        choices=['none', 'mlp', 'pairsleft', 'agent'],
                         default='none',
                         help='the value network type')
     parser.add_argument('--value_hl',
@@ -228,8 +228,10 @@ def make_agent(args):
 
     if args.value_model == 'none':
         value_network = None
-    elif args.environment == 'RandomBinomialIdeal':
+    elif args.environment == 'RandomBinomialIdeal' and args.value_model == 'pairsleft':
         value_network = PairsLeftBaseline(gam=args.gam)
+    elif args.environment == 'RandomBinomialIdeal' and args.value_model == 'agent':
+        value_network = AgentBaseline(BuchbergerAgent('degree'), gam=args.gam)
     else:
         value_network = MultilayerPerceptron(dims[0], args.value_hl, 1, final_activation='linear')
 
