@@ -41,6 +41,7 @@ terms SugarPolynomial           := f -> terms polynomial f
 leadTerm SugarPolynomial        := f -> leadTerm polynomial f
 leadMonomial SugarPolynomial    := f -> leadMonomial polynomial f
 leadCoefficient SugarPolynomial := f -> leadCoefficient polynomial f
+degree SugarPolynomial          := f -> degree polynomial f
 
 SugarPolynomial + SugarPolynomial := SugarPolynomial => (f, g) -> (
     sugarPolynomial(max(sugar f, sugar g), polynomial f + polynomial g)
@@ -225,13 +226,17 @@ spair(Sequence, List) := (S, F) -> (
     gamma := lcm(leadMonomial f, leadMonomial g);
     sug := max(sugar f + sugar (gamma // leadMonomial f),
 	       sugar g + sugar (gamma // leadMonomial g));
-    new SPair from {S, gamma, sug}
+    td := first degree (spoly(f, g))#0;
+    new SPair from {S, gamma, sug, td}
     )
 
 indices SPair := Sequence    => p -> p#0
 lcm     SPair := RingElement => p -> p#1
 sugar   SPair := ZZ          => p -> p#2
 degree  SPair := ZZ          => p -> first degree lcm p
+
+trueDegree = method()
+trueDegree SPair := ZZ => p -> p#3
 
 SPair ? SPair := (s1, s2) -> indices s1 ? indices s2
 
@@ -284,6 +289,9 @@ selectPair(List) := SPair => opts -> (P) -> (
 	)
     else if opts.Strategy === "Degree" then (
 	p = P#(argmin(P, degree));
+	)
+    else if opts.Strategy === "TrueDegree" then (
+	p = P#(argmin(P, trueDegree));
 	)
     else if opts.Strategy === "Normal" then (
 	p = P#(argmin(P, lcm));
