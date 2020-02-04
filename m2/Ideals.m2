@@ -11,7 +11,7 @@ newPackage(
 
 export {"commutingMatrices", "cyclic", "eco", "katsura", "noon", "reimer",
         "chemkin", "haas", "jason210", "kotsireas", "lichtblau", "twistedCubic", "virasoro",
-        "randomBinomialIdeal", "degreeDistribution", "Pure"}
+        "randomBinomialIdeal", "degreeDistribution", "Pure", "randomPolynomialIdeal"}
 
 -------------------------------------------------------------------------------
 --- ideal families
@@ -154,6 +154,22 @@ randomChoice(ZZ, List) := ZZ => (n, P) -> (
     position(accumulate(plus, 0, P), x -> x > r)
     )
 
+randomPoisson = method()
+randomPoisson ZZ := ZZ =>
+randomPoisson RR := ZZ => lambda -> (
+    -- lambda = the parameter of a Poisson distribution
+    -- return a Poisson random variable
+
+    L := exp(-lambda);
+    k := 1;
+    p := random 1.0;
+    while p > L do (
+	k = k + 1;
+	p = p * random 1.0;
+	);
+    k - 1
+    )
+
 randomNonzero = method()
 randomNonzero(Ring) := RingElement => R -> (
     -- R = a ring
@@ -214,6 +230,23 @@ randomBinomial(List, PolynomialRing) := RingElement => opts -> (D, R) -> (
 	d2 := randomChoice(length D, D);
 	randomBinomial(d1, d2, R, opts)
     )
+    )
+
+randomPolynomial = method()
+randomPolynomial(List, ZZ, PolynomialRing) := RingElement =>
+randomPolynomial(List, RR, PolynomialRing) := RingElement => (D, lambda, R) -> (
+    -- D = a list of probabilities for each degree
+    -- lambda = the parameter for a Poisson distribution on length
+    -- R = a polynomial ring
+
+    t := 1 + randomPoisson lambda;
+    f := 0_R;
+    for i to t - 1 do (
+	d := randomChoice(length D, D);
+	c := randomNonzero coefficientRing R;
+	f = f + c * randomMonomial(d, R);
+	);
+    f
     )
 
 degreeDistribution = method(Options => {Constants => false, Degrees => "Uniform"})
@@ -284,6 +317,53 @@ randomBinomialIdeal(PolynomialRing, List, ZZ) := Ideal => opts -> (R, D, s) -> (
 
     ideal for i to s-1 list
               randomBinomial(D, R, Homogeneous => opts.Homogeneous, Pure => opts.Pure)
+    )
+
+randomPolynomialIdeal = method(Options => {
+	CoefficientRing => ZZ/32003,
+	MonomialOrder => GRevLex,
+	Constants => false,
+	Degrees => "Uniform"
+	})
+randomPolynomialIdeal(ZZ, ZZ, ZZ, RR) := Ideal => opts -> (n, d, s, lambda) -> (
+    -- n = a number of variables
+    -- d = max degree of monomials
+    -- s = number of generators of ideal
+    -- lambda = parameter for the Poisson distribution on polynomial lengths
+    -- return a random polynomial ideal
+
+    R := (opts.CoefficientRing)[vars(0..n-1), MonomialOrder => opts.MonomialOrder];
+    D := degreeDistribution(R, d, Constants => opts.Constants, Degrees => opts.Degrees);
+    randomPolynomialIdeal(R, d, s, lambda, opts)    
+    )
+randomPolynomialIdeal(PolynomialRing, ZZ, ZZ, RR) := Ideal => opts -> (R, d, s, lambda) -> (
+    -- R = a polynomial ring
+    -- d = max degree of monomials
+    -- s = number of generators of ideal
+    -- lambda = parameter for the Poisson distribution on polynomial lengths
+    -- return a random polynomial ideal
+
+    D := degreeDistribution(R, d, Constants => opts.Constants, Degrees => opts.Degrees);
+    randomPolynomialIdeal(R, D, s, lambda, opts)
+    )
+randomPolynomialIdeal(ZZ, List, ZZ, RR) := Ideal => opts -> (n, D, s, lambda) -> (
+    -- n = number of variables
+    -- D = probabilites for each degree
+    -- s = number of generators of ideal
+    -- lambda = parameter for the Poisson distribution on polynomial lengths
+    -- return a random polynomial ideal
+
+    R := (opts.CoefficientRing)[vars(0..n-1), MonomialOrder => opts.MonomialOrder];
+    randomPolynomialIdeal(R, D, s, lambda, opts)
+    )
+randomPolynomialIdeal(PolynomialRing, List, ZZ, RR) := Ideal => opts -> (R, D, s, lambda) -> (
+    -- R = a polynomial ring
+    -- D = probabilites for each degree
+    -- s = number of generators of ideal
+    -- return a random binomial ideal
+
+    ideal for i to s-1 list
+              randomPolynomial(D, lambda, R)
     )
 
 beginDocumentation()

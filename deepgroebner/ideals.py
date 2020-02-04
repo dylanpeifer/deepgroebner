@@ -93,6 +93,24 @@ def basis(ring, d):
         return [np.prod(c) for c in it.combinations_with_replacement(ring.gens, d)]
 
 
+def random_monomial(D, ring, bases=None):
+    """Return a random monomial from the ring.
+
+    Parameters
+    ----------
+    D : array_like
+        The list of probabilities indexed by degree (i.e., D[i] = P(degree i))
+    ring : polynomial ring
+        The polynomial ring.
+    bases : list, optional
+        The list of precomputed monomial bases for efficiency.
+    """
+    if bases is None:
+        bases = [basis(ring, i) for i in range(len(D))]
+    d = np.random.choice(len(D), p=D)
+    return np.random.choice(bases[d])
+
+    
 def random_binomial(D, ring, homogeneous=False, pure=False, bases=None):
     """Return a random binomial from the ring.
 
@@ -140,6 +158,33 @@ def random_binomial(D, ring, homogeneous=False, pure=False, bases=None):
             return m2 + c * m1
     else:
         raise RuntimeError('failed to generate two distinct random monomials after 1000 trials')
+
+
+def random_polynomial(D, lam, ring, bases=None):
+    """Return a random polynomial from the ring.
+    
+    The number of terms in the polynomial is one larger than
+    a Poisson random variable with parameter lam.
+
+    Parameters
+    ----------
+    D : array_like
+        The list of probabilities indexed by degree (i.e., D[i] = P(degree i))
+    lam : float
+        The lambda parameter for the poisson distribution on length.
+    ring : polynomial ring
+        The polynomial ring.
+    bases : list, optional
+        The list of precomputed monomial bases for efficiency.
+    """
+    if bases is None:
+        bases = [basis(ring, i) for i in range(len(D))]
+    t = 1 + np.random.poisson(lam)
+    f = 0
+    for _ in range(t):
+        c = random_nonzero_coeff(ring)
+        f += c * random_monomial(D, ring, bases=bases)
+    return f
 
 
 class RandomBinomialIdealGenerator:
@@ -192,6 +237,60 @@ class RandomBinomialIdealGenerator:
         return [random_binomial(self.dist, self.ring,
                                 homogeneous=self.homogeneous, pure=self.pure,
                                 bases=self.bases)
+                for _ in range(self.generators)]
+
+    def __iter__(self):
+        return self
+
+    def _make_dist(self, n, d, constants, degrees):
+        """Return the probability distribution of degrees."""
+        head = [1] if constants else [0]
+        if degrees == 'uniform':
+            tail = d * [1]
+        elif degrees == 'weighted':
+            tail = [int(sp.binomial(n+i-1, n-1)) for i in range(1, d + 1)]
+        elif degrees == 'maximum':
+            tail = (d - 1) * [0] + [1]
+        else:
+            raise ValueError('unrecognized degree option')
+        dist = np.array(head + tail)
+        return dist / np.sum(dist)
+
+
+class RandomIdealGenerator:
+    """Generator of random examples of polynomial ideals.
+
+    Parameters
+    ----------
+    n : int
+        The number of variables.
+    d : int
+        The maximum degree of a chosen monomial.
+    s : int
+        The number of generators of each ideal.
+    lam : float
+        The lambda parameter for the poisson distribution on lengths.
+    coefficient_ring : ring, optional
+        The coefficient ring for the polynomials.
+    order : {'grevlex', 'lex', 'grlex'}, optional
+        The monomial order.
+    constants : bool, optional
+        Whether to include constants as monomials.
+    degrees : {'uniform', 'weighted', 'maximum'}, optional
+        The distribution of degrees of monomials.
+    """
+
+    def __init__(self, n, d, s, lam, coefficient_ring=sp.FF(32003), order='grevlex',
+                 constants=False, degrees='uniform'):
+        self.ring = sp.xring('x:' + str(n), coefficient_ring, order)[0]
+        self.dist = self._make_dist(n, d, constants, degrees)
+        self.lam = lam
+        self.generators = s
+        self.bases = [basis(self.ring, i) for i in range(d + 1)]
+
+    def __next__(self):
+        return [random_polynomial(self.dist, self.lam, self.ring,
+                                  bases=self.bases)
                 for _ in range(self.generators)]
 
     def __iter__(self):
