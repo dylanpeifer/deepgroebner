@@ -226,8 +226,10 @@ spair(Sequence, List) := (S, F) -> (
     gamma := lcm(leadMonomial f, leadMonomial g);
     sug := max(sugar f + sugar (gamma // leadMonomial f),
 	       sugar g + sugar (gamma // leadMonomial g));
-    td := first degree (spoly(f, g))#0;
-    new SPair from {S, gamma, sug, td}
+    s := (spoly(f, g))#0;
+    td := first degree s;
+    im := (if # terms s == 1 then 0 else 1);  -- sort key that favors monomials
+    new SPair from {S, gamma, sug, td, im}
     )
 
 indices SPair := Sequence    => p -> p#0
@@ -237,6 +239,9 @@ degree  SPair := ZZ          => p -> first degree lcm p
 
 trueDegree = method()
 trueDegree SPair := ZZ => p -> p#3
+
+isMonomial = method()
+isMonomial SPair := ZZ => p -> p#4
 
 SPair ? SPair := (s1, s2) -> indices s1 ? indices s2
 
@@ -292,6 +297,15 @@ selectPair(List) := SPair => opts -> (P) -> (
 	)
     else if opts.Strategy === "TrueDegree" then (
 	p = P#(argmin(P, trueDegree));
+	)
+    else if opts.Strategy === "MonomialDegree" then (
+	p = P#(argmin(P, p -> {isMonomial p, degree p}));
+	)
+    else if opts.Strategy === "MonomialTrueDegree" then (
+	p = P#(argmin(P, p -> {isMonomial p, trueDegree p}));
+	)
+    else if opts.Strategy === "MonomialTrueDegreeDegree" then (
+	p = P#(argmin(P, p -> {isMonomial p, trueDegree p, degree p}));
 	)
     else if opts.Strategy === "Normal" then (
 	p = P#(argmin(P, lcm));
