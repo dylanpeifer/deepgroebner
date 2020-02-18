@@ -74,8 +74,8 @@ Defaults are provided for all arguments in the script.
 
 For example, we can train an agent on 3-20-10-uniform using
 
-    python run.py --variables 3 --degree 20 --generators 10 \\
-                  --degree_distribution uniform \\
+    python run.py --variables 3 --degree 20 --generators 10 \
+                  --degree_distribution uniform \
                   --value_model agent --value_updates 0
 
 By default, the script will create a subdirectory in `data/runs` where it will
