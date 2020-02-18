@@ -179,7 +179,7 @@ def random_polynomial(D, lam, ring, bases=None):
     """
     if bases is None:
         bases = [basis(ring, i) for i in range(len(D))]
-    t = 1 + np.random.poisson(lam)
+    t = 2 + np.random.poisson(lam)
     f = 0
     for _ in range(t):
         c = random_nonzero_coeff(ring)

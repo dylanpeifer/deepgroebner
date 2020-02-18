@@ -239,7 +239,7 @@ randomPolynomial(List, RR, PolynomialRing) := RingElement => (D, lambda, R) -> (
     -- lambda = the parameter for a Poisson distribution on length
     -- R = a polynomial ring
 
-    t := 1 + randomPoisson lambda;
+    t := 2 + randomPoisson lambda;
     f := 0_R;
     for i to t - 1 do (
 	d := randomChoice(length D, D);
