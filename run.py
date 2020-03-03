@@ -231,7 +231,10 @@ def make_agent(args):
     elif args.environment == 'RandomBinomialIdeal' and args.value_model == 'pairsleft':
         value_network = PairsLeftBaseline(gam=args.gam)
     elif args.environment == 'RandomBinomialIdeal' and args.value_model == 'agent':
-        value_network = AgentBaseline(BuchbergerAgent('degree'), gam=args.gam)
+        agent = PPOAgent(ParallelMultilayerPerceptron(dims[0], args.policy_hl))
+        agent.load_policy_weights('data/models/3-20-10-uniform/policy.h5')
+        value_network = AgentBaseline(agent, gam=args.gam)
+        # value_network = AgentBaseline(BuchbergerAgent('degree'), gam=args.gam)
     else:
         value_network = MultilayerPerceptron(dims[0], args.value_hl, 1, final_activation='linear')
 

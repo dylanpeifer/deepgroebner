@@ -339,6 +339,14 @@ class LeadMonomialsWrapper():
     def render(self):
         self.env.render()
 
+    def copy(self):
+        env = self.env.copy()
+        copy = LeadMonomialsWrapper(env, k=self.k, dtype=self.dtype)
+        copy.pairs = self.pairs.copy()
+        copy.m = self.m
+        copy.leads = self.leads.copy()
+        return copy
+
     def _matrix(self):
         if self.pairs:
             return np.array([np.concatenate([self.leads[p[0]], self.leads[p[1]]])

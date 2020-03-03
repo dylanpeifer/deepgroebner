@@ -551,7 +551,10 @@ class Agent:
             if self.value_model is None:
                 value = 0
             elif hasattr(self.value_model, 'agent'):  # this is an AgentBaseline
-                value = self.value_model.predict(env.env)
+                if hasattr(self.value_model.agent, 'strategy'):  # with a BuchbergerAgent
+                    value = self.value_model.predict(env.env)
+                else:  # with a PGAgent/PPOAgent
+                    value = self.value_model.predict(env)
             else:
                 value = self.value_model.predict(state[np.newaxis])[0][0]
             next_state, reward, done, _ = env.step(action)

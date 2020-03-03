@@ -147,7 +147,7 @@ class AgentBaseline:
         env = env.copy()
         R = 0.0
         discount = 1.0
-        state = (env.G, env.P)
+        state = (env.G, env.P) if hasattr(env, 'G') else env._matrix()
         done = False
         while not done:
             action = self.agent.act(state)
