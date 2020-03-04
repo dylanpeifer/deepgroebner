@@ -12,7 +12,7 @@ import sympy as sp
 from deepgroebner.buchberger import BuchbergerEnv, LeadMonomialsWrapper, BuchbergerAgent
 from deepgroebner.ideals import RandomBinomialIdealGenerator, FromDirectoryIdealGenerator
 from deepgroebner.pg import PGAgent, PPOAgent
-from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, PairsLeftBaseline, AgentBaseline
+from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, PairsLeftBaseline, AgentBaseline, ValueRNN
 
 def make_parser():
     """Return the command line argument parser for this script."""
@@ -72,6 +72,20 @@ def make_parser():
                         choices=['ppo', 'pg'],
                         default='ppo',
                         help='the training algorithm')
+    parser.add_argument('--gam',
+                        type=float,
+                        default=0.99,
+                        help='the discount rate')
+    parser.add_argument('--lam',
+                        type=float,
+                        default=0.97,
+                        help='the generalized advantage parameter')
+    parser.add_argument('--eps',
+                        type=float,
+                        default=0.2,
+                        help='the clip ratio for PPO')
+
+    # policy model
     parser.add_argument('--policy_hl',
                         type=int, nargs='*',
                         default=[128],
@@ -88,14 +102,20 @@ def make_parser():
                         type=float,
                         default=0.01,
                         help='the KL divergence limit')
+    parser.add_argument('--policy_weights',
+                        type=str,
+                        default="",
+                        help='filename for initial policy weights')
+
+    # value model
     parser.add_argument('--value_model',
-                        choices=['none', 'mlp', 'pairsleft', 'agent'],
+                        choices=['none', 'mlp', 'pairsleft', 'agent', 'rnn', 'degree'],
                         default='none',
                         help='the value network type')
     parser.add_argument('--value_hl',
                         type=int, nargs='*',
                         default=[128],
-                        help='the hidden layers in the policy model')
+                        help='the hidden layers in the value model')
     parser.add_argument('--value_lr',
                         type=float,
                         default=1e-3,
@@ -104,18 +124,10 @@ def make_parser():
                         type=int,
                         default=80,
                         help='value model gradient updates per epoch')
-    parser.add_argument('--gam',
-                        type=float,
-                        default=0.99,
-                        help='the discount rate')
-    parser.add_argument('--lam',
-                        type=float,
-                        default=0.97,
-                        help='the generalized advantage parameter')
-    parser.add_argument('--eps',
-                        type=float,
-                        default=0.2,
-                        help='the clip ratio for PPO')
+    parser.add_argument('--value_weights',
+                        type=str,
+                        default="",
+                        help='filename for initial value weights')
 
     # training parameters
     parser.add_argument('--name',
@@ -212,6 +224,56 @@ def make_test_env(args):
     return env
 
 
+def make_policy_network(args):
+    """Return the policy network for this run."""
+    dims = {'CartPole-v0': (4, 2),
+            'CartPole-v1': (4, 2),
+            'LunarLander-v2': (8, 4),
+            'RandomBinomialIdeal': (2 * args.variables * args.k, 1)}[args.environment]
+
+    if args.environment == 'RandomBinomialIdeal':
+        policy_network = ParallelMultilayerPerceptron(dims[0], args.policy_hl)
+    else:
+        policy_network = MultilayerPerceptron(dims[0], args.policy_hl, dims[1])
+
+    if args.policy_weights != "":
+        policy_network.load_weights(args.policy_weights)
+
+    return policy_network
+
+
+def make_value_network(args):
+    """Return the value network for this run."""
+    dims = {'CartPole-v0': (4, 2),
+            'CartPole-v1': (4, 2),
+            'LunarLander-v2': (8, 4),
+            'RandomBinomialIdeal': (2 * args.variables * args.k, 1)}[args.environment]
+
+    if args.environment in ['CartPole-v0', 'CartPole-v1', 'LunarLander-v2']:
+        if args.value_model == 'none':
+            value_network = None
+        else:
+            value_network = MultilayerPerceptron(dims[0], args.value_hl, 1, final_activation='linear')
+    else:
+        if args.value_model == 'none':
+            value_network = None
+        elif args.value_model == 'pairsleft':
+            value_network = PairsLeftBaseline(gam=args.gam)
+        elif args.value_model == 'degree':
+            value_network = AgentBaseline(BuchbergerAgent('degree'), gam=args.gam)
+        elif args.value_model == 'agent':
+            agent = PPOAgent(ParallelMultilayerPerceptron(dims[0], args.policy_hl))
+            agent.load_policy_weights(args.value_weights)
+            value_network = AgentBaseline(agent, gam=args.gam)
+        elif args.value_model == 'rnn' and args.value_weights != "":
+            value_network = ValueRNN(dims[0], args.value_hl[0])
+            value_network.load_weights(args.value_weights)
+        elif args.value_model == 'rnn':
+            value_network = ValueRNN(dims[0], args.value_hl[0])
+
+    return value_network
+
+
 def make_agent(args):
     """Return the agent for this run."""
     dims = {'CartPole-v0': (4, 2),
@@ -220,23 +282,12 @@ def make_agent(args):
             'RandomBinomialIdeal': (2 * args.variables * args.k, 1)}[args.environment]
 
     if args.environment == 'RandomBinomialIdeal':
-        policy_network = ParallelMultilayerPerceptron(dims[0], args.policy_hl)
         action_dim_fn = lambda s: s[0]
     else:
-        policy_network = MultilayerPerceptron(dims[0], args.policy_hl, dims[1])
         action_dim_fn = lambda s: dims[1]
 
-    if args.value_model == 'none':
-        value_network = None
-    elif args.environment == 'RandomBinomialIdeal' and args.value_model == 'pairsleft':
-        value_network = PairsLeftBaseline(gam=args.gam)
-    elif args.environment == 'RandomBinomialIdeal' and args.value_model == 'agent':
-        agent = PPOAgent(ParallelMultilayerPerceptron(dims[0], args.policy_hl))
-        agent.load_policy_weights('data/models/3-20-10-uniform/policy.h5')
-        value_network = AgentBaseline(agent, gam=args.gam)
-        # value_network = AgentBaseline(BuchbergerAgent('degree'), gam=args.gam)
-    else:
-        value_network = MultilayerPerceptron(dims[0], args.value_hl, 1, final_activation='linear')
+    policy_network = make_policy_network(args)
+    value_network = make_value_network(args)
 
     if args.algorithm == 'pg':
         agent = PGAgent(policy_network=policy_network, policy_lr=args.policy_lr, policy_updates=args.policy_updates,

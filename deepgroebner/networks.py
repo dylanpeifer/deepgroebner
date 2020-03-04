@@ -169,6 +169,27 @@ class AgentBaseline:
         pass
 
 
+
+def ValueRNN(input_dim, units, cell='lstm', bidirectional=True):
+    """Return an RNN value network for LeadMonomialsWrapper environments."""
+    model = tf.keras.models.Sequential()
+    model.add(tf.keras.layers.InputLayer(input_shape=[None, input_dim]))
+    if cell == 'simple':
+        layer = tf.keras.layers.SimpleRNN(units)
+    elif cell == 'lstm':
+        layer = tf.keras.layers.LSTM(units)
+    elif cell == 'gru':
+        layer = tf.keras.layers.GRU(units)
+    else:
+        raise ValueError('unknown cell type')
+    if bidirectional:
+        model.add(tf.keras.layers.Bidirectional(layer))
+    else:
+        model.add(layer)
+    model.add(tf.keras.layers.Dense(1))
+    return model
+
+
 def AtariNetSmall(input_shape, action_size, final_activation='linear'):
     """Return the network from the first DQN paper."""
     model = tf.keras.models.Sequential()

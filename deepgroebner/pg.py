@@ -111,6 +111,7 @@ class TrajectoryBuffer:
         self.states = []
         self.probas = []
         self.values = []
+        self.pred_values = []
         self.actions = []
         self.rewards = []
         self.start = 0
@@ -136,6 +137,7 @@ class TrajectoryBuffer:
         self.states.append(state)
         self.probas.append(proba)
         self.values.append(value)
+        self.pred_values.append(value)
         self.actions.append(action)
         self.rewards.append(reward)
         self.end += 1
@@ -160,6 +162,7 @@ class TrajectoryBuffer:
         self.states.clear()
         self.probas.clear()
         self.values.clear()
+        self.pred_values.clear()
         self.actions.clear()
         self.rewards.clear()
         self.start = 0
@@ -203,6 +206,8 @@ class TrajectoryBuffer:
                                     dtype=np.int),
                 'advants': np.array([advantages[i] for i in indices],
                                     dtype=np.float32),
+                'pred_values': np.array([[self.pred_values[i]] for i in indices],
+                                        dtype=np.float32),
             }
         return data
 
@@ -327,6 +332,7 @@ def _merge_buffers(bufferlist):
         output.states += b.states
         output.probas += b.probas
         output.values += b.values
+        output.pred_values += b.pred_values
         output.actions += b.actions
         output.rewards += b.rewards
     output.end = len(output.states)
@@ -461,7 +467,9 @@ class Agent:
                    'policy_updates': np.zeros(epochs),
                    'delta_policy_loss': np.zeros(epochs),
                    'policy_ent': np.zeros(epochs),
-                   'policy_kld': np.zeros(epochs)}
+                   'policy_kld': np.zeros(epochs),
+                   'mean_value': np.zeros(epochs),
+                   'mean_value_error': np.zeros(epochs)}
 
         for i in range(epochs):
             self.buffer.clear()
@@ -496,6 +504,9 @@ class Agent:
             history['delta_policy_loss'][i] = policy_history['loss'][-1] - policy_history['loss'][0]
             history['policy_ent'][i] = policy_history['ent'][-1]
             history['policy_kld'][i] = policy_history['kld'][-1]
+            history['mean_value'][i] = np.mean(np.vstack([data['pred_values'] for shape, data in batches.items()]))
+            history['mean_value_error'][i] = np.mean(np.square(np.vstack([data['pred_values'] - data['values']
+                                                                         for shape, data in batches.items()])))
 
             if logdir is not None and (i+1) % save_freq == 0:
                 self.save_policy_weights(logdir + "/policy-" + str(i+1) + ".h5")
@@ -516,6 +527,8 @@ class Agent:
                     tf.summary.scalar('delta_policy_loss', history['delta_policy_loss'][i], step=i)
                     tf.summary.scalar('policy_ent', history['policy_ent'][i], step=i)
                     tf.summary.scalar('policy_kld', history['policy_kld'][i], step=i)
+                    tf.summary.scalar('mean_value', history['mean_value'][i], step=i)
+                    tf.summary.scalar('mean_value_error', history['mean_value_error'][i], step=i)
                 tb_writer.flush()
             if verbose > 0:
                 print_status_bar(i, epochs, history, verbose=verbose)
