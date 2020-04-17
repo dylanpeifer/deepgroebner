@@ -257,6 +257,27 @@ class RandomBinomialIdealGenerator:
         return dist / np.sum(dist)
 
 
+class MixedRandomBinomialIdealGenerator:
+    """Generator that picks uniformly from different binomial distributions."""
+
+    def __init__(self, n, ds, ss, coefficient_ring=sp.FF(32003), order='grevlex',
+                 constants=False, degrees='uniform', homogeneous=False,
+                 pure=False):
+        self.gens = [RandomBinomialIdealGenerator(n, d, s, coefficient_ring=coefficient_ring,
+                                                  order=order, constants=constants, degrees=degrees,
+                                                  homogeneous=homogeneous, pure=pure)
+                    for d in ds
+                    for s in ss]
+        self.current_gen = np.random.choice(self.gens)
+
+    def __next__(self):
+        self.current_gen = np.random.choice(self.gens)
+        return next(self.current_gen)
+
+    def __iter__(self):
+        return self
+
+
 class RandomIdealGenerator:
     """Generator of random examples of polynomial ideals.
 

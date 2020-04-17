@@ -10,7 +10,7 @@ import gym
 import sympy as sp
 
 from deepgroebner.buchberger import BuchbergerEnv, LeadMonomialsWrapper, BuchbergerAgent
-from deepgroebner.ideals import RandomBinomialIdealGenerator, FromDirectoryIdealGenerator
+from deepgroebner.ideals import RandomBinomialIdealGenerator, FromDirectoryIdealGenerator, MixedRandomBinomialIdealGenerator
 from deepgroebner.pg import PGAgent, PPOAgent
 from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, PairsLeftBaseline, AgentBaseline, ValueRNN
 
@@ -21,7 +21,7 @@ def make_parser():
 
     # environment type
     parser.add_argument('--environment',
-                        choices=['RandomBinomialIdeal', 'CartPole-v0', 'CartPole-v1', 'LunarLander-v2'],
+                        choices=['RandomBinomialIdeal', 'MixedRandomBinomialIdeal', 'CartPole-v0', 'CartPole-v1', 'LunarLander-v2'],
                         default='RandomBinomialIdeal',
                         help='the training environment')
     
@@ -202,6 +202,14 @@ def make_env(args):
         ideal_gen = FromDirectoryIdealGenerator(dirname, ring)
         env = BuchbergerEnv(ideal_gen, elimination=args.elimination, rewards=args.rewards) 
         env = LeadMonomialsWrapper(env, k=args.k)
+    elif args.environment == "MixedRandomBinomialIdeal":
+        ideal_gen = MixedRandomBinomialIdealGenerator(args.variables,
+                                                      list(range(5, args.degree+1)),
+                                                      list(range(4, args.generators+1)),
+                                                      constants=args.constants, degrees=args.degree_distribution,
+                                                      homogeneous=args.homogeneous, pure=args.pure)
+        env = BuchbergerEnv(ideal_gen, elimination=args.elimination, rewards=args.rewards)
+        env = LeadMonomialsWrapper(env, k=args.k)       
     else:
         ideal_gen = RandomBinomialIdealGenerator(args.variables, args.degree, args.generators,
                                                  constants=args.constants, degrees=args.degree_distribution,
@@ -229,9 +237,10 @@ def make_policy_network(args):
     dims = {'CartPole-v0': (4, 2),
             'CartPole-v1': (4, 2),
             'LunarLander-v2': (8, 4),
-            'RandomBinomialIdeal': (2 * args.variables * args.k, 1)}[args.environment]
+            'RandomBinomialIdeal': (2 * args.variables * args.k, 1),
+            'MixedRandomBinomialIdeal': (2 * args.variables * args.k, 1)}[args.environment]
 
-    if args.environment == 'RandomBinomialIdeal':
+    if args.environment in ['RandomBinomialIdeal', 'MixedRandomBinomialIdeal']:
         policy_network = ParallelMultilayerPerceptron(dims[0], args.policy_hl)
     else:
         policy_network = MultilayerPerceptron(dims[0], args.policy_hl, dims[1])
@@ -247,7 +256,8 @@ def make_value_network(args):
     dims = {'CartPole-v0': (4, 2),
             'CartPole-v1': (4, 2),
             'LunarLander-v2': (8, 4),
-            'RandomBinomialIdeal': (2 * args.variables * args.k, 1)}[args.environment]
+            'RandomBinomialIdeal': (2 * args.variables * args.k, 1),
+            'MixedRandomBinomialIdeal': (2 * args.variables * args.k, 1)}[args.environment]
 
     if args.environment in ['CartPole-v0', 'CartPole-v1', 'LunarLander-v2']:
         if args.value_model == 'none':
@@ -279,9 +289,10 @@ def make_agent(args):
     dims = {'CartPole-v0': (4, 2),
             'CartPole-v1': (4, 2),
             'LunarLander-v2': (8, 4),
-            'RandomBinomialIdeal': (2 * args.variables * args.k, 1)}[args.environment]
+            'RandomBinomialIdeal': (2 * args.variables * args.k, 1),
+            'MixedRandomBinomialIdeal': (2 * args.variables * args.k, 1)}[args.environment]
 
-    if args.environment == 'RandomBinomialIdeal':
+    if args.environment in ['RandomBinomialIdeal', 'MixedRandomBinomialIdeal']:
         action_dim_fn = lambda s: s[0]
     else:
         action_dim_fn = lambda s: dims[1]
