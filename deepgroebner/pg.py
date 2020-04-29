@@ -473,7 +473,7 @@ class Agent:
 
         for i in range(epochs):
             self.buffer.clear()
-            return_history = self.run_episodes(env, max_episode_length=max_episode_length,
+            return_history = self.run_episodes(env, episodes=episodes, max_episode_length=max_episode_length,
                                                store=True, parallel=parallel)
             if stacked:
                 batches = self.buffer.get(method='stacked', stack_size=stack_size, pad=pad,
@@ -485,7 +485,7 @@ class Agent:
             value_history = self._fit_value_model(batches, epochs=self.value_updates, stacked=stacked)
 
             if test_env is not None:
-                return_history = self.run_episodes(test_env, max_episode_length=max_episode_length,
+                return_history = self.run_episodes(test_env, episodes=episodes, max_episode_length=max_episode_length,
                                                    store=False, parallel=parallel)
                 try:
                     env.env.ideal_gen.update()  # for binned training using FromDirectoryIdealGenerator
