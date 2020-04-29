@@ -533,6 +533,8 @@ class Agent:
             if verbose > 0:
                 print_status_bar(i, epochs, history, verbose=verbose)
 
+        return history
+
 
     def run_episode(self, env, max_episode_length=None, greedy=False, buffer=None):
         """Run an episode and return total reward and episode length.
