@@ -12,7 +12,10 @@ newPackage(
 export {"SugarPolynomial", "sugarPolynomial", "polynomial", "sugar",
         "reduce", "minimalize", "interreduce", "spoly",
         "buchberger", "SelectionStrategy", "EliminationStrategy", "SortReducers",
-	"ReductionStrategy", "Homogenize", "Minimalize", "Interreduce", "SortInput"}
+	"ReductionStrategy", "Homogenize", "Minimalize", "Interreduce", "SortInput",
+	"Min", "Length", "Roots", "Value", "Children"}
+
+needsPackage "DivisionAlgorithm"
 
 -------------------------------------------------------------------------------
 --- sugar polynomials
@@ -164,6 +167,21 @@ reduce(SugarPolynomial, List) := SugarPolynomial => opts -> (g, F) -> (
     (r + g, stats)
     )
 
+reduce' = method(Options => {
+	Strategy => "Regular",
+	Reduce => "Full",
+	SortReducers => false})
+reduce'(RingElement, List) := RingElement => opts -> (g, F) -> (
+    -- g = a polynomial
+    -- F = a list of polynomials
+    -- returns a remainder when g is divided by F
+
+    (r, arr) := divAlgWithStats(matrix {{g}}, matrix {F});
+    stats := hashTable {"polynomialAdditions" => arr#0,
+	                "monomialAdditions" => arr#1};
+    (first first entries r, stats)
+    )
+
 minimalize = method()
 minimalize(List) := List => (F) -> (
     -- F = a list of polynomials forming a Groebner basis
@@ -198,7 +216,7 @@ argmax = method()
 argmax(List) := ZZ => (x) -> (
     -- x = a list
     -- returns the index of the max element of x (or the first index if there are multiple)
-    if #x === 0 then null else first fold((i,j) -> if i#1 >= j#1 then i else j, pairs x)
+    if #x === 0 then null else first fold((i,j) -> if i#1 > j#1 then i else j, pairs x)
     )
 argmax(List, Function) := ZZ => (x, f) -> (
     argmax(apply(x, f))
@@ -219,29 +237,35 @@ argmin(List, Function) := ZZ => (x, f) -> (
 -------------------------------------------------------------------------------
 SPair = new Type of BasicList
 
-spair = method(TypicalValue => SPair)
-spair(Sequence, List) := (S, F) -> (
+spair = method(TypicalValue => SPair, Options => {SelectionStrategy => "Sugar"})
+spair(Sequence, List) := opts -> (S, F) -> (
     f := F#(S#0);
     g := F#(S#1);
     gamma := lcm(leadMonomial f, leadMonomial g);
-    sug := max(sugar f + sugar (gamma // leadMonomial f),
-	       sugar g + sugar (gamma // leadMonomial g));
-    s := (spoly(f, g))#0;
-    td := first degree s;
-    im := (if # terms s == 1 then 0 else 1);  -- sort key that favors monomials
-    new SPair from {S, gamma, sug, td, im}
+    k := if opts.SelectionStrategy === "First" then
+             (S#1, S#0)
+	 else if opts.SelectionStrategy === "Degree" then
+	     first degree gamma
+	 else if opts.SelectionStrategy === "Normal" then
+	     gamma
+	 else if opts.SelectionStrategy === "Sugar" then
+	     (max(sugar f + sugar (gamma // leadMonomial f),
+    	          sugar g + sugar (gamma // leadMonomial g)),
+	      gamma)
+	 else if opts.SelectionStrategy === "TrueDegree" then (
+	     (s, stats) := spoly(f, g);
+	     first degree s
+	     )
+	 else if opts.SelectionStrategy === "Random" then
+	     1;
+    new SPair from {S, gamma, k}
     )
 
 indices SPair := Sequence    => p -> p#0
 lcm     SPair := RingElement => p -> p#1
-sugar   SPair := ZZ          => p -> p#2
-degree  SPair := ZZ          => p -> first degree lcm p
 
-trueDegree = method()
-trueDegree SPair := ZZ => p -> p#3
-
-isMonomial = method()
-isMonomial SPair := ZZ => p -> p#4
+key = method()
+key SPair := Thing => p -> p#2
 
 SPair ? SPair := (s1, s2) -> indices s1 ? indices s2
 
@@ -279,55 +303,26 @@ lcmCriterion(SPair, List) := Boolean => (p, F) -> (
 -------------------------------------------------------------------------------
 PairList := new Type of MutableList
 
-selectPair = method(Options => {Strategy => "First", Sort => false})
+selectPair = method(Options => {Strategy => "Sugar", Sort => false})
 selectPair(List) := SPair => opts -> (P) -> (
     -- P = a list of SPairs in Buchberger's algorithm
     -- returns the next pair to process
 
     p := 0;
 
-    if opts.Strategy === "First" then (
-	p = P#0;
-	)
-    else if opts.Strategy === "Random" then (
-	p = P#(random(#P));
-	)
-    else if opts.Strategy === "Degree" then (
-	p = P#(argmin(P, degree));
-	)
-    else if opts.Strategy === "TrueDegree" then (
-	p = P#(argmin(P, trueDegree));
-	)
-    else if opts.Strategy === "MonomialDegree" then (
-	p = P#(argmin(P, p -> {isMonomial p, degree p}));
-	)
-    else if opts.Strategy === "MonomialTrueDegree" then (
-	p = P#(argmin(P, p -> {isMonomial p, trueDegree p}));
-	)
-    else if opts.Strategy === "MonomialTrueDegreeDegree" then (
-	p = P#(argmin(P, p -> {isMonomial p, trueDegree p, degree p}));
-	)
-    else if opts.Strategy === "Normal" then (
-	p = P#(argmin(P, lcm));
-	)
-    else if opts.Strategy === "Sugar" then (
-	p = P#(argmin(P, p -> {sugar p, lcm p}));
-	)
-    else if opts.Strategy === "Last" then (
-	p = P#(#P-1);
-	)
-    else if opts.Strategy === "Strange" then (
-	p = P#(argmax(P, lcm));
-	)
-    else if opts.Strategy === "Spice" then (
-	p = P#(argmax(P, p -> {sugar p, lcm p}));
-	);
+    if opts.Strategy === "Random" then
+	p = P#(random(#P))
+    else
+       p = P#(argmin(P, key));
 
     P = delete(p, P);
     (p, P)
     )
 
-updatePairs = method(Options => {Strategy => "None"})
+updatePairs = method(Options => {
+	EliminationStrategy => "GebauerMoeller",
+	SelectionStrategy => "Sugar"
+	})
 updatePairs(List, List, RingElement) := List =>
 updatePairs(List, List, SugarPolynomial) := List => opts -> (P, F, f) -> (
     -- P = a list of SPairs
@@ -337,12 +332,12 @@ updatePairs(List, List, SugarPolynomial) := List => opts -> (P, F, f) -> (
     --     polynomials F obtained after adding f
 
     F = append(F, f);
-    P' := apply(#F-1, i -> spair((i, #F-1), F));
+    P' := apply(#F-1, i -> spair((i, #F-1), F, SelectionStrategy => opts.SelectionStrategy));
 
-    if opts.Strategy === "LCM" then (
+    if opts.EliminationStrategy === "LCM" then (
 	P' = select(P', p -> not lcmCriterion(p, F));
 	)
-    else if opts.Strategy === "Sugar" or opts.Strategy === "GebauerMoeller" then (
+    else if opts.EliminationStrategy === "Sugar" or opts.EliminationStrategy === "GebauerMoeller" then (
 	-- eliminate from old list
 	lf := leadMonomial f;
 	P = select(P, p -> (
@@ -352,15 +347,22 @@ updatePairs(List, List, SugarPolynomial) := List => opts -> (P, F, f) -> (
 	    	lcm(leadMonomial F#j, lf) == lcm p));
 
     	-- sugar paper eliminates LCM early
-	if opts.Strategy === "Sugar" then (
+	if opts.EliminationStrategy === "Sugar" then (
 	    P' = select(P', p -> not lcmCriterion(p, F));
 	);
 
-    	-- eliminate if strictly divisible
-    	P' = select(P', p -> all(P', p' -> lcm p % lcm p' != 0 or lcm p == lcm p'));
+    	-- minimalize the list of lcms
+	L := for p in P' list {lcm p, p};
+	L = (sort L)/last;
+	P' = {};	
+        for p in L do (
+	    if all(P', p' -> lcm p % lcm p' != 0 or lcm p == lcm p') then (
+	        P' = append(P', p);
+	    );
+	);
 
     	-- keep 1 of each equivalence class and remove any with lcm criterion
-    	classes := partition(lcm, P');
+	classes := partition(lcm, P');
 	P'' := {};
 	for m in keys classes do (
 	    if any(classes#m, p -> lcmCriterion(p, F)) then continue;
@@ -396,7 +398,9 @@ buchberger(Ideal) := Sequence => opts -> I -> (
     P := {};
     G := {};
     for f in F do (
-	(P, G) = updatePairs(P, G, f, Strategy => opts.EliminationStrategy);
+	(P, G) = updatePairs(P, G, f,
+	                     EliminationStrategy => opts.EliminationStrategy,
+			     SelectionStrategy => opts.SelectionStrategy);
 	);
 
     reducers := G;
@@ -413,12 +417,17 @@ buchberger(Ideal) := Sequence => opts -> I -> (
     while #P > 0 do (
 	(p, P) = selectPair(P, Strategy => opts.SelectionStrategy);
 	(s, adds) = spoly(p, G);
-	(r, stats) := reduce(s, reducers, Strategy => opts.ReductionStrategy);
+	(r, stats) := if opts.SelectionStrategy === "Sugar" then
+	                  reduce(s, reducers, Strategy => opts.ReductionStrategy)
+	              else
+		          reduce(s, reducers, Strategy => opts.ReductionStrategy);
 	polynomialAdditions = polynomialAdditions + stats#"polynomialAdditions" + 1;
 	monomialAdditions = monomialAdditions + stats#"monomialAdditions" + adds;
 
 	if r != 0 then (
-	    (P, G) = updatePairs(P, G, r, Strategy => opts.EliminationStrategy);
+	    (P, G) = updatePairs(P, G, r,
+		                 EliminationStrategy => opts.EliminationStrategy,
+				 SelectionStrategy => opts.SelectionStrategy);
 	    nonzeroReductions = nonzeroReductions + 1;
 	    reducers = G;
 	    if opts.SortReducers then reducers = sort reducers;
@@ -634,3 +643,66 @@ assert(isSubset(G1, G2) and isSubset(G2, G1))
 ///
 
 end
+
+restart
+debug needsPackage "SelectionStrategies"
+needsPackage "Ideals"
+
+reduce' = profile reduce'
+selectPair = profile selectPair
+updatePairs = profile updatePairs
+spair = profile spair
+
+I = reimer 6
+
+elapsedTime gb I;
+elapsedTime buchberger(I, SelectionStrategy => "Normal", Minimalize => false, Interreduce => false);
+profileSummary
+
+elapsedTime for sel in {"First", "Degree", "Normal"} do (
+    (G, stats) = buchberger(I, SelectionStrategy => sel, Minimalize => false, Interreduce => false);
+    print sel;
+    print(stats#"zeroReductions" + stats#"nonzeroReductions");
+    )
+
+elapsedTime for sel in {"Last", "Codegree", "Strange"} do (
+    (G, stats) = buchberger(I, SelectionStrategy => sel, Minimalize => false, Interreduce => false);
+    print sel;
+    print(stats#"zeroReductions" + stats#"nonzeroReductions");
+    )
+
+elapsedTime L = for i from 1 to 100 list (
+    (G, stats) = buchberger(I, SelectionStrategy => "Random");
+    stats#"zeroReductions" + stats#"nonzeroReductions"
+    )
+sum(L) * 1.0 / (#L)
+sqrt(sum(apply(L, x -> x^2)) * 1.0 / (#L) - (sum(L) * 1.0 / (#L))^2)
+
+
+
+restart
+debug needsPackage "ExampleIdeals"
+debug needsPackage "SelectionStrategies"
+
+reduce' = profile reduce'
+selectPair = profile selectPair
+updatePairs = profile updatePairs
+spair = profile spair
+spoly = profile spoly
+
+I = mayrMeyer(ZZ/101, 2, 2);
+I = ideal compress gens I;
+S = ring I;
+gens gb I;
+(G, stats) = buchberger(I, SelectionStrategy => "Normal");
+profileSummary
+
+
+restart
+needsPackage "SelectionStrategies"
+needsPackage "Ideals"
+
+elapsedTime for i from 1 to 100 do (
+    I = randomPolynomialIdeal(3, 20, 10, 0.1, Degrees => "Uniform");    
+    (G, stats) = buchberger(I, SelectionStrategy => "Degree");
+    )
