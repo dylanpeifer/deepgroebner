@@ -190,6 +190,15 @@ def ValueRNN(input_dim, units, cell='lstm', bidirectional=True):
     return model
 
 
+def PolicyRNN(input_dim, units):
+    """Return an RNN policy network for LeadMonomialsWrapper environments."""
+    inputs = tf.keras.layers.Input(shape=[None, input_dim])
+    X, h = tf.keras.layers.GRU(units, return_sequences=True, return_state=True)(inputs)
+    h = tf.keras.layers.Reshape([units, 1])(h)
+    outputs = tf.nn.softmax(tf.squeeze(tf.matmul(X, h), axis=[-1]))
+    return tf.keras.Model(inputs=inputs, outputs=outputs)
+
+
 def AtariNetSmall(input_shape, action_size, final_activation='linear'):
     """Return the network from the first DQN paper."""
     model = tf.keras.models.Sequential()
