@@ -122,7 +122,7 @@ def test_random_binomial_5(D, ring, b):
 
 def test_RandomBinomialIdealGenerator_0():
     np.random.seed(123)
-    ideal_gen = RandomBinomialIdealGenerator(3, 5, 5)
+    ideal_gen = RandomBinomialIdealGenerator(3, 5, 5, degrees='weighted')
     x0, x1, x2 = ideal_gen.ring.gens
     I = [x0**3*x2 + 19967*x1**3,
          x0*x1**3 + 15378*x0**2*x1,
@@ -133,12 +133,12 @@ def test_RandomBinomialIdealGenerator_0():
 
 
 @pytest.mark.parametrize("d, consts, degs, D", [
-    (1, False, "uniform", np.array([0.0, 1.0])),
-    (1, True, "uniform", np.array([0.5, 0.5])),
-    (1, True, "weighted", np.array([0.25, 0.75])),
-    (5, False, "uniform", np.array([0] + 5 * [0.2])),
-    (5, True, "uniform", np.ones(6)/6),
-    (5, True, "weighted", np.array([1, 3, 6, 10, 15, 21])/56.0),
+    (1, False, "weighted", np.array([0.0, 1.0])),
+    (1, True, "weighted", np.array([0.5, 0.5])),
+    (1, True, "uniform", np.array([0.25, 0.75])),
+    (5, False, "weighted", np.array([0] + 5 * [0.2])),
+    (5, True, "weighted", np.ones(6)/6),
+    (5, True, "uniform", np.array([1, 3, 6, 10, 15, 21])/56.0),
     (3, True, "maximum", np.array([0.5, 0, 0, 0.5])),
     (3, False, "maximum", np.array([0, 0, 0, 1.0])),
 ])
@@ -149,14 +149,14 @@ def test_RandomBinomialIdealGenerator_1(d, consts, degs, D):
 
 def test_RandomBinomialIdealGenerator_2():
     np.random.seed(681)
-    ideal_gen = RandomBinomialIdealGenerator(3, 3, 2, degrees='weighted', order='lex')
+    ideal_gen = RandomBinomialIdealGenerator(3, 3, 2, degrees='uniform', order='lex')
     x0, x1, x2 = ideal_gen.ring.gens
     assert next(ideal_gen) == [x1 + 11414*x2**3, x0 + 11229*x1*x2**2]
 
 
 def test_RandomBinomialIdealGenerator_3():
     np.random.seed(10)
-    ideal_gen = RandomBinomialIdealGenerator(5, 10, 5, degrees='weighted',
+    ideal_gen = RandomBinomialIdealGenerator(5, 10, 5, degrees='uniform',
                                              homogeneous=True, coefficient_ring=sp.FF(101))
     x0, x1, x2, x3, x4 = ideal_gen.ring.gens
     I = [x0**5*x1**3 + 10*x0*x2*x3*x4**5,

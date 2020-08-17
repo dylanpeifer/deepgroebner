@@ -246,9 +246,9 @@ class RandomBinomialIdealGenerator:
         """Return the probability distribution of degrees."""
         head = [1] if constants else [0]
         if degrees == 'uniform':
-            tail = d * [1]
+             tail = [int(sp.binomial(n+i-1, n-1)) for i in range(1, d + 1)]
         elif degrees == 'weighted':
-            tail = [int(sp.binomial(n+i-1, n-1)) for i in range(1, d + 1)]
+            tail = d * [1]
         elif degrees == 'maximum':
             tail = (d - 1) * [0] + [1]
         else:
@@ -321,9 +321,9 @@ class RandomIdealGenerator:
         """Return the probability distribution of degrees."""
         head = [1] if constants else [0]
         if degrees == 'uniform':
-            tail = d * [1]
-        elif degrees == 'weighted':
             tail = [int(sp.binomial(n+i-1, n-1)) for i in range(1, d + 1)]
+        elif degrees == 'weighted':
+            tail = d * [1]
         elif degrees == 'maximum':
             tail = (d - 1) * [0] + [1]
         else:
@@ -383,7 +383,7 @@ def FromFileIdealGenerator(filename, ring):
     --------
     >>> import sympy as sp
     >>> ring, _ = sp.xring("x,y,z", sp.FF(32003), 'grevlex')
-    >>> ideal_gen = FromFileIdealGenerator('data/bins/3-5-5-uniform-homog/bin18.txt', ring)
+    >>> ideal_gen = FromFileIdealGenerator('data/bins/3-5-5-weighted-homog/bin18.txt', ring)
     >>> next(ideal_gen)
     [y**4*z + 2634 mod 32003*x**2*y*z**2,
      y*z + 9889 mod 32003*z**2,
@@ -431,7 +431,7 @@ class FromDirectoryIdealGenerator:
     --------
     >>> import sympy as sp
     >>> ring, _ = sp.xring("a,b,c,d,e", sp.FF(32003), 'grevlex')
-    >>> ideal_gen = FromDirectoryIdealGenerator('data/bins/5-10-5-uniform', ring)
+    >>> ideal_gen = FromDirectoryIdealGenerator('data/bins/5-10-5-weighted', ring)
     >>> next(ideal_gen)
     [b**4*c**2*e**4 + 7134 mod 32003*a**2*b*c*d**2*e**2,
      b**3*e + 26763 mod 32003*c,
