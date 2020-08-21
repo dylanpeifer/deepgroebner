@@ -3,6 +3,17 @@
 Applications of reinforcement learning to selection strategies
 in Buchberger's algorithm.
 
+This is the main code repository for the paper
+
+* [Dylan Peifer, Michael Stillman, and Daniel Halpern-Leistner.
+Learning selection strategies in Buchberger's algorithm.
+In *Proceedings of the 37th International Conference on Machine Learning
+(ICML 2020).*](https://icml.cc/virtual/2020/poster/6742)
+[arXiv:2005.01917](https://arxiv.org/abs/2005.01917)
+
+with some precomputed statistics and training data available at
+[10.5281/zenodo.3676043](https://doi.org/10.5281/zenodo.3676043).
+
 ## Requirements and Installation
 
 The main codebase is a Python package in the `deepgroebner/` directory. To
@@ -72,11 +83,11 @@ arguments type
 
 Defaults are provided for all arguments in the script.
 
-For example, we can train an agent on 3-20-10-uniform using
+For example, we can train an agent on 3-20-10-weighted using
 
     python run.py --variables 3 --degree 20 --generators 10 \
-                  --degree_distribution uniform \
-                  --value_model agent --value_updates 0
+                  --degree_distribution weighted \
+                  --value_model degree --value_updates 0
 
 By default, the script will create a subdirectory in `data/runs` where it will
 store TensorBoard logs, model checkpoints, and a complete list of script
@@ -88,19 +99,22 @@ directory, we can rerun the same experiment with
 ## Generating Statistics
 
 To generate statistics, use the `make_stats.m2` and `make_stats2.m2` scripts in
-the `m2/` directory.  Run these scripts as
+the `m2/` directory. Run these scripts as
 
     M2 --script make_stats.m2 n d s consts degs homog pure samples
 
 where n, d, s, and samples are integers, consts, homog, and pure are 0 or 1
 representing false or true, and degs is one of {uniform, weighted, maximum}.
-Output is stored in the `data/stats/` directory, and files will be appended to
+Output is stored in CSV files in the `data/stats/` directory. Files will be appended to
 rather than replaced if they already exist.
+
+For example, we can run the known strategies on 10000 samples from 3-20-10-weighted with
+
+    cd m2
+    M2 --script make_stats.m2 3 20 10 0 weighted 0 0 10000
 
 ## Viewing Results
 TensorBoard can be used to visualize training runs with
 
     tensorboard --logdir data/runs
 
-The statistics are aggregated and processed in Jupyter notebooks in the
-`notebooks/` directory.
