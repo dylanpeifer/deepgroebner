@@ -354,3 +354,19 @@ def test_LeadMonomialsWrapper_1():
     assert not done
     state, _, done, _ = env.step(0)
     assert done
+
+
+@pytest.mark.parametrize("selection, k, action", [
+    ('degree', 1, 2),
+    ('degree', 2, 1),
+    ('first', 1, 0),
+    ('first', 2, 0),
+])
+def test_LeadMonomialsAgent(selection, k, action):
+    agent = LeadMonomialsAgent(selection=selection, k=k)
+    state = np.array([[11,  1,  2,  7,  2,  5,  5, 12,  2,  0,  1,  2],
+                      [ 1, 17,  0,  1,  5, 10,  0, 16,  3,  1, 10,  7],
+                      [ 0,  8,  7,  9,  0,  2,  5, 12,  2,  0,  1,  2],
+                      [ 0,  8,  7,  9,  0,  2,  0, 16,  3,  1, 10,  7],
+                      [11,  1,  2,  7,  2,  5,  0,  0, 12,  9,  0,  2]])
+    assert agent.act(state) == action
