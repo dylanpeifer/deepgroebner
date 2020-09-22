@@ -168,7 +168,7 @@ class TrajectoryBuffer:
         self.start = 0
         self.end = 0
 
-    def get_batched(self, normalize_advantages=True):
+    def get(self, normalize_advantages=True):
         """Return a dictionary of state shapes to training data.
 
         Parameters
@@ -210,115 +210,6 @@ class TrajectoryBuffer:
                                         dtype=np.float32),
             }
         return data
-
-    def get_stacked(self, normalize_advantages=True, stack_size=-1, pad=False):
-        """Return a list of training data.
-
-        If stack_size is not -1 and state size is larger than stack_size
-        that state will be ignored
-
-        Parameters
-        ----------
-        stack_size : integer
-            the number of pairs to include in each batch.
-            if stack_size==-1, all pairs are included in a single batch
-        normalize_advantages : bool, optional
-            Whether to normalize the returned advantages.
-
-        Returns
-        -------
-        data : list
-            A list of training data
-
-            Each element of the list is a dictionary with keys
-            'states', 'starts', 'probas', 'values', 'actions', and 'advants' values
-            ndarrays.
-        """
-        assert self.start == self.end, "Must apply self.finish() before getting stacked data"
-        advantages = np.array(self.values[:self.start])
-        if normalize_advantages:
-            advantages -= np.mean(advantages)
-            advantages /= np.std(advantages)
-
-        if stack_size == -1:
-            starts = np.concatenate([np_one_hot(len(s),0) for s in self.states]).astype('int') # shape: (#pairs)
-            data = [{
-                'states': np.concatenate([[s] for s in self.states], axis=1).astype('float32'), # shape: (1,#pairs,#variables)
-                'probas': np.array(self.probas, dtype=np.float32), # shape: (#states)
-                'values': np.array([[val] for val in self.rewards], dtype=np.float32), # shape: (#states,1)
-                'actions': np.concatenate([np_one_hot(len(self.states[k]), self.actions[k])
-                                           for k in range(self.start)]).astype('bool'), # shape: (#pairs)
-                'advants': np.array(advantages, dtype=np.float32), # shape: (#states)
-                'starts' : starts,
-                'seg_id' : np.cumsum(starts)-1, # shape: (#pairs)
-            }]
-        else:
-            # This loop decides how to assign states to batches. Each state is assigned
-            # greedily to the first batch which has room
-            batch_id = self.start * [-1]
-            space_left = [stack_size]
-            for i in range(self.start):
-                if len(self.states[i]) > stack_size:
-                    continue
-                else:
-                    where_fits = [len(self.states[i]) <= x for x in space_left]
-                    if True in where_fits:
-                        idx = where_fits.index(True)
-                        batch_id[i] = idx
-                        space_left[idx] -= len(self.states[i])
-                    else:
-                        batch_id[i] = len(space_left)
-                        space_left.append(stack_size - len(self.states[i]))
-
-            # now we stack the datapoints in each batch, and pad by 0's if that option is selected
-            data = []
-            for idx in range(len(space_left)):
-                starts = np.concatenate([np_one_hot(len(self.states[k]),0)
-                                         for k in range(self.start) if batch_id[k]==idx]) # shape: (#pairs)
-                if pad:
-                    starts = np.pad(starts,(0,space_left[idx]),constant_values=(1,)) # shape: (stack_size)
-                data.append({
-                    'states': np.concatenate([[val] for k, val in enumerate(self.states) if batch_id[k] == idx], 
-                                             axis=1).astype('float32'), # shape: (1,#pairs,#variables)
-                    'probas': np.array([val for k, val in enumerate(self.probas) if batch_id[k] == idx], dtype=np.float32), # shape: (#states)
-                    'values': np.array([[val] for k, val in enumerate(self.rewards) if batch_id[k] == idx], dtype=np.float32), # shape: (#states,1)
-                    'actions': np.concatenate([np_one_hot(len(self.states[k]), self.actions[k])
-                                               for k in range(self.start)
-                                               if batch_id[k] == idx]).astype('bool'), # shape: (#pairs)
-                    'advants': np.array([val for k, val in enumerate(advantages) if batch_id[k] == idx], dtype=np.float32), # shape: (#states)
-                    'starts' : starts,
-                    'seg_id' : np.cumsum(starts)-1,
-                })
-                if pad:
-                    data[-1]['states'] = np.pad(data[-1]['states'],((0,0),(0,space_left[idx]),(0,0)),constant_values=(0.,)) # shape: (1,stack_size,#variables)
-                    data[-1]['actions'] = np.pad(data[-1]['actions'],(0,space_left[idx]),constant_values=(True,)) # shape: (stack_size)
-        return data
-
-    def get(self, method='batched', normalize_advantages=True, stack_size=-1, pad=False):
-        """Return training data.
-
-        Parameters
-        ----------
-        method : {'batched', 'stacked'}, optional
-            The method for aggregating the training data.
-        normalize_advantages: bool, optional
-            Whether to normalize the computed advantages.
-        stack_size : integer, optional
-            The number of pairs to include in each batch if stacking.
-            If stack_size==-1, all pairs are included in a single batch.
-        pad : bool, optional
-            Whether to pad batches if stacking.
-
-        Returns
-        -------
-        data : dict or list
-            The training data.
-
-        """
-        if method == 'batched':
-            return self.get_batched(normalize_advantages=normalize_advantages)
-        elif method == 'stacked':
-            return self.get_stacked(normalize_advantages=normalize_advantages, stack_size=stack_size, pad=pad)
 
     def __len__(self):
         return len(self.states)
@@ -419,9 +310,8 @@ class Agent:
         action = np.argmax(probs) if greedy else np.random.choice(len(probs), p=probs)
         return (action, probs[action]) if return_probs else action
 
-    def train(self, env, episodes=10, epochs=1, max_episode_length=None, stacked=False,
-              stack_size=-1, pad=False, verbose=0, save_freq=1, logdir=None, test_env=None,
-              parallel=True):
+    def train(self, env, episodes=10, epochs=1, max_episode_length=None, verbose=0, save_freq=1,
+              logdir=None, test_env=None, parallel=True):
         """Train the agent on env.
 
         Parameters
@@ -434,12 +324,6 @@ class Agent:
             The number of epochs to train.
         max_episode_length : int, optional
             The maximum number of steps of interaction in an episode.
-        stacked : bool, optional
-            Whether to use stacking of training data.
-        stack_size : int, optional
-            Size of stacks in stacked training (-1 means one big stack).
-        pad : bool, optional
-            Whether to pad stacks in stacked training.
         verbose : int, optional
             How much information to print to the user.
         save_freq : int, optional
@@ -473,20 +357,19 @@ class Agent:
 
         for i in range(epochs):
             self.buffer.clear()
-            return_history = self.run_episodes(env, episodes=episodes, max_episode_length=max_episode_length,
-                                               store=True, parallel=parallel)
-            if stacked:
-                batches = self.buffer.get(method='stacked', stack_size=stack_size, pad=pad,
-                                          normalize_advantages=self.normalize_advantages)
-            else:
-                batches = self.buffer.get(method='batched',
-                                          normalize_advantages=self.normalize_advantages)
-            policy_history = self._fit_policy_model(batches, epochs=self.policy_updates, stacked=stacked)
-            value_history = self._fit_value_model(batches, epochs=self.value_updates, stacked=stacked)
+            return_history = self.run_episodes(
+                env, episodes=episodes, max_episode_length=max_episode_length,
+                store=True, parallel=parallel
+            )
+            batches = self.buffer.get(normalize_advantages=self.normalize_advantages)
+            policy_history = self._fit_policy_model(batches, epochs=self.policy_updates)
+            value_history = self._fit_value_model(batches, epochs=self.value_updates)
 
             if test_env is not None:
-                return_history = self.run_episodes(test_env, episodes=episodes, max_episode_length=max_episode_length,
-                                                   store=False, parallel=parallel)
+                return_history = self.run_episodes(
+                    test_env, episodes=episodes, max_episode_length=max_episode_length, store=False, 
+                    parallel=parallel
+                )
                 try:
                     env.env.ideal_gen.update()  # for binned training using FromDirectoryIdealGenerator
                 except AttributeError:
@@ -504,7 +387,8 @@ class Agent:
             history['delta_policy_loss'][i] = policy_history['loss'][-1] - policy_history['loss'][0]
             history['policy_ent'][i] = policy_history['ent'][-1]
             history['policy_kld'][i] = policy_history['kld'][-1]
-            history['mean_value'][i] = np.mean(np.vstack([data['pred_values'] for shape, data in batches.items()]))
+            history['mean_value'][i] = np.mean(np.vstack([data['pred_values']
+                                                          for shape, data in batches.items()]))
             history['mean_value_error'][i] = np.mean(np.square(np.vstack([data['pred_values'] - data['values']
                                                                          for shape, data in batches.items()])))
 
@@ -592,7 +476,8 @@ class Agent:
             results.append(self.run_episode(env, max_episode_length=max_episode_length, greedy=greedy, buffer=buff))
         output.put((results,buff))
 
-    def run_episodes(self, env, episodes=100, max_episode_length=None, greedy=False, store=False, parallel=True):
+    def run_episodes(self, env, episodes=100, max_episode_length=None, greedy=False, store=False,
+                     parallel=True):
         """Run several episodes, store interaction in buffer, and return history.
 
         Parameters
@@ -626,10 +511,10 @@ class Agent:
             results = [output.get() for p in processes]
             for p in processes:
                 p.join()
-            self.buffer=_merge_buffers([b for (_,b) in results])
+            self.buffer=_merge_buffers([b for (_, b) in results])
             returns = [x for (t,_) in results for x in t]
             for i in range(episodes):
-                (history['returns'][i],history['lengths'][i]) = returns[i]
+                (history['returns'][i], history['lengths'][i]) = returns[i]
         else:
             for i in range(episodes):
                 R, L = self.run_episode(env,max_episode_length=max_episode_length, greedy=greedy, buffer=self.buffer)
@@ -638,55 +523,32 @@ class Agent:
 
         return history
 
-    def _fit_policy_model(self, batches, epochs=1, stacked=False):
+    def _fit_policy_model(self, batches, epochs=1):
         """Fit policy model with one gradient update per epoch."""
         history = {'loss': [], 'kld': [], 'ent': []}
-        if stacked:
-            for epoch in range(epochs):
-                for datum in batches:
-                    with tf.GradientTape() as tape:
-                        logits = tf.reshape(self.policy_model.get_logits(datum['states'])[0], [-1]) # Here we drop the batch dimension. We assume batch_dim=1
-                        logits = logits - tf.reduce_mean(logits) # for numerical stability
-                        exp_logits = tf.math.exp(logits)
-                        unnormalized = tf.boolean_mask(exp_logits, datum['actions'])
-                        new_prob = unnormalized / tf.math.segment_sum(exp_logits, datum['seg_id'])
-                        loss = tf.reduce_mean(self.policy_loss(new_prob, datum['probas'], datum['advants']))
-                        kld = tf.reduce_mean(tf.math.log(datum['probas'] / new_prob))
-                        ent = tf.reduce_mean(-tf.math.log(new_prob))
-                    varis = self.policy_model.trainable_variables
-                    grads = tape.gradient(loss, varis)
-                    self.policy_optimizer.apply_gradients(zip(grads, varis))
-                # these are just the values from the last batch in batches
-                history['loss'].append(loss)
-                history['kld'].append(kld)
-                history['ent'].append(ent)
-                if self.kld_limit is not None and kld > self.kld_limit:
-                    break
-            self.policy_model.get_weights()  # for fast wrappers
-        else:
-            for epoch in range(epochs):
-                with tf.GradientTape() as tape:
-                    losses, klds, ents = [], [], []
-                    for shape, data in batches.items():
-                        action_dim = self.action_dim_fn(shape)
-                        if action_dim == 1:
-                            continue
-                        probs = self.policy_model(data['states'])
-                        new_prob = tf.reduce_sum(tf.one_hot(data['actions'], action_dim) * probs, axis=1)
-                        losses.append(self.policy_loss(new_prob, data['probas'], data['advants']))
-                        klds.append(tf.math.log(data['probas'] / new_prob))
-                        ents.append(-tf.math.log(new_prob))
-                    loss = tf.reduce_mean(tf.concat(losses, axis=0))
-                    kld = tf.reduce_mean(tf.concat(klds, axis=0))
-                    ent = tf.reduce_mean(tf.concat(ents, axis=0))
-                varis = self.policy_model.trainable_variables
-                grads = tape.gradient(loss, varis)
-                self.policy_optimizer.apply_gradients(zip(grads, varis))
-                history['loss'].append(loss)
-                history['kld'].append(kld)
-                history['ent'].append(ent)
-                if self.kld_limit is not None and kld > self.kld_limit:
-                    break
+        for epoch in range(epochs):
+            with tf.GradientTape() as tape:
+                losses, klds, ents = [], [], []
+                for shape, data in batches.items():
+                    action_dim = self.action_dim_fn(shape)
+                    if action_dim == 1:
+                        continue
+                    probs = self.policy_model(data['states'])
+                    new_prob = tf.reduce_sum(tf.one_hot(data['actions'], action_dim) * probs, axis=1)
+                    losses.append(self.policy_loss(new_prob, data['probas'], data['advants']))
+                    klds.append(tf.math.log(data['probas'] / new_prob))
+                    ents.append(-tf.math.log(new_prob))
+                loss = tf.reduce_mean(tf.concat(losses, axis=0))
+                kld = tf.reduce_mean(tf.concat(klds, axis=0))
+                ent = tf.reduce_mean(tf.concat(ents, axis=0))
+            varis = self.policy_model.trainable_variables
+            grads = tape.gradient(loss, varis)
+            self.policy_optimizer.apply_gradients(zip(grads, varis))
+            history['loss'].append(loss)
+            history['kld'].append(kld)
+            history['ent'].append(ent)
+            if self.kld_limit is not None and kld > self.kld_limit:
+                break
             self.policy_model.get_weights()  # for fast wrappers
         history = {k: np.array(v) for k, v in history.items()}
         return history
@@ -699,9 +561,9 @@ class Agent:
         """Save the current weights in the policy model to filename."""
         self.policy_model.save_weights(filename)
 
-    def _fit_value_model(self, batches, epochs=1, stacked=False):
+    def _fit_value_model(self, batches, epochs=1):
         """Fit value model with one gradient update per epoch."""
-        if stacked or self.value_model is None or hasattr(self.value_model, 'agent'):
+        if self.value_model is None or hasattr(self.value_model, 'agent'):
             epochs = 0
         history = {'loss': np.zeros(epochs)}
         for epoch in range(epochs):

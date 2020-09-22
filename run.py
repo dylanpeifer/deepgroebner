@@ -171,18 +171,6 @@ def make_parser():
                         type=lambda x: str(x).lower() == 'true',
                         default=False,
                         help='whether to train on binned ideals')
-    parser.add_argument('--stacked',
-                        type=lambda x: str(x).lower() == 'true',
-                        default=False,
-                        help='whether to use stacking')
-    parser.add_argument('--stack_size',
-                        type=int,
-                        default=-1,
-                        help='the stack batch size for stacking')
-    parser.add_argument('--pad',
-                        type=lambda x: str(x).lower() == 'true',
-                        default=False,
-                        help='whether to pad stacks')
     parser.add_argument('--parallel',
                         type=lambda x: str(x).lower() == 'true',
                         default=True,
@@ -358,7 +346,6 @@ if __name__ == '__main__':
     save_args(logdir, args)
     print(logdir)
     agent.train(env, episodes=args.episodes, epochs=args.epochs,
-                stacked=args.stacked, stack_size=args.stack_size, pad=args.pad,
                 save_freq=args.save_freq, logdir=logdir, verbose=args.verbose,
                 max_episode_length=args.max_episode_length, test_env=test_env,
                 parallel=args.parallel)
