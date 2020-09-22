@@ -214,6 +214,10 @@ class TransformersEncoder(tf.keras.layers.Layer):
 
 
 #--------------------------------------------------------## Implementation of Pointer Network
+# TODO:
+# - GRU
+# - Check out probabilities
+
 class pnetEncoder(tf.keras.layers.Layer):
     ''' 
     Encoder for pointer network. 
@@ -239,7 +243,7 @@ class pnetEncoder(tf.keras.layers.Layer):
 
         Return output sequences, final memory state, final cell state
         '''
-        return self.lstm(tf.cast(input_seq, tf.float32))
+        return self.lstm(tf.cast(input_seq, dtype=tf.float32))
 
 class pointer(tf.keras.layers.Layer):
     '''
@@ -269,25 +273,27 @@ class pointer(tf.keras.layers.Layer):
         self.input_size = input_dim
         self.hidden_size = hidden_layer
     
-    def initStartToken(self, input_dim):
+    def initStartToken(self, input_dim, batch_size):
         '''
         '''
         np.random.seed(42)
-        start_token = tf.convert_to_tensor(np.random.random([1,1,self.input_size]).astype(np.float32))
+        start_token = tf.convert_to_tensor(np.random.random([batch_size,1,self.input_size]).astype(np.float32))
         return start_token
 
     def __call__(self, encoder_output, initial_states):
         '''
         '''
-        start_token = self.initStartToken(self.input_size)
+
+        batch_size = encoder_output.shape[0]
+
+        start_token = self.initStartToken(self.input_size, batch_size)
         lstm_decoder_output = self.decoder_lstm(start_token, initial_state=initial_states) # Start generating
-        similarity_score = np.zeros([encoder_output.shape[1]])
+        similarity_score = np.zeros([batch_size, encoder_output.shape[1]])
         lstm_decoder_projection = self.decode_weight(lstm_decoder_output)
-        for index, _ in enumerate(similarity_score):
-            e_i = tf.expand_dims(encoder_output[0][index], axis = 0)
-            intermediate_value = self.tanh(self.encoder_weight(e_i) + lstm_decoder_projection)
-            u_i = self.v(intermediate_value)
-            similarity_score[index] = u_i[0][0][0]
+        for batch in range(batch_size):
+            for index in range(similarity_score.shape[1]):
+                e_i = tf.expand_dims(encoder_output[batch][index], axis = 0)
+                similarity_score[batch][index] = self.v(self.tanh(self.encoder_weight(e_i) + lstm_decoder_projection[batch]))[0][0]
         return tf.nn.softmax(tf.convert_to_tensor(similarity_score))
 
 class PointerNetwork(tf.keras.layers.Layer):
@@ -315,7 +321,23 @@ class PointerNetwork(tf.keras.layers.Layer):
             c0 = tf.convert_to_tensor(np.random.random([1,self.hidden_size]).astype(np.float32))
             initial_states = [h0, c0]
 
-        prob_dist = tf.expand_dims(self.point(seq_output, initial_states), axis = 0)
+        prob_dist = self.point(seq_output, initial_states)
+
+        return prob_dist
+
+    def __call__(self, input):
+        '''
+        '''
+        if(self.encoding_type == 'lstm'):
+            seq_output, mem_state, carry_state = self.encoder(input)
+            initial_states = [mem_state, carry_state]
+        elif(self.encoding_type == 'self-attention'):
+            seq_output = self.selfAttention(input)
+            h0 = tf.convert_to_tensor(np.random.random([1,self.hidden_size]).astype(np.float32))
+            c0 = tf.convert_to_tensor(np.random.random([1,self.hidden_size]).astype(np.float32))
+            initial_states = [h0, c0]
+
+        prob_dist = self.point(seq_output, initial_states)
 
         return prob_dist
 #-------------------------------------------------------## End of Pointer Network
