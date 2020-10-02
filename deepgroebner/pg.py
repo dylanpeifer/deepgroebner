@@ -562,7 +562,7 @@ class Agent:
         episode_length = 0
         total_reward = 0
         while not done:
-            action, prob = self.act(state, return_probs=True)
+            action, prob = self.act(state, greedy = greedy, return_probs=True)
             if self.value_model is None:
                 value = 0
             elif hasattr(self.value_model, 'agent'):  # this is an AgentBaseline
@@ -671,8 +671,9 @@ class Agent:
                         action_dim = self.action_dim_fn(shape)
                         if action_dim == 1:
                             continue
-                        probs = self.policy_model(data['states'])
-                        new_prob = tf.reduce_sum(tf.one_hot(data['actions'], action_dim) * probs, axis=1)
+                        probs = self.policy_model.predict(data['states'])
+                        prob_32 = tf.cast(probs, tf.float32)
+                        new_prob = tf.reduce_sum(tf.one_hot(data['actions'], action_dim) * prob_32, axis=1)
                         losses.append(self.policy_loss(new_prob, data['probas'], data['advants']))
                         klds.append(tf.math.log(data['probas'] / new_prob))
                         ents.append(-tf.math.log(new_prob))

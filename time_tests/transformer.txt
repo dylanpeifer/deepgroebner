@@ -1,0 +1,44 @@
+
+  _     ._   __/__   _ _  _  _ _/_   Recorded: 13:10:03  Samples:  68564
+ /_//_/// /_\ / //_// / //_'/ //     Duration: 90.893    CPU time: 95.782
+/   _/                      v3.2.0
+
+Program: test.py
+
+[31m90.896[0m [48;5;24m[38;5;15m<module>[0m  [2mtest.py:1[0m
+├─ [31m87.913[0m [48;5;24m[38;5;15mmain[0m  [2mtest.py:186[0m
+│  └─ [31m87.302[0m [48;5;24m[38;5;15mrun_episodes[0m  [2mdeepgroebner/pg.py:595[0m
+│     └─ [31m87.302[0m [48;5;24m[38;5;15mrun_episode[0m  [2mdeepgroebner/pg.py:539[0m
+│        ├─ [31m83.414[0m [48;5;24m[38;5;15mact[0m  [2mdeepgroebner/pg.py:406[0m
+│        │  ├─ [31m82.082[0m [48;5;24m[38;5;15mpredict[0m  [2mdeepgroebner/networks.py:317[0m
+│        │  │  ├─ [31m61.845[0m [48;5;24m[38;5;15m__call__[0m  [2mdeepgroebner/networks.py:247[0m
+│        │  │  │  └─ [31m61.785[0m [48;5;24m[38;5;15m__call__[0m  [2mdeepgroebner/networks.py:228[0m
+│        │  │  │     ├─ [33m43.251[0m [48;5;24m[38;5;15m__call__[0m  [2mdeepgroebner/networks.py:192[0m
+│        │  │  │     │  ├─ [33m25.098[0m start[0m  [2mthreading.py:834[0m
+│        │  │  │     │  │     [18 frames hidden]  [2mthreading[0m
+│        │  │  │     │  │        [33m24.616[0m wait[0m  [2mthreading.py:270[0m
+│        │  │  │     │  │        └─ [33m24.525[0m lock.acquire[0m  [2m<built-in>:0[0m
+│        │  │  │     │  ├─ [32m16.009[0m join[0m  [2mthreading.py:979[0m
+│        │  │  │     │  │     [12 frames hidden]  [2mthreading[0m
+│        │  │  │     │  │        [32m15.985[0m _wait_for_tstate_lock[0m  [2mthreading.py:1017[0m
+│        │  │  │     │  │        └─ [32m15.951[0m lock.acquire[0m  [2m<built-in>:0[0m
+│        │  │  │     │  └─ [92m[2m1.648[0m __call__[0m  [2mtensorflow/python/keras/engine/base_layer.py:875[0m
+│        │  │  │     │        [398 frames hidden]  [2mtensorflow, numpy, abc, contextlib[0m
+│        │  │  │     └─ [32m17.739[0m __call__[0m  [2mtensorflow/python/keras/engine/base_layer.py:875[0m
+│        │  │  │           [934 frames hidden]  [2mtensorflow, _collections_abc, abc, nu...[0m
+│        │  │  └─ [33m20.184[0m [48;5;24m[38;5;15m__call__[0m  [2mdeepgroebner/networks.py:431[0m
+│        │  │     ├─ [32m18.004[0m __call__[0m  [2mtensorflow/python/keras/layers/recurrent.py:656[0m
+│        │  │     │     [2002 frames hidden]  [2mtensorflow, abc, _collections_abc, we...[0m
+│        │  │     └─ [92m[2m1.177[0m [48;5;24m[38;5;15minitStartToken[0m  [2mdeepgroebner/networks.py:419[0m
+│        │  └─ [92m[2m1.164[0m wrapper[0m  [2mtensorflow/python/util/dispatch.py:198[0m
+│        │        [78 frames hidden]  [2mtensorflow, abc[0m
+│        └─ [92m[2m3.263[0m [48;5;24m[38;5;15mstep[0m  [2mdeepgroebner/buchberger.py:331[0m
+│           └─ [92m[2m2.710[0m [48;5;24m[38;5;15mstep[0m  [2mdeepgroebner/buchberger.py:224[0m
+└─ [92m[2m2.466[0m <module>[0m  [2mtensorflow/__init__.py:15[0m
+      [2761 frames hidden]  [2mtensorflow, google, pkg_resources, po...[0m
+
+predict - 82.082
+  TransformersEncoder - 61.845
+    MultiHeadedAttention - 43.251
+  Pointer - 20.184
+

@@ -191,7 +191,7 @@ class MultiHeadSelfAttention(tf.keras.layers.Layer):
 
     def __call__(self, q, k, v):
         '''
-        Get multi-headed attention, we thread the projects
+        Get multi-headed attention, we thread the self attention layers
 
         Params:
             q, k, v: Query, Key, Value matrix
@@ -249,6 +249,8 @@ class TransformersEncoder(tf.keras.layers.Layer):
             input_set = self.encoding_layer[i](input_set)
         return input_set
 
+# Useless stuff for right now
+#-----------------------------------------------------------------------------------------------
 class DecoderLayer(tf.keras.layers.Layer):
     def __init__(self, num_heads, input_dim, feed_forward_hidden_size):
         super(DecoderLayer, self).__init__()
@@ -294,8 +296,8 @@ class TransformersDecoder(tf.keras.layers.Layer):
         self.linear = tf.keras.layers.Layer(input_dim)
     def __call__(self, key, value):
         decoder_output = self.decoder(key, value)
-
         return tf.squeeze(tf.nn.softmax(self.linear(decoder_output)), axis = 0)
+#-----------------------------------------------------------------------------------------------
 
 class Transformers(tf.keras.layers.Layer):
     def __init__(self, num_layers, num_heads, input_dim, feed_forward_hidden_size, training):
@@ -311,10 +313,37 @@ class Transformers(tf.keras.layers.Layer):
         '''
         super(Transformers, self).__init__()
         self.encoder = TransformersEncoder(num_layers, num_heads, input_dim, feed_forward_hidden_size, training)
-        self.decoder = pointer(input_dim, feed_forward_hidden_size, layer_type='gru')
+        self.decoder = pointer(input_dim, input_dim, layer_type='gru', dot_product_attention=True)
     def predict(self, input_set):
         output_encoder = self.encoder(input_set)
         return self.decoder(output_encoder)
+
+class TPMP(tf.keras.layers.Layer):
+    '''
+    TPMP: TransformerParallelMultilayerPerceptron - using the transformer encoding step and the perceptron for the decoder
+    '''
+    def __init__(self, num_layers, num_heads, input_dim, feed_forward_hidden_size, training, perceptron_hidden_layer: list):
+        '''
+        Constructor for TPMP
+
+        Params:
+            num_layers: number of encoder and decoder blocks
+            num_heads: number of multi-attention heads. NOTE: It must divide input_dim
+            input_dim: size of input
+            feed_forward_hidden_size: Size of the feed forward network
+            training: To indicate that we want dropout
+            perceptron_hidden_layer: dimension of the hidden layer for ParallelMultilayerPerceptron
+        '''
+        super(TPMP, self).__init__()
+        self.encoder = TransformersEncoder(num_layers, num_heads, input_dim, feed_forward_hidden_size, training)
+        self.decoder = ParallelMultilayerPerceptron(input_dim, perceptron_hidden_layer)
+    def predict(self, input_set):
+        '''
+        Output probability over the input_set
+        '''
+        output_encoder = self.encoder(input_set)
+        prob = self.decoder(output_encoder)
+        return prob
         
 #--------------------------------------------------------## End of Transformers
 
@@ -361,7 +390,7 @@ class pointer(tf.keras.layers.Layer):
     Pointer network attention mechanism. This will also handle the one decode step
     '''
 
-    def __init__(self, input_dim, hidden_layer, layer_type = 'lstm'):
+    def __init__(self, input_dim, hidden_layer, layer_type = 'lstm', dot_product_attention = False):
         '''
         Constructor for pointer based attention.
 
@@ -380,10 +409,12 @@ class pointer(tf.keras.layers.Layer):
             self.decoder_layer = tf.keras.layers.LSTM(hidden_layer, return_sequences=True)
         elif layer_type == 'gru':
             self.decoder_layer = tf.keras.layers.GRU(hidden_layer, return_sequences=True) 
-        self.encoder_weight = tf.keras.layers.Dense(hidden_layer)
-        self.decode_weight = tf.keras.layers.Dense(hidden_layer)
-        self.v = tf.keras.layers.Dense(1)
-        self.tanh = tf.keras.activations.tanh
+        if not dot_product_attention:
+            self.encoder_weight = tf.keras.layers.Dense(hidden_layer)
+            self.decode_weight = tf.keras.layers.Dense(hidden_layer)
+            self.v = tf.keras.layers.Dense(1)
+            self.tanh = tf.keras.activations.tanh
+        self.dot_prod_attention = dot_product_attention
         self.input_size = input_dim
         self.hidden_size = hidden_layer
     
@@ -405,33 +436,40 @@ class pointer(tf.keras.layers.Layer):
         
         Params:
             encoder_output: output of the encoder block
+                size: (batch, seq_len, input_dim)
             initial_states: hidden and cell states from the encoder block
-        '''
+       '''
         batch_size = encoder_output.shape[0]
         start_token = self.initStartToken(batch_size)
-        lstm_decoder_output = self.decoder_layer(start_token, initial_state=initial_states) # Start generating
-        similarity_score = np.zeros([batch_size, encoder_output.shape[1]])
-        lstm_decoder_projection = self.decode_weight(lstm_decoder_output)
-        encoder_project = self.encoder_weight(encoder_output)
-        for batch in range(batch_size):
-            for index in range(similarity_score.shape[1]):
-                #e_i = tf.expand_dims(encoder_output[batch][index], axis = 0)
-                similarity_score[batch][index] = self.v(self.tanh(encoder_project[batch][index] + lstm_decoder_projection[batch]))[0][0] # change this
-        return tf.nn.softmax(tf.convert_to_tensor(similarity_score))
+        lstm_decoder_output = self.decoder_layer(start_token, initial_state=initial_states) #(batch, 1, input_dim)
+        if self.dot_prod_attention:
+            attention_scores = tf.squeeze(tf.linalg.matmul(lstm_decoder_output, encoder_output, transpose_b = True), axis = 1)
+            return tf.nn.softmax(attention_scores)
+        else:
+            similarity_score = np.zeros([batch_size, encoder_output.shape[1]])
+            lstm_decoder_projection = self.decode_weight(lstm_decoder_output)
+            encoder_project = self.encoder_weight(encoder_output)
+            for batch in range(batch_size):
+                for index in range(similarity_score.shape[1]):
+                    #e_i = tf.expand_dims(encoder_output[batch][index], axis = 0)
+                    similarity_score[batch][index] = self.v(self.tanh(encoder_project[batch][index] + lstm_decoder_projection[batch]))[0][0] # change this
+            return tf.nn.softmax(tf.convert_to_tensor(similarity_score))
 
 class PointerNetwork(tf.keras.layers.Layer):
-    def __init__(self, input_dim, hidden_layer, input_layer = 'lstm'):
+    def __init__(self, input_dim, hidden_layer, input_layer = 'lstm', dot_prod_attention=False):
         '''
         Params:
             input_dim: dimension of input
             hidden_layer: dimension of output layer
             input_layer: lstm or gru
+            dot_prod_attention: dot product attention or traditional pointer network attention
         '''
         super(PointerNetwork, self).__init__()
         self.encoder = pnetEncoder(hidden_layer, layer_type = input_layer)
-        self.point = pointer(input_dim, hidden_layer, layer_type=input_layer)
+        self.point = pointer(input_dim, hidden_layer, layer_type=input_layer, dot_product_attention=dot_prod_attention)
         self.hidden_size = hidden_layer
         self.layer = input_layer
+        self.attention_type = dot_prod_attention
 
     def predict(self, input):
         '''
