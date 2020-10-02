@@ -117,6 +117,13 @@ class ParallelMultilayerPerceptron:
 
 class SelfAttention(tf.keras.layers.Layer):
     def __init__(self, input_dim, hidden_layer):
+        '''
+        Constructor for self attention.
+        
+        Params:
+            input_dim: size of input size (number of features)
+            hidden_layer: output size for dense layers (in transformers it will be input_dim / num_heads)
+        '''
         super(SelfAttention, self).__init__()
         self.query_weight = tf.keras.layers.Dense(hidden_layer)
         self.key_weight = tf.keras.layers.Dense(hidden_layer)
@@ -124,22 +131,39 @@ class SelfAttention(tf.keras.layers.Layer):
         self.input_size = input_dim
 
     def attention(self, Q, K, V):
-        similarities = tf.math.divide(tf.matmul(Q, tf.transpose(K)), tf.constant([self.input_size**(1/2)]))
+        '''
+        Calculate attention given Q, K, V matrix
+        '''
+        similarities = tf.math.divide(tf.linalg.matmul(Q, K, transpose_b=True), tf.constant([self.input_size**(1/2)]))
         attention_weights = tf.nn.softmax(similarities)
         weighted_vectors = tf.matmul(attention_weights, V)
         return weighted_vectors
 
-    def __call__(self, input_set):
-        Q = tf.squeeze(self.query_weight(input_set), axis = 0)
-        K = tf.squeeze(self.key_weight(input_set), axis = 0)
-        V = tf.squeeze(self.value_weight(input_set), axis = 0)
+    def __call__(self, q_input, k_input, v_input):
+        '''
+        Get weighted vectors.
 
-        weighted_vectors = tf.expand_dims(self.attention(Q,K,V), axis = 0)
+        Params:
+            q_input, k_input, v_input: Query, Key, Value matrix
+            
+        NOTE: For encoder stage all input will be the same. For decoder stage q_input will be from the start token
+        and k_input = v_input from the encoder stage 
+        '''
+        Q = self.query_weight(q_input)
+        K = self.key_weight(k_input)
+        V = self.value_weight(v_input)
+
+        weighted_vectors = self.attention(Q,K,V)
         
         return weighted_vectors
 
 class MultiHeadSelfAttention(tf.keras.layers.Layer):
     def __init__(self, num_heads, input_dim):
+        '''
+        Params:
+            num_heads: Number of projections
+            input_dim: Number of features of our input
+        '''
         super(MultiHeadSelfAttention, self).__init__()
         
         if input_dim % num_heads != 0:
@@ -153,21 +177,36 @@ class MultiHeadSelfAttention(tf.keras.layers.Layer):
         self.num_heads = num_heads
         self.final_layer = tf.keras.layers.Dense(input_dim)
 
-    def attention(self, input_set, attention_layer, results, index):
-        results[index] = tf.squeeze(attention_layer(input_set), axis = 0)
+    def attention(self, q, k, v, attention_layer, results, index):
+        '''
+        Calculate the self attention of q, k, v (see __call__ in SelfAttention)
 
-    def __call__(self, input_set):
+        Params:
+            q, k, v: Query, Value, Key matrix
+            attention_layer: ith SelfAttention layer
+            results: list used to store the results of the threaded attention
+            index: index that the output of attention_layer should go
+        '''
+        results[index] = attention_layer(q,k,v)
+
+    def __call__(self, q, k, v):
+        '''
+        Get multi-headed attention, we thread the projects
+
+        Params:
+            q, k, v: Query, Key, Value matrix
+        '''
         results = [None] * self.num_heads
         threads = []
         for i in range(self.num_heads):
-            process = Thread(target = self.attention, args=[input_set, self.selfAttentionLayer[i], results, i])
+            process = Thread(target = self.attention, args=[q,k,v, self.selfAttentionLayer[i], results, i])
             process.start()
             threads.append(process)
 
         for process in threads:
             process.join()
 
-        head_concat = tf.expand_dims(tf.concat(results, 1), axis = 0)
+        head_concat = tf.concat(results, 2) # Concatenate output
 
         return self.final_layer(head_concat)
 
@@ -190,32 +229,98 @@ class EncoderLayer(tf.keras.layers.Layer):
 
         input_set = tf.cast(input_set, tf.float32)
 
-        attention_output = self.attention(input_set)
+        attention_output = self.attention(input_set, input_set, input_set)
         attention_output = self.dropout1(attention_output, training= self.training) # Only use drop out when training
         att_norm = self.layer_norm_mha(input_set + attention_output)
 
         ff = self.second_lt(self.first_lt(att_norm))
-        ff = self.dropout1(ff, training = self.training)
-        encoder_output = self.layer_norm_ff(input_set + ff)
+        ff1 = self.dropout1(ff, training = self.training)
+        encoder_output = self.layer_norm_ff(input_set + ff1)
         return encoder_output
 
 class TransformersEncoder(tf.keras.layers.Layer):
-    def __init__(self, num_layers, num_heads, input_dim, feed_forward_hidden_size):
+    def __init__(self, num_layers, num_heads, input_dim, feed_forward_hidden_size, training):
         super(TransformersEncoder, self).__init__()
-        self.encoding_layer = [EncoderLayer(num_heads, input_dim, feed_forward_hidden_size) for _ in range(num_layers)]
+        self.encoding_layer = [EncoderLayer(num_heads, input_dim, feed_forward_hidden_size, training) for _ in range(num_layers)]
         self.num_layers = num_layers
 
     def __call__(self, input_set):
         for i in range(self.num_layers):
             input_set = self.encoding_layer[i](input_set)
         return input_set
+
+class DecoderLayer(tf.keras.layers.Layer):
+    def __init__(self, num_heads, input_dim, feed_forward_hidden_size):
+        super(DecoderLayer, self).__init__()
+        self.mha_1 = MultiHeadSelfAttention(num_heads, input_dim)
+        self.mha_2 = MultiHeadSelfAttention(num_heads, input_dim)
+
+        self.first_lt = tf.keras.layers.Dense(feed_forward_hidden_size, activation = 'relu')
+        self.second_lt = tf.keras.layers.Dense(input_dim)
+
+        self.layer_norm_mha_1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.layer_norm_mah_2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.layer_norm_ff = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+
+        self.ffn = tf.keras.layers.Dense(feed_forward_hidden_size, activation='relu')
+
+        self.input_dim = input_dim
+
+    def initDecodeInput(self, batch_size):
+        np.random.seed(42)
+        start_token = tf.convert_to_tensor(np.random.random([batch_size,1,self.input_dim]).astype(np.float32))
+        np.random.seed()
+        return start_token
+        
+
+    def __call__(self, key, value):
+        batch_size = key.shape[0]
+        decode_input = self.initDecodeInput(batch_size)
+        
+        mha_1_output = self.mha_1(decode_input, decode_input, decode_input)
+        norm_mha_1_output = self.layer_norm_mha_1(mha_1_output + decode_input)
+        mha_2_output = self.mha_1(mha_1_output, key, value)
+        norm_mha_2_output = self.layer_norm_mah_2(mha_2_output + decode_input)
+
+        ff_output = self.second_lt(self.first_lt(norm_mha_2_output))
+        ff_norm = self.layer_norm_ff(ff_output + norm_mha_2_output)
+
+        return ff_norm
+           
+class TransformersDecoder(tf.keras.layers.Layer):
+    def __init__(self, num_heads, input_dim, feed_forward_hidden_size):
+        super(TransformersDecoder, self).__init__()
+        self.decoder = DecoderLayer(num_heads, input_dim, feed_forward_hidden_size)
+        self.linear = tf.keras.layers.Layer(input_dim)
+    def __call__(self, key, value):
+        decoder_output = self.decoder(key, value)
+
+        return tf.squeeze(tf.nn.softmax(self.linear(decoder_output)), axis = 0)
+
+class Transformers(tf.keras.layers.Layer):
+    def __init__(self, num_layers, num_heads, input_dim, feed_forward_hidden_size, training):
+        '''
+        Constructor for Transformers.
+
+        Params:
+            num_layers: number of encoder and decoder blocks
+            num_heads: number of multi-attention heads. NOTE: It must divide input_dim
+            input_dim: size of input
+            feed_forward_hidden_size: Size of the feed forward network
+            training: To indicate that we want dropout
+        '''
+        super(Transformers, self).__init__()
+        self.encoder = TransformersEncoder(num_layers, num_heads, input_dim, feed_forward_hidden_size, training)
+        self.decoder = pointer(input_dim, feed_forward_hidden_size, layer_type='gru')
+    def predict(self, input_set):
+        output_encoder = self.encoder(input_set)
+        return self.decoder(output_encoder)
         
 #--------------------------------------------------------## End of Transformers
 
 
 #--------------------------------------------------------## Implementation of Pointer Network
 # TODO:
-# - GRU
 # - Check out probabilities
 
 class pnetEncoder(tf.keras.layers.Layer):
@@ -223,7 +328,7 @@ class pnetEncoder(tf.keras.layers.Layer):
     Encoder for pointer network. 
     '''
 
-    def __init__(self, hidden_layer):
+    def __init__(self, hidden_layer, layer_type = 'lstm'):
         '''
         Constructor for pointer network LSTM. 
         
@@ -231,7 +336,13 @@ class pnetEncoder(tf.keras.layers.Layer):
             hidden_layer - the output dimension of the output
         '''
         super(pnetEncoder, self).__init__()
-        self.lstm = tf.keras.layers.LSTM(hidden_layer, return_sequences=True, return_state=True)
+        if layer_type == 'lstm':
+            self.encode = tf.keras.layers.LSTM(hidden_layer, return_sequences=True, return_state=True)
+        elif layer_type == 'gru':
+            self.encode = tf.keras.layers.GRU(hidden_layer, return_sequences=True, return_state=True)
+        else:
+            raise Exception('LayerTypeError: Layer type entered is not supported')
+
         self.hidden_size = hidden_layer
     
     def __call__(self, input_seq):
@@ -243,14 +354,14 @@ class pnetEncoder(tf.keras.layers.Layer):
 
         Return output sequences, final memory state, final cell state
         '''
-        return self.lstm(tf.cast(input_seq, dtype=tf.float32))
+        return self.encode(tf.cast(input_seq, dtype=tf.float32))
 
 class pointer(tf.keras.layers.Layer):
     '''
     Pointer network attention mechanism. This will also handle the one decode step
     '''
 
-    def __init__(self, input_dim, hidden_layer):
+    def __init__(self, input_dim, hidden_layer, layer_type = 'lstm'):
         '''
         Constructor for pointer based attention.
 
@@ -265,7 +376,10 @@ class pointer(tf.keras.layers.Layer):
         '''
 
         super(pointer, self).__init__()
-        self.decoder_lstm = tf.keras.layers.LSTM(hidden_layer, return_sequences=True)
+        if layer_type == 'lstm':
+            self.decoder_layer = tf.keras.layers.LSTM(hidden_layer, return_sequences=True)
+        elif layer_type == 'gru':
+            self.decoder_layer = tf.keras.layers.GRU(hidden_layer, return_sequences=True) 
         self.encoder_weight = tf.keras.layers.Dense(hidden_layer)
         self.decode_weight = tf.keras.layers.Dense(hidden_layer)
         self.v = tf.keras.layers.Dense(1)
@@ -273,54 +387,61 @@ class pointer(tf.keras.layers.Layer):
         self.input_size = input_dim
         self.hidden_size = hidden_layer
     
-    def initStartToken(self, input_dim, batch_size):
+    def initStartToken(self, batch_size):
         '''
+        Initialize start token
+
+        Params:
+            batch_size: size of batch
         '''
         np.random.seed(42)
         start_token = tf.convert_to_tensor(np.random.random([batch_size,1,self.input_size]).astype(np.float32))
+        np.random.seed()
         return start_token
 
-    def __call__(self, encoder_output, initial_states):
+    def __call__(self, encoder_output, initial_states = None):
         '''
+        Calculate attention.
+        
+        Params:
+            encoder_output: output of the encoder block
+            initial_states: hidden and cell states from the encoder block
         '''
-
         batch_size = encoder_output.shape[0]
-
-        start_token = self.initStartToken(self.input_size, batch_size)
-        lstm_decoder_output = self.decoder_lstm(start_token, initial_state=initial_states) # Start generating
+        start_token = self.initStartToken(batch_size)
+        lstm_decoder_output = self.decoder_layer(start_token, initial_state=initial_states) # Start generating
         similarity_score = np.zeros([batch_size, encoder_output.shape[1]])
         lstm_decoder_projection = self.decode_weight(lstm_decoder_output)
+        encoder_project = self.encoder_weight(encoder_output)
         for batch in range(batch_size):
             for index in range(similarity_score.shape[1]):
-                e_i = tf.expand_dims(encoder_output[batch][index], axis = 0)
-                similarity_score[batch][index] = self.v(self.tanh(self.encoder_weight(e_i) + lstm_decoder_projection[batch]))[0][0]
+                #e_i = tf.expand_dims(encoder_output[batch][index], axis = 0)
+                similarity_score[batch][index] = self.v(self.tanh(encoder_project[batch][index] + lstm_decoder_projection[batch]))[0][0] # change this
         return tf.nn.softmax(tf.convert_to_tensor(similarity_score))
 
 class PointerNetwork(tf.keras.layers.Layer):
-    def __init__(self, input_dim, hidden_layer, input_edit = 'lstm'):
+    def __init__(self, input_dim, hidden_layer, input_layer = 'lstm'):
         '''
+        Params:
+            input_dim: dimension of input
+            hidden_layer: dimension of output layer
+            input_layer: lstm or gru
         '''
         super(PointerNetwork, self).__init__()
-        if input_edit == 'lstm':
-            self.encoder = pnetEncoder(hidden_layer)
-        elif input_edit == 'self-attention':
-            self.selfAttention = SelfAttention(input_dim, hidden_layer)
-        self.point = pointer(input_dim, hidden_layer)
+        self.encoder = pnetEncoder(hidden_layer, layer_type = input_layer)
+        self.point = pointer(input_dim, hidden_layer, layer_type=input_layer)
         self.hidden_size = hidden_layer
-        self.encoding_type = input_edit
+        self.layer = input_layer
 
     def predict(self, input):
         '''
         '''
-        if(self.encoding_type == 'lstm'):
+        if self.layer == 'lstm':
             seq_output, mem_state, carry_state = self.encoder(input)
             initial_states = [mem_state, carry_state]
-        elif(self.encoding_type == 'self-attention'):
-            seq_output = self.selfAttention(input)
-            h0 = tf.convert_to_tensor(np.random.random([1,self.hidden_size]).astype(np.float32))
-            c0 = tf.convert_to_tensor(np.random.random([1,self.hidden_size]).astype(np.float32))
-            initial_states = [h0, c0]
-
+        else:
+            seq_output, mem_state = self.encoder(input)
+            initial_states = mem_state
         prob_dist = self.point(seq_output, initial_states)
 
         return prob_dist
@@ -328,15 +449,8 @@ class PointerNetwork(tf.keras.layers.Layer):
     def __call__(self, input):
         '''
         '''
-        if(self.encoding_type == 'lstm'):
-            seq_output, mem_state, carry_state = self.encoder(input)
-            initial_states = [mem_state, carry_state]
-        elif(self.encoding_type == 'self-attention'):
-            seq_output = self.selfAttention(input)
-            h0 = tf.convert_to_tensor(np.random.random([1,self.hidden_size]).astype(np.float32))
-            c0 = tf.convert_to_tensor(np.random.random([1,self.hidden_size]).astype(np.float32))
-            initial_states = [h0, c0]
-
+        seq_output, mem_state, carry_state = self.encoder(input)
+        initial_states = [mem_state, carry_state]
         prob_dist = self.point(seq_output, initial_states)
 
         return prob_dist
