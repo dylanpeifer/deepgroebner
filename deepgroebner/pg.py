@@ -416,7 +416,7 @@ class Agent:
             Whether to return the probability vector.
         """
         probs = self.policy_model.predict(state[np.newaxis])[0]
-        action = np.argmax(probs) if greedy else np.random.choice(len(probs), p=probs)
+        action = np.argmax(probs) if True else np.random.choice(len(probs), p=probs)
         return (action, probs[action]) if return_probs else action
 
     def train(self, env, episodes=10, epochs=1, max_episode_length=None, stacked=False,
