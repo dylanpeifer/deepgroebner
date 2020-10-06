@@ -1,0 +1,55 @@
+
+  _     ._   __/__   _ _  _  _ _/_   Recorded: 13:40:58  Samples:  221943
+ /_//_/// /_\ / //_// / //_'/ //     Duration: 224.569   CPU time: 225.112
+/   _/                      v3.2.0
+
+Program: test.py
+
+[31m224.576[0m [48;5;24m[38;5;15m<module>[0m  [2mtest.py:1[0m
+├─ [31m221.541[0m [48;5;24m[38;5;15mmain[0m  [2mtest.py:186[0m
+│  └─ [31m220.994[0m [48;5;24m[38;5;15mrun_episodes[0m  [2mdeepgroebner/pg.py:595[0m
+│     └─ [31m220.993[0m [48;5;24m[38;5;15mrun_episode[0m  [2mdeepgroebner/pg.py:539[0m
+│        ├─ [31m216.802[0m [48;5;24m[38;5;15mact[0m  [2mdeepgroebner/pg.py:406[0m
+│        │  └─ [31m215.022[0m [48;5;24m[38;5;15mpredict[0m  [2mdeepgroebner/networks.py:473[0m
+│        │     ├─ [33m117.368[0m [48;5;24m[38;5;15m__call__[0m  [2mdeepgroebner/networks.py:432[0m
+│        │     │  ├─ [33m65.909[0m wrapper[0m  [2mtensorflow/python/util/dispatch.py:198[0m
+│        │     │  │     [103 frames hidden]  [2mtensorflow, abc[0m
+│        │     │  │        [92m[2m3.614[0m flatten[0m  [2mtensorflow/python/util/nest.py:274[0m
+│        │     │  │        └─ [92m[2m3.153[0m PyCapsule.Flatten[0m  [2m<built-in>:0[0m
+│        │     │  │        [32m12.352[0m strided_slice[0m  [2mtensorflow/python/ops/gen_array_ops.py:10170[0m
+│        │     │  │        └─ [32m11.493[0m PyCapsule.TFE_Py_FastPathExecute[0m  [2m<built-in>:0[0m
+│        │     │  ├─ [32m25.557[0m __call__[0m  [2mtensorflow/python/keras/engine/base_layer.py:875[0m
+│        │     │  │     [503 frames hidden]  [2mtensorflow, numpy, abc, contextlib[0m
+│        │     │  │        [92m[2m3.130[0m bias_add[0m  [2mtensorflow/python/ops/gen_nn_ops.py:648[0m
+│        │     │  │        └─ [92m[2m2.983[0m PyCapsule.TFE_Py_FastPathExecute[0m  [2m<built-in>:0[0m
+│        │     │  │        [92m[2m4.368[0m mat_mul[0m  [2mtensorflow/python/ops/gen_math_ops.py:5591[0m
+│        │     │  │        └─ [92m[2m4.170[0m PyCapsule.TFE_Py_FastPathExecute[0m  [2m<built-in>:0[0m
+│        │     │  ├─ [32m17.709[0m __call__[0m  [2mtensorflow/python/keras/layers/recurrent.py:656[0m
+│        │     │  │     [1986 frames hidden]  [2mtensorflow, abc, _collections_abc, we...[0m
+│        │     │  └─ [92m[2m3.291[0m binary_op_wrapper[0m  [2mtensorflow/python/ops/math_ops.py:1122[0m
+│        │     │        [24 frames hidden]  [2mtensorflow[0m
+│        │     └─ [33m97.594[0m [48;5;24m[38;5;15m__call__[0m  [2mdeepgroebner/networks.py:376[0m
+│        │        └─ [33m97.151[0m __call__[0m  [2mtensorflow/python/keras/layers/recurrent.py:656[0m
+│        │              [2141 frames hidden]  [2mtensorflow, abc, _collections_abc, we...[0m
+│        │                 [92m[2m4.619[0m mat_mul[0m  [2mtensorflow/python/ops/gen_math_ops.py:5591[0m
+│        │                 └─ [92m[2m4.311[0m PyCapsule.TFE_Py_FastPathExecute[0m  [2m<built-in>:0[0m
+│        │                 [92m[2m4.218[0m split[0m  [2mtensorflow/python/ops/gen_array_ops.py:9855[0m
+│        │                 └─ [92m[2m3.928[0m PyCapsule.TFE_Py_FastPathExecute[0m  [2m<built-in>:0[0m
+│        │                 [92m[2m3.467[0m bias_add[0m  [2mtensorflow/python/ops/gen_nn_ops.py:648[0m
+│        │                 └─ [92m[2m3.224[0m PyCapsule.TFE_Py_FastPathExecute[0m  [2m<built-in>:0[0m
+│        │                 [92m[2m4.529[0m add_v2[0m  [2mtensorflow/python/ops/gen_math_ops.py:463[0m
+│        │                 └─ [92m[2m4.083[0m PyCapsule.TFE_Py_FastPathExecute[0m  [2m<built-in>:0[0m
+│        │                 [92m[2m2.962[0m mul[0m  [2mtensorflow/python/ops/gen_math_ops.py:6143[0m
+│        │                 └─ [92m[2m2.662[0m PyCapsule.TFE_Py_FastPathExecute[0m  [2m<built-in>:0[0m
+│        └─ [92m[2m3.602[0m [48;5;24m[38;5;15mstep[0m  [2mdeepgroebner/buchberger.py:331[0m
+│           └─ [92m[2m2.985[0m [48;5;24m[38;5;15mstep[0m  [2mdeepgroebner/buchberger.py:224[0m
+└─ [92m[2m2.479[0m <module>[0m  [2mtensorflow/__init__.py:15[0m
+      [2793 frames hidden]  [2mtensorflow, google, pkg_resources, re...[0m
+
+predict - 215.022
+  attention step - 117.368
+    wrapper - 65.909
+    base_layer - 25.557
+    lstm_start_token_seq - 17.709
+    binary_op_wrapper - 3.291
+  GRU - 97.594

@@ -1,0 +1,48 @@
+
+  _     ._   __/__   _ _  _  _ _/_   Recorded: 13:37:24  Samples:  118487
+ /_//_/// /_\ / //_// / //_'/ //     Duration: 120.646   CPU time: 120.894
+/   _/                      v3.2.0
+
+Program: test.py
+
+[31m120.652[0m [48;5;24m[38;5;15m<module>[0m  [2mtest.py:1[0m
+├─ [31m117.262[0m [48;5;24m[38;5;15mmain[0m  [2mtest.py:186[0m
+│  └─ [31m116.695[0m [48;5;24m[38;5;15mrun_episodes[0m  [2mdeepgroebner/pg.py:595[0m
+│     └─ [31m116.694[0m [48;5;24m[38;5;15mrun_episode[0m  [2mdeepgroebner/pg.py:539[0m
+│        ├─ [31m112.405[0m [48;5;24m[38;5;15mact[0m  [2mdeepgroebner/pg.py:406[0m
+│        │  ├─ [31m110.885[0m [48;5;24m[38;5;15mpredict[0m  [2mdeepgroebner/networks.py:473[0m
+│        │  │  ├─ [31m91.576[0m [48;5;24m[38;5;15m__call__[0m  [2mdeepgroebner/networks.py:376[0m
+│        │  │  │  └─ [31m91.107[0m __call__[0m  [2mtensorflow/python/keras/layers/recurrent.py:656[0m
+│        │  │  │        [2101 frames hidden]  [2mtensorflow, abc, _collections_abc, we...[0m
+│        │  │  │           [92m[2m4.350[0m mat_mul[0m  [2mtensorflow/python/ops/gen_math_ops.py:5591[0m
+│        │  │  │           └─ [92m[2m4.090[0m PyCapsule.TFE_Py_FastPathExecute[0m  [2m<built-in>:0[0m
+│        │  │  │           [92m[2m3.666[0m split[0m  [2mtensorflow/python/ops/gen_array_ops.py:9855[0m
+│        │  │  │           └─ [92m[2m3.407[0m PyCapsule.TFE_Py_FastPathExecute[0m  [2m<built-in>:0[0m
+│        │  │  │           [92m[2m3.230[0m bias_add[0m  [2mtensorflow/python/ops/gen_nn_ops.py:648[0m
+│        │  │  │           └─ [92m[2m2.925[0m PyCapsule.TFE_Py_FastPathExecute[0m  [2m<built-in>:0[0m
+│        │  │  │           [92m[2m2.446[0m sigmoid[0m  [2mtensorflow/python/ops/gen_math_ops.py:8903[0m
+│        │  │  │           └─ [92m[2m2.229[0m PyCapsule.TFE_Py_FastPathExecute[0m  [2m<built-in>:0[0m
+│        │  │  │           [92m[2m4.490[0m add_v2[0m  [2mtensorflow/python/ops/gen_math_ops.py:463[0m
+│        │  │  │           └─ [92m[2m4.059[0m PyCapsule.TFE_Py_FastPathExecute[0m  [2m<built-in>:0[0m
+│        │  │  │           [92m[2m2.944[0m mul[0m  [2mtensorflow/python/ops/gen_math_ops.py:6143[0m
+│        │  │  │           └─ [92m[2m2.667[0m PyCapsule.TFE_Py_FastPathExecute[0m  [2m<built-in>:0[0m
+│        │  │  │           [92m[2m1.896[0m add_v2[0m  [2mtensorflow/python/ops/gen_math_ops.py:463[0m
+│        │  │  │           └─ [92m[2m1.723[0m PyCapsule.TFE_Py_FastPathExecute[0m  [2m<built-in>:0[0m
+│        │  │  │           [92m[2m1.442[0m less[0m  [2mtensorflow/python/ops/gen_math_ops.py:4877[0m
+│        │  │  │           └─ [92m[2m1.276[0m PyCapsule.TFE_Py_FastPathExecute[0m  [2m<built-in>:0[0m
+│        │  │  └─ [32m19.268[0m [48;5;24m[38;5;15m__call__[0m  [2mdeepgroebner/networks.py:432[0m
+│        │  │     ├─ [32m16.557[0m __call__[0m  [2mtensorflow/python/keras/layers/recurrent.py:656[0m
+│        │  │     │     [2014 frames hidden]  [2mtensorflow, abc, _collections_abc, we...[0m
+│        │  │     └─ [92m[2m1.979[0m [48;5;24m[38;5;15minitStartToken[0m  [2mdeepgroebner/networks.py:420[0m
+│        │  └─ [92m[2m1.275[0m wrapper[0m  [2mtensorflow/python/util/dispatch.py:198[0m
+│        │        [80 frames hidden]  [2mtensorflow, abc[0m
+│        └─ [92m[2m3.695[0m [48;5;24m[38;5;15mstep[0m  [2mdeepgroebner/buchberger.py:331[0m
+│           └─ [92m[2m3.096[0m [48;5;24m[38;5;15mstep[0m  [2mdeepgroebner/buchberger.py:224[0m
+└─ [92m[2m2.817[0m <module>[0m  [2mtensorflow/__init__.py:15[0m
+      [2871 frames hidden]  [2mtensorflow, google, pkg_resources, ge...[0m
+
+predict - 110.885
+  GRU - 91.576
+  dot_attention - 19.268
+    lstm_start_token - 16.557
+    

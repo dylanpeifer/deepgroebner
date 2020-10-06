@@ -1,0 +1,70 @@
+
+  _     ._   __/__   _ _  _  _ _/_   Recorded: 10:37:06  Samples:  83059
+ /_//_/// /_\ / //_// / //_'/ //     Duration: 85.429    CPU time: 86.406
+/   _/                      v3.2.0
+
+Program: test.py
+
+[31m85.432[0m [48;5;24m[38;5;15m<module>[0m  [2mtest.py:1[0m
+├─ [31m81.861[0m [48;5;24m[38;5;15mmain[0m  [2mtest.py:186[0m
+│  └─ [31m81.301[0m [48;5;24m[38;5;15mtrain[0m  [2mdeepgroebner/pg.py:422[0m
+│     ├─ [31m78.640[0m [48;5;24m[38;5;15mrun_episodes[0m  [2mdeepgroebner/pg.py:595[0m
+│     │  └─ [31m78.638[0m [48;5;24m[38;5;15mrun_episode[0m  [2mdeepgroebner/pg.py:539[0m
+│     │     ├─ [31m74.704[0m [48;5;24m[38;5;15mact[0m  [2mdeepgroebner/pg.py:406[0m
+│     │     │  ├─ [31m73.264[0m [48;5;24m[38;5;15mpredict[0m  [2mdeepgroebner/networks.py:306[0m
+│     │     │  │  ├─ [31m53.146[0m [48;5;24m[38;5;15m__call__[0m  [2mdeepgroebner/networks.py:236[0m
+│     │     │  │  │  └─ [31m53.093[0m [48;5;24m[38;5;15m__call__[0m  [2mdeepgroebner/networks.py:215[0m
+│     │     │  │  │     ├─ [33m36.577[0m [48;5;24m[38;5;15m__call__[0m  [2mdeepgroebner/networks.py:175[0m
+│     │     │  │  │     │  ├─ [33m32.935[0m [48;5;24m[38;5;15m__call__[0m  [2mdeepgroebner/networks.py:137[0m
+│     │     │  │  │     │  │  ├─ [33m29.890[0m __call__[0m  [2mtensorflow/python/keras/engine/base_layer.py:875[0m
+│     │     │  │  │     │  │  │     [538 frames hidden]  [2mtensorflow, numpy, abc, enum[0m
+│     │     │  │  │     │  │  │        [32m11.863[0m _tensordot_reshape[0m  [2mtensorflow/python/ops/math_ops.py:4405[0m
+│     │     │  │  │     │  │  │        │  [32m5.271[0m reshape[0m  [2mtensorflow/python/ops/gen_array_ops.py:8143[0m
+│     │     │  │  │     │  │  │        │  │  [92m[2m1.017[0m quick_execute[0m  [2mtensorflow/python/eager/execute.py:33[0m
+│     │     │  │  │     │  │  │        │  │  └─ [92m[2m0.874[0m PyCapsule.TFE_Py_Execute[0m  [2m<built-in>:0[0m
+│     │     │  │  │     │  │  │        │  └─ [92m[2m1.109[0m PyCapsule.TFE_Py_FastPathExecute[0m  [2m<built-in>:0[0m
+│     │     │  │  │     │  │  │        ├─ [92m[2m3.092[0m prod[0m  [2m<__array_function__ internals>:2[0m
+│     │     │  │  │     │  │  │        │  └─ [92m[2m2.811[0m prod[0m  [2mnumpy/core/fromnumeric.py:2843[0m
+│     │     │  │  │     │  │  │        │        [6 frames hidden]  [2mnumpy[0m
+│     │     │  │  │     │  │  │        │           [92m[2m2.518[0m _wrapreduction[0m  [2mnumpy/core/fromnumeric.py:73[0m
+│     │     │  │  │     │  │  │        │           └─ [92m[2m1.686[0m ufunc.reduce[0m  [2m<built-in>:0[0m
+│     │     │  │  │     │  │  │        [32m4.988[0m reshape[0m  [2mtensorflow/python/ops/gen_array_ops.py:8143[0m
+│     │     │  │  │     │  │  │        └─ [92m[2m1.041[0m PyCapsule.TFE_Py_FastPathExecute[0m  [2m<built-in>:0[0m
+│     │     │  │  │     │  │  │        [92m[2m1.359[0m mat_mul[0m  [2mtensorflow/python/ops/gen_math_ops.py:5591[0m
+│     │     │  │  │     │  │  │        └─ [92m[2m1.269[0m PyCapsule.TFE_Py_FastPathExecute[0m  [2m<built-in>:0[0m
+│     │     │  │  │     │  │  │        [92m[2m1.535[0m bias_add[0m  [2mtensorflow/python/ops/gen_nn_ops.py:648[0m
+│     │     │  │  │     │  │  │        └─ [92m[2m1.480[0m PyCapsule.TFE_Py_FastPathExecute[0m  [2m<built-in>:0[0m
+│     │     │  │  │     │  │  └─ [92m[2m2.908[0m [48;5;24m[38;5;15mattention[0m  [2mdeepgroebner/networks.py:128[0m
+│     │     │  │  │     │  │     └─ [92m[2m2.449[0m wrapper[0m  [2mtensorflow/python/util/dispatch.py:198[0m
+│     │     │  │  │     │  │           [99 frames hidden]  [2mtensorflow[0m
+│     │     │  │  │     │  └─ [92m[2m3.413[0m __call__[0m  [2mtensorflow/python/keras/engine/base_layer.py:875[0m
+│     │     │  │  │     │        [465 frames hidden]  [2mtensorflow, numpy, abc[0m
+│     │     │  │  │     └─ [32m15.719[0m __call__[0m  [2mtensorflow/python/keras/engine/base_layer.py:875[0m
+│     │     │  │  │           [935 frames hidden]  [2mtensorflow, abc, _collections_abc, nu...[0m
+│     │     │  │  └─ [33m20.066[0m [48;5;24m[38;5;15m__call__[0m  [2mdeepgroebner/networks.py:426[0m
+│     │     │  │     ├─ [33m17.497[0m __call__[0m  [2mtensorflow/python/keras/layers/recurrent.py:656[0m
+│     │     │  │     │     [2003 frames hidden]  [2mtensorflow, abc, _collections_abc, we...[0m
+│     │     │  │     └─ [92m[2m1.896[0m [48;5;24m[38;5;15minitStartToken[0m  [2mdeepgroebner/networks.py:414[0m
+│     │     │  │        └─ [92m[2m0.928[0m inner[0m  [2mcontextlib.py:72[0m
+│     │     │  │              [14 frames hidden]  [2mcontextlib, numpy[0m
+│     │     │  └─ [92m[2m1.226[0m wrapper[0m  [2mtensorflow/python/util/dispatch.py:198[0m
+│     │     │        [74 frames hidden]  [2mtensorflow, abc[0m
+│     │     └─ [92m[2m3.362[0m [48;5;24m[38;5;15mstep[0m  [2mdeepgroebner/buchberger.py:331[0m
+│     │        └─ [92m[2m2.800[0m [48;5;24m[38;5;15mstep[0m  [2mdeepgroebner/buchberger.py:224[0m
+│     └─ [92m[2m2.447[0m [48;5;24m[38;5;15m_fit_policy_model[0m  [2mdeepgroebner/pg.py:641[0m
+│        ├─ [92m[2m1.122[0m [48;5;24m[38;5;15mpredict[0m  [2mdeepgroebner/networks.py:306[0m
+│        │  └─ [92m[2m0.877[0m [48;5;24m[38;5;15m__call__[0m  [2mdeepgroebner/networks.py:236[0m
+│        │     └─ [92m[2m0.877[0m [48;5;24m[38;5;15m__call__[0m  [2mdeepgroebner/networks.py:215[0m
+│        └─ [92m[2m0.970[0m gradient[0m  [2mtensorflow/python/eager/backprop.py:983[0m
+│              [390 frames hidden]  [2mtensorflow, abc, collections[0m
+└─ [92m[2m2.933[0m <module>[0m  [2mtensorflow/__init__.py:15[0m
+      [2787 frames hidden]  [2mtensorflow, google, pkg_resources, re...[0m
+         [92m[2m0.927[0m <module>[0m  [2mtensorflow/python/pywrap_tensorflow.py:15[0m
+         └─ [92m[2m0.926[0m create_dynamic[0m  [2m<built-in>:0[0m
+
+predict - 73.264
+	transformerEncoder - 53.146
+		multihead attention - 53.093
+			Actually in __call__ - 36.577
+			base_layer(tensorflow) - 15.719
+	Pointer - 20.066

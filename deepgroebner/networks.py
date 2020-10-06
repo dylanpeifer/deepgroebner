@@ -110,11 +110,6 @@ class ParallelMultilayerPerceptron:
         return tf.keras.Model(inputs=inputs, outputs=[probs, outputs])
 
 #--------------------------------------------------------## Implementation for Transformers
-
-# I assume batch length is always 1
-# TODO: 
-#   2) Decoding Block
-
 class SelfAttention(tf.keras.layers.Layer):
     def __init__(self, input_dim, hidden_layer):
         '''
@@ -170,41 +165,23 @@ class MultiHeadSelfAttention(tf.keras.layers.Layer):
             raise Exception('InputDimensionAndNumHeadError: input_dim must be divisble by num_heads')
 
 
-        self.selfAttentionLayer = []
+        self.heads = []
         for _ in range(num_heads):
-            self.selfAttentionLayer.append(SelfAttention(input_dim, input_dim/num_heads))
+            self.heads.append(SelfAttention(input_dim, input_dim/num_heads))
         
         self.num_heads = num_heads
         self.final_layer = tf.keras.layers.Dense(input_dim)
 
-    def attention(self, q, k, v, attention_layer, results, index):
-        '''
-        Calculate the self attention of q, k, v (see __call__ in SelfAttention)
-
-        Params:
-            q, k, v: Query, Value, Key matrix
-            attention_layer: ith SelfAttention layer
-            results: list used to store the results of the threaded attention
-            index: index that the output of attention_layer should go
-        '''
-        results[index] = attention_layer(q,k,v)
-
     def __call__(self, q, k, v):
         '''
-        Get multi-headed attention, we thread the self attention layers
+        Get multi-headed attention
 
         Params:
             q, k, v: Query, Key, Value matrix
         '''
-        results = [None] * self.num_heads
-        threads = []
-        for i in range(self.num_heads):
-            process = Thread(target = self.attention, args=[q,k,v, self.selfAttentionLayer[i], results, i])
-            process.start()
-            threads.append(process)
-
-        for process in threads:
-            process.join()
+        results = []
+        for layer in self.heads:
+            results.append(layer(q, k, v))
 
         head_concat = tf.concat(results, 2) # Concatenate output
 
@@ -212,6 +189,16 @@ class MultiHeadSelfAttention(tf.keras.layers.Layer):
 
 class EncoderLayer(tf.keras.layers.Layer):
     def __init__(self, num_heads, input_dim, feed_forward_hidden_size, training: bool, rate = .1):
+        '''
+        Constructor.
+
+        @Params:
+            num_heads - Number of self attention layers NOTE: num_heads must divide input_dim
+            input_dim - Dimension of input 
+            feed_forward_hidden_size - size of feed forward network at the end of the encoder
+            training - encorporate drop out 
+            rate - rate of dropout
+        '''
         super(EncoderLayer, self).__init__()
         self.attention = MultiHeadSelfAttention(num_heads, input_dim)
         self.first_lt = tf.keras.layers.Dense(feed_forward_hidden_size, activation = 'relu')
@@ -229,10 +216,12 @@ class EncoderLayer(tf.keras.layers.Layer):
 
         input_set = tf.cast(input_set, tf.float32)
 
+        # Multiheaded attention
         attention_output = self.attention(input_set, input_set, input_set)
         attention_output = self.dropout1(attention_output, training= self.training) # Only use drop out when training
-        att_norm = self.layer_norm_mha(input_set + attention_output)
+        att_norm = self.layer_norm_mha(input_set + attention_output) # Residual connection and norm
 
+        # Feed forward network stage
         ff = self.second_lt(self.first_lt(att_norm))
         ff1 = self.dropout1(ff, training = self.training)
         encoder_output = self.layer_norm_ff(input_set + ff1)
@@ -390,7 +379,7 @@ class pointer(tf.keras.layers.Layer):
     Pointer network attention mechanism. This will also handle the one decode step
     '''
 
-    def __init__(self, input_dim, hidden_layer, layer_type = 'lstm', dot_product_attention = False):
+    def __init__(self, input_dim, hidden_layer, layer_type = 'lstm', dot_product_attention = False, prob = 'norm'):
         '''
         Constructor for pointer based attention.
 
@@ -414,6 +403,10 @@ class pointer(tf.keras.layers.Layer):
             self.decode_weight = tf.keras.layers.Dense(hidden_layer)
             self.v = tf.keras.layers.Dense(1)
             self.tanh = tf.keras.activations.tanh
+        if prob == 'log':
+            self.softmax = tf.nn.log_softmax
+        else:
+            self.softmax = tf.nn.softmax
         self.dot_prod_attention = dot_product_attention
         self.input_size = input_dim
         self.hidden_size = hidden_layer
@@ -444,7 +437,7 @@ class pointer(tf.keras.layers.Layer):
         lstm_decoder_output = self.decoder_layer(start_token, initial_state=initial_states) #(batch, 1, input_dim)
         if self.dot_prod_attention:
             attention_scores = tf.squeeze(tf.linalg.matmul(lstm_decoder_output, encoder_output, transpose_b = True), axis = 1)
-            return tf.nn.softmax(attention_scores)
+            return self.softmax(attention_scores)
         else:
             similarity_score = np.zeros([batch_size, encoder_output.shape[1]])
             lstm_decoder_projection = self.decode_weight(lstm_decoder_output)
@@ -453,7 +446,7 @@ class pointer(tf.keras.layers.Layer):
                 for index in range(similarity_score.shape[1]):
                     #e_i = tf.expand_dims(encoder_output[batch][index], axis = 0)
                     similarity_score[batch][index] = self.v(self.tanh(encoder_project[batch][index] + lstm_decoder_projection[batch]))[0][0] # change this
-            return tf.nn.softmax(tf.convert_to_tensor(similarity_score))
+            return self.softmax(tf.convert_to_tensor(similarity_score))
 
 class PointerNetwork(tf.keras.layers.Layer):
     def __init__(self, input_dim, hidden_layer, input_layer = 'lstm', dot_prod_attention=False):
