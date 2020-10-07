@@ -419,7 +419,7 @@ class pointer(tf.keras.layers.Layer):
             batch_size: size of batch
         '''
         np.random.seed(42)
-        start_token = tf.convert_to_tensor(np.random.random([batch_size,1,self.input_size]).astype(np.float32))
+        start_token = tf.convert_to_tensor(np.random.random([batch_size,1,self.input_size]).astype(np.float32)) # Change this
         np.random.seed()
         return start_token
 
@@ -486,6 +486,36 @@ class PointerNetwork(tf.keras.layers.Layer):
 
         return prob_dist
 #-------------------------------------------------------## End of Pointer Network
+
+#-------------------------------------------------------## Processing 
+class ProcessBlock(tf.keras.layers.Layer):
+    def __init__(self, input_size, hidden_layer, num_step):
+        super(ProcessBlock, self).__init__()
+        self.ffn = tf.keras.layers.Dense(hidden_layer)
+        self.process_block = tf.keras.layers.GRU(hidden_layer+input_size, return_state=True)
+        self.hidden_size = hidden_layer
+        self.num_step = num_step
+    def read_out(self, M, q, batch_size):
+        attention = tf.nn.softmax(tf.linalg.matmul(M, q, transpose_b = True))
+        r_t = tf.linalg.matmul(attention, M, transpose_a = True)
+        q_star_t = tf.concat(q, r_t, axis = 1)
+        input = tf.zeros([batch_size, 1, 1])
+        _, mem_state = self.process_block(input, initial_state=q_star_t)
+        return mem_state
+    def initHiddenState(self, batch_size):
+        np.random.seed(42)
+        start_token = tf.convert_to_tensor(np.random.random([batch_size,1,self.hidden_size]).astype(np.float32)) # Change this
+        np.random.seed()
+        return start_token
+    def __call__(self, input_seq):
+        embeddings = self.ffn(input_seq)
+        initial_state = self.initHiddenState(input_seq.shape[0])
+        for _ in range(self.num_step):
+            initial_state = self.read_out(embeddings, initial_state, input_seq.shape[0])
+        return initial_state
+
+# TODO: Implement some type of probability function or pointer 
+#-------------------------------------------------------## End of processing block
 
 
 class PairsLeftBaseline:
