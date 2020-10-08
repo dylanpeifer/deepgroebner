@@ -6,7 +6,7 @@ import time
 
 from deepgroebner.buchberger import BuchbergerEnv, LeadMonomialsWrapper
 from deepgroebner.ideals import RandomBinomialIdealGenerator
-from deepgroebner.networks import MultilayerPerceptron, PointerNetwork, pnetEncoder, Transformers, TPMP
+from deepgroebner.networks import MultilayerPerceptron, PointerNetwork, pnetEncoder, Transformers, TPMP, ProcessBlock
 import deepgroebner.networks as n
 from deepgroebner.pg import PPOAgent
 
@@ -188,13 +188,18 @@ def main():
     ideal_gen = RandomBinomialIdealGenerator(3, 20, 10, degrees='weighted') 
     env = LeadMonomialsWrapper(BuchbergerEnv(ideal_gen), k=2)
 
+    processBlock = ProcessBlock(12, 128, 1)
+    state = env.reset()
+    state = tf.expand_dims(state, axis = 0)
+    processBlock(state)
+
     #network = PointerNetwork(12, 128, input_layer='gru', dot_prod_attention=True)
     #network = ParallelMultilayerPerceptron(12, [128])
     #network = Transformers(1, 3, 12, 128, training=False)
     #network = TPMP(1, 3, 12, 128, False, [128])
-    agent = PPOAgent(network)
+    #gent = PPOAgent(network)
     #agent.run_episodes(env, episodes=1, greedy=True, parallel = False)
-    agent.train(env, episodes = 100, verbose = 1, parallel=False)
+    #agent.train(env, episodes = 100, verbose = 1, parallel=False)
     #------------------------------------------------------------------
 
 if __name__ == '__main__':

@@ -488,30 +488,78 @@ class PointerNetwork(tf.keras.layers.Layer):
 #-------------------------------------------------------## End of Pointer Network
 
 #-------------------------------------------------------## Processing 
+class CustomLSTM(tf.keras.layers.Layer):
+    def __init__(self, hl_out_size):
+        super(CustomLSTM, self).__init__()
+        self.Whi = tf.keras.layers.Dense(hl_out_size, activation='sigmoid')
+        self.Whf = tf.keras.layers.Dense(hl_out_size, activation='sigmoid')
+        self.Whg = tf.keras.layers.Dense(hl_out_size, activation='tanh')
+        self.Who = tf.keras.layers.Dense(hl_out_size, activation='sigmoid')
+    def __call__(self, input, cell_state):
+        i_t = self.Whi(input)
+        f_t = self.Whf(input)
+        g_t = self.Whg(input)
+        o_t = self.Who(input)
+        c_t = tf.math.multiply(f_t,cell_state) + tf.math.multiply(i_t, g_t)
+        h_t = tf.math.multiply(o_t, tf.tanh(c_t))
+        return h_t, c_t
+
 class ProcessBlock(tf.keras.layers.Layer):
-    def __init__(self, input_size, hidden_layer, num_step):
+    def __init__(self, hidden_layer, num_step):
+        '''
+        Constructor for ProcessBlock.
+
+        @Params:
+            hidden_layer: Size of embeddings and LSTM
+            num_step: Number of times I process the input
+        '''
         super(ProcessBlock, self).__init__()
-        self.ffn = tf.keras.layers.Dense(hidden_layer)
-        self.process_block = tf.keras.layers.GRU(hidden_layer+input_size, return_state=True)
+        self.embed = tf.keras.layers.Dense(hidden_layer)
+        self.convul = tf.keras.layers.Dense(hidden_layer)
+        #self.process_block = tf.keras.layers.GRU(hidden_layer, return_state=True)
+        self.process_block = CustomLSTM(hidden_layer)
         self.hidden_size = hidden_layer
         self.num_step = num_step
-    def read_out(self, M, q, batch_size):
+    def read_out(self, M, q, c,batch_size):
+        '''
+        Perform the attention with the memory vectors and pass by the LSTM
+
+        @Params:
+            M - Polynomial Embeddings
+            q - Query vector (last hidden state)
+            c - Last cell state
+            batch_size - size of batch
+        '''
         attention = tf.nn.softmax(tf.linalg.matmul(M, q, transpose_b = True))
-        r_t = tf.linalg.matmul(attention, M, transpose_a = True)
-        q_star_t = tf.concat(q, r_t, axis = 1)
-        input = tf.zeros([batch_size, 1, 1])
-        _, mem_state = self.process_block(input, initial_state=q_star_t)
-        return mem_state
+        r_t = tf.linalg.matmul(attention, M, transpose_a = True) # sum of weight memory vector (by attention)
+        q_star_t = tf.concat([q, r_t], axis = 2)
+        mem_state, cell_state = self.process_block(q_star_t, c)
+        return mem_state, cell_state
     def initHiddenState(self, batch_size):
+        '''
+        Initialize initial hidden states and cell state. 
+
+        @Params:
+            batch_size - size of batch
+        '''
         np.random.seed(42)
-        start_token = tf.convert_to_tensor(np.random.random([batch_size,1,self.hidden_size]).astype(np.float32)) # Change this
+        hidden_state = tf.convert_to_tensor(np.random.random([batch_size,1,self.hidden_size]).astype(np.float32)) # Change this
+        cell_state = tf.convert_to_tensor(np.random.random([batch_size,1,self.hidden_size]).astype(np.float32)) # Change this
         np.random.seed()
-        return start_token
+        return hidden_state, cell_state
     def __call__(self, input_seq):
-        embeddings = self.ffn(input_seq)
-        initial_state = self.initHiddenState(input_seq.shape[0])
+        '''
+        Calculate embedding.
+
+        @Params:
+            input_seq - input sequence
+        '''
+        embeddings = self.embed(input_seq)
+        initial_state, cell_state = self.initHiddenState(input_seq.shape[0])
+
+        # Start processing
         for _ in range(self.num_step):
-            initial_state = self.read_out(embeddings, initial_state, input_seq.shape[0])
+            initial_state, cell_state = self.read_out(embeddings, initial_state, cell_state, input_seq.shape[0])
         return initial_state
 
 # TODO: Implement some type of probability function or pointer 
