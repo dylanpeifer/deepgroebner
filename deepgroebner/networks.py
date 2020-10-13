@@ -303,6 +303,9 @@ class Transformers(tf.keras.layers.Layer):
     def predict(self, input_set):
         output_encoder = self.encoder(input_set)
         return self.decoder(output_encoder)
+    def __call__(self, input_set):
+        output_encoder = self.encoder(input_set)
+        return self.decoder(output_encoder)
 
 class TPMP(tf.keras.layers.Layer):
     '''
@@ -324,6 +327,13 @@ class TPMP(tf.keras.layers.Layer):
         self.encoder = TransformersEncoder(num_layers, num_heads, input_dim, feed_forward_hidden_size, training)
         self.decoder = ParallelMultilayerPerceptron(input_dim, perceptron_hidden_layer)
     def predict(self, input_set):
+        '''
+        Output probability over the input_set
+        '''
+        output_encoder = self.encoder(input_set)
+        prob = self.decoder(output_encoder)
+        return prob
+    def __call__(self, input_set):
         '''
         Output probability over the input_set
         '''
