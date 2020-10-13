@@ -182,24 +182,41 @@ def test_multi_headed():
     print('After network: ')
     print(result.shape) # num_examples, 12
 
+# Tests for processing_block
+def test_process_block():
+
+    #Environment Initializations
+    ideal_gen = RandomBinomialIdealGenerator(3, 20, 10, degrees='weighted') 
+    env = LeadMonomialsWrapper(BuchbergerEnv(ideal_gen), k=2)
+    state = env.reset()
+    state_shuffled = tf.random.shuffle(state) # shuffle state
+
+    processBlock = ProcessBlock(128, 4) # Processing block
+
+    state = tf.expand_dims(state, axis = 0)
+    state_shuffled = tf.expand_dims(state_shuffled, axis = 0)
+    blend_og = processBlock(state)
+    blend_shuffled = processBlock(state_shuffled)
+
+    #print(blend_og)
+
+
     
 def main():
     #---------------------------------------------------------------------
     ideal_gen = RandomBinomialIdealGenerator(3, 20, 10, degrees='weighted') 
     env = LeadMonomialsWrapper(BuchbergerEnv(ideal_gen), k=2)
 
-    processBlock = ProcessBlock(12, 128, 1)
-    state = env.reset()
-    state = tf.expand_dims(state, axis = 0)
-    processBlock(state)
+    #test_process_block()
 
-    #network = PointerNetwork(12, 128, input_layer='gru', dot_prod_attention=True)
+    network = PointerNetwork(12, 128, input_layer='gru', dot_prod_attention=True)
     #network = ParallelMultilayerPerceptron(12, [128])
-    #network = Transformers(1, 3, 12, 128, training=False)
+    #network = Transformers(1, 4, 20, 128, training=False)
+    #print(network.non_trainable_variables)
     #network = TPMP(1, 3, 12, 128, False, [128])
-    #gent = PPOAgent(network)
+    agent = PPOAgent(network)
     #agent.run_episodes(env, episodes=1, greedy=True, parallel = False)
-    #agent.train(env, episodes = 100, verbose = 1, parallel=False)
+    agent.train(env, episodes = 100, verbose = 1, parallel=True)
     #------------------------------------------------------------------
 
 if __name__ == '__main__':

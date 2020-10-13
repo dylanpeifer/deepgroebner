@@ -10,9 +10,6 @@ import numpy as np
 import scipy.special as sc
 import tensorflow as tf
 
-# NEW IMPORT
-from threading import Thread
-
 class MultilayerPerceptron:
     """A multilayer perceptron network with fast predict calls."""
 
@@ -480,11 +477,7 @@ class PointerNetwork(tf.keras.layers.Layer):
     def __call__(self, input):
         '''
         '''
-        seq_output, mem_state, carry_state = self.encoder(input)
-        initial_states = [mem_state, carry_state]
-        prob_dist = self.point(seq_output, initial_states)
-
-        return prob_dist
+        return self.predict(input)
 #-------------------------------------------------------## End of Pointer Network
 
 #-------------------------------------------------------## Processing 
@@ -515,7 +508,7 @@ class ProcessBlock(tf.keras.layers.Layer):
         '''
         super(ProcessBlock, self).__init__()
         self.embed = tf.keras.layers.Dense(hidden_layer)
-        self.convul = tf.keras.layers.Dense(hidden_layer)
+        #self.convul = tf.keras.layers.Dense(hidden_layer)
         #self.process_block = tf.keras.layers.GRU(hidden_layer, return_state=True)
         self.process_block = CustomLSTM(hidden_layer)
         self.hidden_size = hidden_layer
