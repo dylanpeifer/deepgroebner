@@ -456,7 +456,7 @@ class pointer(tf.keras.layers.Layer):
             return self.softmax(tf.convert_to_tensor(similarity_score))
 
 class PointerNetwork(tf.keras.layers.Layer):
-    def __init__(self, input_dim, hidden_layer, input_layer = 'lstm', dot_prod_attention=False):
+    def __init__(self, input_dim, hidden_layer, input_layer = 'lstm', dot_prod_attention=False, prob = 'norm'):
         '''
         Params:
             input_dim: dimension of input
@@ -466,7 +466,7 @@ class PointerNetwork(tf.keras.layers.Layer):
         '''
         super(PointerNetwork, self).__init__()
         self.encoder = pnetEncoder(hidden_layer, layer_type = input_layer)
-        self.point = pointer(input_dim, hidden_layer, layer_type=input_layer, dot_product_attention=dot_prod_attention)
+        self.point = pointer(input_dim, hidden_layer, layer_type=input_layer, dot_product_attention=dot_prod_attention, prob = prob)
         self.hidden_size = hidden_layer
         self.layer = input_layer
         self.attention_type = dot_prod_attention
