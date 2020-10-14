@@ -24,7 +24,8 @@ class MultilayerPerceptron:
         for i, (m, b) in enumerate(self.weights):
             X = np.dot(X, m) + b
             if i == len(self.weights)-1:
-                X = sc.log_softmax(X, axis=1)
+                if self.final_activation != 'linear':
+                    X = sc.log_softmax(X, axis=1)
             else:
                 X = np.maximum(X, 0, X)
         return X
@@ -101,7 +102,8 @@ class ParallelMultilayerPerceptron:
         x = inputs
         for hidden in hidden_layers:
             x = tf.keras.layers.Conv1D(hidden, 1, activation='relu')(x)
-        outputs = tf.keras.layers.Conv1D(1, 1, activation=tf.nn.log_softmax)(x)
+        x = tf.keras.layers.Conv1D(1, 1, activation='linear')(x)
+        outputs = tf.nn.log_softmax(x, axis=1)
         logprobs = tf.keras.layers.Flatten()(outputs)
         return tf.keras.Model(inputs=inputs, outputs=[logprobs, outputs])
 
