@@ -109,7 +109,7 @@ class TrajectoryBuffer:
         self.gam = gam
         self.lam = lam
         self.states = []
-        self.probas = []
+        self.logps = []
         self.values = []
         self.pred_values = []
         self.actions = []
@@ -117,15 +117,15 @@ class TrajectoryBuffer:
         self.start = 0
         self.end = 0
 
-    def store(self, state, proba, value, action, reward):
+    def store(self, state, logp, value, action, reward):
         """Store the information from one interaction with the environment.
 
         Parameters
         ----------
         state : ndarray
            The observation of the state.
-        proba : float
-           The agent's previous probability of picking the chosen action.
+        logp : float
+           The agent's logged probability of picking the chosen action.
         value : float
            The agent's computed value of the state.
         action : int
@@ -135,7 +135,7 @@ class TrajectoryBuffer:
 
         """
         self.states.append(state)
-        self.probas.append(proba)
+        self.logps.append(logp)
         self.values.append(value)
         self.pred_values.append(value)
         self.actions.append(action)
@@ -160,7 +160,7 @@ class TrajectoryBuffer:
     def clear(self):
         """Reset the buffer."""
         self.states.clear()
-        self.probas.clear()
+        self.logps.clear()
         self.values.clear()
         self.pred_values.clear()
         self.actions.clear()
@@ -182,7 +182,7 @@ class TrajectoryBuffer:
             A dictionary mapping state shape to training data.
 
             Each value of the dictionary is a dictionary with keys
-            'states', 'probas', 'values', 'actions', 'advants', and values
+            'states', 'logps', 'values', 'actions', 'advants', and values
             ndarrays.
 
         """
@@ -198,7 +198,7 @@ class TrajectoryBuffer:
             data[shape] = {
                 'states': np.array([self.states[i] for i in indices],
                                    dtype=np.float32),
-                'probas': np.array([self.probas[i] for i in indices],
+                'logps': np.array([self.logps[i] for i in indices],
                                    dtype=np.float32),
                 'values': np.array([[self.rewards[i]] for i in indices],
                                    dtype=np.float32),
@@ -221,7 +221,7 @@ def _merge_buffers(bufferlist):
     for b in bufferlist[1:]:
         assert b.start==b.end, "Must apply self.finish() before merging buffers"
         output.states += b.states
-        output.probas += b.probas
+        output.logps += b.logps
         output.values += b.values
         output.pred_values += b.pred_values
         output.actions += b.actions
@@ -294,7 +294,7 @@ class Agent:
         self.action_dim_fn = action_dim_fn
         self.kld_limit = kld_limit
 
-    def act(self, state, greedy=False, return_probs=False):
+    def act(self, state, greedy=False, return_logp=False):
         """Return an action for the given state using the policy model.
 
         Parameters
@@ -303,12 +303,18 @@ class Agent:
             The state of the environment.
         greedy : bool, optional
             Whether to sample or pick the action with max probability.
-        return_probs : bool, optional
-            Whether to return the probability vector.
+        return_logp : bool, optional
+            Whether to return the log probability of choosing the chosen action.
         """
-        probs = self.policy_model.predict(state[np.newaxis])[0]
-        action = np.argmax(probs) if greedy else np.random.choice(len(probs), p=probs)
-        return (action, probs[action]) if return_probs else action
+        logpi = self.policy_model(state[np.newaxis])
+        if greedy:
+            action = tf.argmax(logpi, axis=1)[0]
+        else:
+            action = tf.random.categorical(logpi, 1)[0, 0]
+        if return_logp:
+            return action.numpy(), logpi[:, action][0].numpy()
+        else:
+            return action.numpy()
 
     def train(self, env, episodes=10, epochs=1, max_episode_length=None, verbose=0, save_freq=1,
               logdir=None, test_env=None, parallel=True):
@@ -446,7 +452,7 @@ class Agent:
         episode_length = 0
         total_reward = 0
         while not done:
-            action, prob = self.act(state, return_probs=True)
+            action, logp = self.act(state, return_logp=True)
             if self.value_model is None:
                 value = 0
             elif hasattr(self.value_model, 'agent'):  # this is an AgentBaseline
@@ -458,7 +464,7 @@ class Agent:
                 value = self.value_model.predict(state[np.newaxis])[0][0]
             next_state, reward, done, _ = env.step(action)
             if buffer is not None:
-                buffer.store(state, prob, value, action, reward)
+                buffer.store(state, logp, value, action, reward)
             episode_length += 1
             total_reward += reward
             if max_episode_length is not None and episode_length > max_episode_length:
@@ -533,11 +539,11 @@ class Agent:
                     action_dim = self.action_dim_fn(shape)
                     if action_dim == 1:
                         continue
-                    probs = self.policy_model(data['states'])
-                    new_prob = tf.reduce_sum(tf.one_hot(data['actions'], action_dim) * probs, axis=1)
-                    losses.append(self.policy_loss(new_prob, data['probas'], data['advants']))
-                    klds.append(tf.math.log(data['probas'] / new_prob))
-                    ents.append(-tf.math.log(new_prob))
+                    logpis = self.policy_model(data['states'])
+                    new_logps = tf.reduce_sum(tf.one_hot(data['actions'], action_dim) * logpis, axis=1)
+                    losses.append(self.policy_loss(new_logps, data['logps'], data['advants']))
+                    klds.append(data['logps'] - new_logps)
+                    ents.append(-new_logps)
                 loss = tf.reduce_mean(tf.concat(losses, axis=0))
                 kld = tf.reduce_mean(tf.concat(klds, axis=0))
                 ent = tf.reduce_mean(tf.concat(ents, axis=0))
@@ -593,15 +599,15 @@ class Agent:
 
 
 @tf.function(experimental_relax_shapes=True)
-def pg_surrogate_loss(new_prob, old_prob, advantages):
+def pg_surrogate_loss(new_logps, old_logps, advantages):
     """Return loss with gradient for policy gradient.
 
     Parameters
     ----------
-    new_probs : Tensor (batch_dim,)
+    new_logps : Tensor (batch_dim,)
         The output of the current model for the chosen action.
-    old_prob : Tensor (batch_dim,)
-        The previous probability of the chosen action.
+    old_logps : Tensor (batch_dim,)
+        The previous logged probability of the chosen action.
     advantages : Tensor (batch_dim,)
         The computed advantages.
 
@@ -611,7 +617,7 @@ def pg_surrogate_loss(new_prob, old_prob, advantages):
         The loss for each interaction.
 
     """
-    return -tf.math.log(new_prob) * advantages
+    return -new_logps * advantages
 
 
 class PGAgent(Agent):
@@ -639,15 +645,15 @@ def ppo_surrogate_loss(eps=0.2):
 
     """
     @tf.function(experimental_relax_shapes=True)
-    def loss(new_prob, old_prob, advantages):
+    def loss(new_logps, old_logps, advantages):
         """Return loss with gradient for proximal policy optimization.
 
         Parameters
         ----------
-        new_probs : Tensor (batch_dim,)
+        new_logps : Tensor (batch_dim,)
             The output of the current model for the chosen action.
-        old_probs : Tensor (batch_dim,)
-            The old model probability for the chosen action.
+        old_logps : Tensor (batch_dim,)
+            The previous logged probability for the chosen action.
         advantages : Tensor (batch_dim,)
             The computed advantages.
 
@@ -657,7 +663,7 @@ def ppo_surrogate_loss(eps=0.2):
             The loss for each interaction.
         """
         min_adv = tf.where(advantages > 0, (1 + eps) * advantages, (1 - eps) * advantages)
-        return -tf.minimum(new_prob / old_prob * advantages, min_adv)
+        return -tf.minimum(tf.exp(new_logps - old_logps) * advantages, min_adv)
     return loss
 
 
