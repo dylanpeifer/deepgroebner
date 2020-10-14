@@ -10,10 +10,11 @@ import numpy as np
 import scipy.special as sc
 import tensorflow as tf
 
+
 class MultilayerPerceptron:
     """A multilayer perceptron network with fast predict calls."""
 
-    def __init__(self, input_dim, hidden_layers, output_dim, final_activation='softmax'):
+    def __init__(self, input_dim, hidden_layers, output_dim, final_activation=tf.nn.log_softmax):
         self.network = self._build_network(input_dim, hidden_layers, output_dim, final_activation)
         self.weights = self.get_weights()
         self.trainable_variables = self.network.trainable_variables
@@ -23,8 +24,8 @@ class MultilayerPerceptron:
         for i, (m, b) in enumerate(self.weights):
             X = np.dot(X, m) + b
             if i == len(self.weights)-1:
-                if self.final_activation == 'softmax':
-                    X = sc.softmax(X, axis=1)
+                if self.final_activation != 'linear':
+                    X = sc.log_softmax(X, axis=1)
             else:
                 X = np.maximum(X, 0, X)
         return X
@@ -69,7 +70,7 @@ class ParallelMultilayerPerceptron:
         for i, (m, b) in enumerate(self.weights):
             X = np.dot(X, m) + b
             if i == len(self.weights)-1:
-                X = sc.softmax(X, axis=1).squeeze(axis=-1)
+                X = sc.log_softmax(X, axis=1).squeeze(axis=-1)
             else:
                 X = np.maximum(X, 0, X)
         return X
@@ -101,10 +102,10 @@ class ParallelMultilayerPerceptron:
         x = inputs
         for hidden in hidden_layers:
             x = tf.keras.layers.Conv1D(hidden, 1, activation='relu')(x)
-        outputs = tf.keras.layers.Conv1D(1, 1, activation='linear')(x)
-        x = tf.keras.layers.Flatten()(outputs)
-        probs = tf.keras.layers.Activation('softmax')(x)
-        return tf.keras.Model(inputs=inputs, outputs=[probs, outputs])
+        x = tf.keras.layers.Conv1D(1, 1, activation='linear')(x)
+        outputs = tf.nn.log_softmax(x, axis=1)
+        logprobs = tf.keras.layers.Flatten()(outputs)
+        return tf.keras.Model(inputs=inputs, outputs=[logprobs, outputs])
 
 #--------------------------------------------------------## Implementation for Transformers
 class SelfAttention(tf.keras.layers.Layer):

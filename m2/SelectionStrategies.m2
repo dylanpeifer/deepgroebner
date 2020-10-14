@@ -12,7 +12,8 @@ newPackage(
 export {"SugarPolynomial", "sugarPolynomial", "polynomial", "sugar",
         "reduce", "minimalize", "interreduce", "spoly",
         "buchberger", "SelectionStrategy", "EliminationStrategy", "SortReducers",
-	"ReductionStrategy", "Homogenize", "Minimalize", "Interreduce", "SortInput"}
+	"ReductionStrategy", "Homogenize", "Minimalize", "Interreduce", "SortInput",
+	"Lineages"}
 
 -------------------------------------------------------------------------------
 --- sugar polynomials
@@ -383,7 +384,8 @@ buchberger = method(Options => {
 	SortReducers => true,
 	Homogenize => false,
 	Minimalize => true,
-	Interreduce => true
+	Interreduce => true,
+	Lineages => false
 	})
 buchberger(Ideal) := Sequence => opts -> I -> (
     -- I = an ideal in a polynomial ring
@@ -392,6 +394,7 @@ buchberger(Ideal) := Sequence => opts -> I -> (
     F := first entries gens I;
     if opts.SortInput then F = sort F;
     if opts.SelectionStrategy === "Sugar" then F = apply(F, sugarPolynomial);
+    if opts.Lineages then L := toList(0..#F-1);
 
     P := {};
     G := {};
@@ -422,6 +425,7 @@ buchberger(Ideal) := Sequence => opts -> I -> (
 	    nonzeroReductions = nonzeroReductions + 1;
 	    reducers = G;
 	    if opts.SortReducers then reducers = sort reducers;
+	    if opts.Lineages then L = append(L, indices p);
 	    )
 	else (
 	    zeroReductions = zeroReductions + 1;
@@ -429,6 +433,7 @@ buchberger(Ideal) := Sequence => opts -> I -> (
 	);
 
     if opts.SelectionStrategy === "Sugar" then G = apply(G, polynomial);
+    if opts.Lineages then L = apply(#L, i -> (L#i, G#i));
     if opts.Minimalize then G = minimalize(G);
     if opts.Interreduce then G = interreduce(G);
 
@@ -436,7 +441,7 @@ buchberger(Ideal) := Sequence => opts -> I -> (
 	               "nonzeroReductions" => nonzeroReductions,
 		       "polynomialAdditions" => polynomialAdditions,
 		       "monomialAdditions" => monomialAdditions};
-    (G, stats)
+    if opts.Lineages then (G, stats, L) else (G, stats)
     )
 
 beginDocumentation()

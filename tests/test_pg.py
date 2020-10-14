@@ -57,7 +57,7 @@ def test_TrajectoryBuffer_0(gam, lam, val, adv):
     batches = buf.get(normalize_advantages=False)
     data = batches[(2,)]
     assert np.array_equal(data['states'], np.array([[1., 2.], [1., 3.], [1., 4.], [1., 5.], [1., 7.]], dtype=np.float32))
-    assert np.array_equal(data['probas'], np.array([0.3, 0.5, 0.7, 0.5, 0.9], dtype=np.float32))
+    assert np.array_equal(data['logps'], np.array([0.3, 0.5, 0.7, 0.5, 0.9], dtype=np.float32))
     assert np.array_equal(data['values'], val)
     assert np.array_equal(data['actions'], np.array([1, 0, 1, 2, 0], dtype=np.int))
     assert np.array_equal(data['advants'], adv)
