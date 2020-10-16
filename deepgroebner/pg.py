@@ -422,7 +422,7 @@ class Agent:
                 tb_writer.flush()
             if verbose > 0:
                 print_status_bar(i, epochs, history, verbose=verbose)
-
+        
         return history
 
 

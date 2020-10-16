@@ -7,7 +7,6 @@ from tensorflow import keras
 
 import os
 
-
 class SupervisedLearner():
     """
     Used to test train new neural net models in 
@@ -25,9 +24,13 @@ class SupervisedLearner():
         self.optimizer = optimizer
 
     def loss_fn(self, correct_action, log_prob):
+        '''
+        Implementation of negative log likelihood loss 
+        '''
         return tf.linalg.matmul(correct_action, log_prob, transpose_b = True)
+    
 
-    def train(self, filename, epochs = 5, batch_size = 100):
+    def train(self, filename, model_path, epochs = 5, batch_size = 100):
         '''
         Train the learner using certain strategy 
         '''
@@ -45,13 +48,11 @@ class SupervisedLearner():
                 loss = tf.reduce_mean(tf.concat(losses, axis=0))
                 grads = tape.gradient(loss, self.model.trainable_variables)
                 self.optimizer.apply_gradients(zip(grads, self.model.trainable_weights))
-                print('Loss was: {}').format(loss)
+                print('Epoch {}/{} - Loss was: {}').format(epoch, epochs, loss)
                 history['loss'] = (epoch, loss)
+        self.model.save_weights(model_path)
+        return history
 
-# TODO: 
-#   - Intelligent way to check if a dataset had been created and raise error
-#   - 
-# 
 class PolynomialDataset():
     '''
     Polynomial dataset that generates, save, load, and batch examples based on selection strategy.
@@ -67,7 +68,7 @@ class PolynomialDataset():
     def __init__(self, n, d, s, selection_strategy = 'normal'):
         ideal_gen = RandomBinomialIdealGenerator(n, d, s, degrees='weighted') 
         self.env = dpb.LeadMonomialsWrapper(dpb.BuchbergerEnv(ideal_gen), k=2)
-        self.agent = dpb.LeadMonomialsAgent(n, selection = selection_strategy, k = 2)
+        self.agent = dpb.LeadMonomialsAgent(selection = selection_strategy, k = 2)
     
     def run_episode(self, dataset):
         '''
@@ -135,5 +136,3 @@ class PolynomialDataset():
         Randomly sample from the dataset
         '''
         return [data[key] for key in np.random.choice(keys, batch_size)]
-            
-        

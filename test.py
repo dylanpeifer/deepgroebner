@@ -214,30 +214,34 @@ def run_buchberger_agent():
         state = next_state
     print(next_state)
 
-def train(filename, n = 3, d = 20, s = 10):
+def train(filename, strategy, model_path, learner, n = 3, d = 20, s = 10):
+    pd = PolynomialDataset(n, d, s, strategy)
+    pd.generate_dataset(filename, num_episodes=500)
     optimizer = tf.keras.optimizers.Adam()
-    learner = TPMP(1, 4, 12, 128, True, [128])
-    
     teacher = SupervisedLearner(n, d, s, learner, optimizer)
-    teacher.train(filename)
+    teacher.train(filename, model_path)
     
 def main():
     #---------------------------------------------------------------------
+
+    learner = TPMP(1, 4, 12, 128, True, [128])
+    train('3-20-10-dataset.npz', strategy = 'normal', model_path = 'supervised_TPMP-1-4-12-128-128', learner = learner)
+
     #ideal_gen = RandomBinomialIdealGenerator(3, 20, 10, degrees='weighted') 
     #env = LeadMonomialsWrapper(BuchbergerEnv(ideal_gen), k=2)
 
     #run_buchberger_agent()
 
-    filename = '3-20-10-dataset.npz'
-    pd = PolynomialDataset(3, 20, 10, 'normal')
-    pd.generate_dataset(filename, num_episodes=1)
+    #filename = '3-20-10-dataset.npz'
+    #pd = PolynomialDataset(3, 20, 10, 'normal')
+    #pd.generate_dataset(filename, num_episodes=1)
     #train(filename)
 
     #test_process_block()
 
-    #network = PointerNetwork(12, 128, input_layer='gru', dot_prod_attention=True)
+    #network = PointerNetwork(12, 128, input_layer='gru', dot_prod_attention=True, prob = 'log')
     #network = ParallelMultilayerPerceptron(12, [128])
-    #network = Transformers(1, 4, 12, 128, training=False)
+    #network = Transformers(1, 4, 12, 128, training=False, prob = 'log')
     #print(network.non_trainable_variables)
     #network = TPMP(1, 3, 12, 128, False, [128])
     #agent = PPOAgent(network)

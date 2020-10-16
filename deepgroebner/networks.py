@@ -286,7 +286,7 @@ class TransformersDecoder(tf.keras.layers.Layer):
         return tf.squeeze(tf.nn.softmax(self.linear(decoder_output)), axis = 0)
 #-----------------------------------------------------------------------------------------------
 
-class Transformers(tf.keras.layers.Layer):
+class Transformers(tf.keras.Model):
     def __init__(self, num_layers, num_heads, input_dim, feed_forward_hidden_size, training, prob = 'norm'):
         '''
         Constructor for Transformers.
@@ -308,7 +308,7 @@ class Transformers(tf.keras.layers.Layer):
         output_encoder = self.encoder(input_set)
         return self.decoder(output_encoder)
 
-class TPMP(tf.keras.layers.Layer):
+class TPMP(tf.keras.Model):
     '''
     TPMP: TransformerParallelMultilayerPerceptron - using the transformer encoding step and the perceptron for the decoder
     '''
@@ -456,7 +456,7 @@ class pointer(tf.keras.layers.Layer):
                     similarity_score[batch][index] = self.v(self.tanh(encoder_project[batch][index] + lstm_decoder_projection[batch]))[0][0] # change this
             return self.softmax(tf.convert_to_tensor(similarity_score))
 
-class PointerNetwork(tf.keras.layers.Layer):
+class PointerNetwork(tf.keras.Model):
     def __init__(self, input_dim, hidden_layer, input_layer = 'lstm', dot_prod_attention=False, prob = 'norm'):
         '''
         Params:

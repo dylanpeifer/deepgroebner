@@ -365,7 +365,7 @@ class LeadMonomialsAgent:
         The selection strategy used to pick pairs.
     """
 
-    def __init__(self, monomial_size, selection='degree', k=1):
+    def __init__(self, selection='degree', k=1):
         self.strategy = selection
         self.k = k
 
