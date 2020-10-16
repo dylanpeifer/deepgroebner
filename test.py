@@ -1,14 +1,16 @@
 import numpy as np
 import sympy as sp
 import tensorflow as tf
+from tensorflow import keras
 import csv
 import time
 
-from deepgroebner.buchberger import BuchbergerEnv, LeadMonomialsWrapper
+from deepgroebner.buchberger import BuchbergerEnv, LeadMonomialsWrapper, BuchbergerAgent
 from deepgroebner.ideals import RandomBinomialIdealGenerator
 from deepgroebner.networks import ParallelMultilayerPerceptron, PointerNetwork, pnetEncoder, Transformers, TPMP, ProcessBlock
 import deepgroebner.networks as n
 from deepgroebner.pg import PPOAgent
+from learner import SupervisedLearner, PolynomialDataset
 
 from pyinstrument import Profiler
 
@@ -200,23 +202,47 @@ def test_process_block():
 
     #print(blend_og)
 
+def run_buchberger_agent():
+    ideal_gen = RandomBinomialIdealGenerator(3, 20, 10, degrees='weighted') 
+    env = BuchbergerEnv(ideal_gen)
+    agent = BuchbergerAgent()
+    state = env.reset()
+    done = False
+    while not done:
+        action = agent.act(state)
+        next_state, reward, done, info = env.step(action)
+        state = next_state
+    print(next_state)
 
+def train(filename, n = 3, d = 20, s = 10):
+    optimizer = tf.keras.optimizers.Adam()
+    learner = TPMP(1, 4, 12, 128, True, [128])
+    
+    teacher = SupervisedLearner(n, d, s, learner, optimizer)
+    teacher.train(filename)
     
 def main():
     #---------------------------------------------------------------------
-    ideal_gen = RandomBinomialIdealGenerator(3, 20, 10, degrees='weighted') 
-    env = LeadMonomialsWrapper(BuchbergerEnv(ideal_gen), k=2)
+    #ideal_gen = RandomBinomialIdealGenerator(3, 20, 10, degrees='weighted') 
+    #env = LeadMonomialsWrapper(BuchbergerEnv(ideal_gen), k=2)
+
+    #run_buchberger_agent()
+
+    filename = '3-20-10-dataset.npz'
+    pd = PolynomialDataset(3, 20, 10, 'normal')
+    pd.generate_dataset(filename, num_episodes=1)
+    #train(filename)
 
     #test_process_block()
 
-    network = PointerNetwork(12, 128, input_layer='gru', dot_prod_attention=True)
+    #network = PointerNetwork(12, 128, input_layer='gru', dot_prod_attention=True)
     #network = ParallelMultilayerPerceptron(12, [128])
     #network = Transformers(1, 4, 12, 128, training=False)
     #print(network.non_trainable_variables)
     #network = TPMP(1, 3, 12, 128, False, [128])
-    agent = PPOAgent(network)
+    #agent = PPOAgent(network)
     #agent.run_episodes(env, episodes=1, greedy=True, parallel = False)
-    agent.train(env, episodes = 1, verbose = 1, parallel=False)
+    #agent.train(env, episodes = 1, verbose = 1, parallel=False)
     #------------------------------------------------------------------
 
 if __name__ == '__main__':

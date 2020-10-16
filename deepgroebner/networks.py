@@ -287,7 +287,7 @@ class TransformersDecoder(tf.keras.layers.Layer):
 #-----------------------------------------------------------------------------------------------
 
 class Transformers(tf.keras.layers.Layer):
-    def __init__(self, num_layers, num_heads, input_dim, feed_forward_hidden_size, training):
+    def __init__(self, num_layers, num_heads, input_dim, feed_forward_hidden_size, training, prob = 'norm'):
         '''
         Constructor for Transformers.
 
@@ -300,7 +300,7 @@ class Transformers(tf.keras.layers.Layer):
         '''
         super(Transformers, self).__init__()
         self.encoder = TransformersEncoder(num_layers, num_heads, input_dim, feed_forward_hidden_size, training)
-        self.decoder = pointer(input_dim, input_dim, layer_type='gru', dot_product_attention=True)
+        self.decoder = pointer(input_dim, input_dim, layer_type='gru', dot_product_attention=True, prob = prob)
     def predict(self, input_set):
         output_encoder = self.encoder(input_set)
         return self.decoder(output_encoder)
