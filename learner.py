@@ -37,20 +37,19 @@ class SupervisedLearner():
         dataset, keys = self.dataset.load(filename)
         history = {'loss':[]} # in case we want to add anything else
         for epoch in range(epochs):
-            losses = []
+            loss = 0
             batch = self.dataset.batch(dataset, keys, batch_size) # Get random sample of data
             with tf.GradientTape() as tape:
                 for _, datum in enumerate(batch):
                     datum_tensor = tf.expand_dims(tf.convert_to_tensor(datum[0]), axis = 0) #(1, num_poly, feature_size)
                     logprob = self.model(datum_tensor)
                     correct_action = tf.expand_dims(tf.one_hot(datum[1], datum[0].shape[0]), axis = 0)
-                    losses.append(self.loss_fn(correct_action, logprob))
-                loss = tf.reduce_mean(tf.concat(losses, axis=0))
+                    loss += self.loss_fn(correct_action, logprob)
                 grads = tape.gradient(loss, self.model.trainable_variables)
                 self.optimizer.apply_gradients(zip(grads, self.model.trainable_weights))
-                print('Epoch {}/{} - Loss was: {}').format(epoch, epochs, loss)
+                print('Epoch {}/{} - Loss was: {}'.format(epoch, epochs, loss))
                 history['loss'] = (epoch, loss)
-        self.model.save_weights(model_path)
+        self.model.save_weights(model_path, save_format='tf')
         return history
 
 class PolynomialDataset():

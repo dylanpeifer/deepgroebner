@@ -216,13 +216,26 @@ def run_buchberger_agent():
 
 def train(filename, strategy, model_path, learner, n = 3, d = 20, s = 10):
     pd = PolynomialDataset(n, d, s, strategy)
-    pd.generate_dataset(filename, num_episodes=500)
+    pd.generate_dataset(filename, num_episodes=10)
     optimizer = tf.keras.optimizers.Adam()
     teacher = SupervisedLearner(n, d, s, learner, optimizer)
-    teacher.train(filename, model_path)
+    teacher.train(filename, model_path, epochs = 1000)
+
+def train_test():
+    learner = TPMP(1,4,12,128,False,[128])
+    learner.load_weights('supervised_TPMP-1-4-12-128-128.index')
+    agent = PPOAgent(learner)
+
+    ideal_gen = RandomBinomialIdealGenerator(3, 20, 10, degrees='weighted') 
+    env = LeadMonomialsWrapper(BuchbergerEnv(ideal_gen), k=2)
+    run_episode(agent, env, 10)
+    print('Done')
+
     
 def main():
     #---------------------------------------------------------------------
+
+    #train_test()
 
     learner = TPMP(1, 4, 12, 128, True, [128])
     train('3-20-10-dataset.npz', strategy = 'normal', model_path = 'supervised_TPMP-1-4-12-128-128', learner = learner)
@@ -246,7 +259,7 @@ def main():
     #network = TPMP(1, 3, 12, 128, False, [128])
     #agent = PPOAgent(network)
     #agent.run_episodes(env, episodes=1, greedy=True, parallel = False)
-    #agent.train(env, episodes = 1, verbose = 1, parallel=False)
+    #agent.train(env, episodes = 100, epochs = 100,verbose = 2, parallel=False)
     #------------------------------------------------------------------
 
 if __name__ == '__main__':
