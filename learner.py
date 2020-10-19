@@ -1,6 +1,7 @@
 import numpy as np
 import deepgroebner.buchberger as dpb
 from deepgroebner.ideals import RandomBinomialIdealGenerator
+from deepgroebner.pg import PPOAgent
 
 import tensorflow as tf
 from tensorflow import keras
@@ -44,13 +45,16 @@ class SupervisedLearner():
                     datum_tensor = tf.expand_dims(tf.convert_to_tensor(datum[0]), axis = 0) #(1, num_poly, feature_size)
                     logprob = self.model(datum_tensor)
                     correct_action = tf.expand_dims(tf.one_hot(datum[1], datum[0].shape[0]), axis = 0)
-                    loss += self.loss_fn(correct_action, logprob)
+                    loss += self.loss_fn(correct_action, -logprob)
                 grads = tape.gradient(loss, self.model.trainable_variables)
                 self.optimizer.apply_gradients(zip(grads, self.model.trainable_weights))
                 print('Epoch {}/{} - Loss was: {}'.format(epoch, epochs, loss))
                 history['loss'] = (epoch, loss)
         self.model.save_weights(model_path, save_format='tf')
         return history
+
+    def model_summary(self):
+        self.model.summary()
 
 class PolynomialDataset():
     '''
@@ -135,3 +139,60 @@ class PolynomialDataset():
         Randomly sample from the dataset
         '''
         return [data[key] for key in np.random.choice(keys, batch_size)]
+
+#NOTE: everything below still needs to be tested!!
+
+class Evaluator:
+    '''
+    Evaluate learners.
+
+    Parameters
+    ----------
+    learners: {'ModelName': [learner, model_path]}
+    '''
+    def __init__(self, learners:dict, lead_agent, env):
+        self.pretrained_model = {}
+        self.performance_tracker = {}
+        for key in learners.keys():
+            pmodel = learners[key][0]
+            model_path = learners[key][1]
+            pmodel.load_weights(model_path)
+            self.pretrained_model[key] = PPOAgent(pmodel)
+            self.performance_tracker[key] = [0]
+        self.lead_agent = lead_agent
+        self.env = env
+
+    def eval(self, num_episodes=1):
+        for i in range(num_episodes):
+            state = self.env.reset()
+            done = False
+            total_step = 0
+            while not done:
+                lead_action = self.lead_agent.act(state)
+                for key in self.pretrained_model.keys():
+                    action = self.pretrained_model[key].act(state, greedy = True)
+                    if action == lead_action:
+                        self.performance_tracker[key][i] = self.performance_tracker[key][i] + 1
+                next_state,_,done,_ = self.env.step(lead_action)
+                state = next_state
+                total_step += 1
+            for key in self.performance_tracker.keys():
+                temp = self.performance_tracker[key]
+                temp[i] = temp[i]/total_step
+                if i != num_episodes-1:
+                    temp.append(0)
+                self.performance_tracker[key] = temp
+        return self.performance_tracker
+
+class Teacher:
+    def __init__(self, dataset_path, strategy, model, model_save_path, optimizer, n, d, s, epochs, batch_size):
+        pd = PolynomialDataset(n,d,s,strategy)
+        pd.generate_dataset(dataset_path, num_episodes=1000)
+        self.learner = SupervisedLearner(n,d,s,model,optimizer, selection_strategy=strategy)
+        self.model_path = model_save_path
+        self.dataset_path = dataset_path
+        self.epochs = epochs
+        self.batch_size = batch_size
+
+    def teach(self):
+        self.learner.train(self.dataset_path, self.model_path, self.epochs, self.batch_size)
