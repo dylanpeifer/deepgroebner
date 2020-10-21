@@ -287,7 +287,7 @@ class TransformersDecoder(tf.keras.layers.Layer):
 #-----------------------------------------------------------------------------------------------
 
 class Transformers(tf.keras.Model):
-    def __init__(self, num_layers, num_heads, input_dim, feed_forward_hidden_size, training, prob = 'norm'):
+    def __init__(self, num_layers, num_heads, input_dim, internal_ff_size, external_ff_size:list, training, prob = 'norm'):
         '''
         Constructor for Transformers.
 
@@ -295,16 +295,31 @@ class Transformers(tf.keras.Model):
             num_layers: number of encoder and decoder blocks
             num_heads: number of multi-attention heads. NOTE: It must divide input_dim
             input_dim: size of input
-            feed_forward_hidden_size: Size of the feed forward network
+            internal_ff_size: Size of the feed forward network
             training: To indicate that we want dropout
         '''
         super(Transformers, self).__init__()
-        self.encoder = TransformersEncoder(num_layers, num_heads, input_dim, feed_forward_hidden_size, training)
-        self.decoder = pointer(input_dim, input_dim, layer_type='gru', dot_product_attention=True, prob = prob)
+        self.embedding_layers = []
+        for layer_size in external_ff_size:
+            self.embedding_layers.append(tf.keras.layers.Dense(layer_size)) # embedding networks
+        if external_ff_size:
+            self.input_dim = external_ff_size[-1]
+        else:
+            self.input_dim = input_dim
+        self.encoder = TransformersEncoder(num_layers, num_heads, self.input_dim, internal_ff_size, training)
+        self.decoder = pointer(self.input_dim, self.input_dim, layer_type='gru', dot_product_attention=True, prob = prob)
     def predict(self, input_set):
+        #Embeddings process
+        for layer in self.embedding_layers:
+            input_set = layer(input_set)
+
+        # output
         output_encoder = self.encoder(input_set)
         return self.decoder(output_encoder)
+
     def __call__(self, input_set):
+        for layer in self.embedding_layers:
+            input_set = layer(input_set)
         output_encoder = self.encoder(input_set)
         return self.decoder(output_encoder)
 
@@ -312,25 +327,35 @@ class TPMP(tf.keras.Model):
     '''
     TPMP: TransformerParallelMultilayerPerceptron - using the transformer encoding step and the perceptron for the decoder
     '''
-    def __init__(self, num_layers, num_heads, input_dim, feed_forward_hidden_size, training, perceptron_hidden_layer: list):
+    def __init__(self, num_layers, num_heads, input_dim, internal_ff_size, external_ff_size:list,training, perceptron_hidden_layer: list):
         '''
         Constructor for TPMP
 
         Params:
             num_layers: number of encoder and decoder blocks
-            num_heads: number of multi-attention heads. NOTE: It must divide input_dim
+            num_heads: number of multi-attention heads. NOTE: It must divide input_dim or the last element of external_ff_size
             input_dim: size of input
-            feed_forward_hidden_size: Size of the feed forward network
+            internal_ff_size: Size of the feed forward network
             training: To indicate that we want dropout
             perceptron_hidden_layer: dimension of the hidden layer for ParallelMultilayerPerceptron
         '''
         super(TPMP, self).__init__()
-        self.encoder = TransformersEncoder(num_layers, num_heads, input_dim, feed_forward_hidden_size, training)
-        self.decoder = ParallelMultilayerPerceptron(input_dim, perceptron_hidden_layer)
+        self.embedding_layers = []
+        for layer_size in external_ff_size:
+            self.embedding_layers.append(tf.keras.layers.Dense(layer_size)) # embedding networks
+        if external_ff_size:
+            self.input_dim = external_ff_size[-1]
+        else:
+            self.input_dim = input_dim
+        self.encoder = TransformersEncoder(num_layers, num_heads, self.input_dim, internal_ff_size, training)
+        self.decoder = ParallelMultilayerPerceptron(self.input_dim, perceptron_hidden_layer)
     def predict(self, input_set):
         '''
         Output probability over the input_set
         '''
+        #Embeddings process
+        for layer in self.embedding_layers:
+            input_set = layer(input_set)
         output_encoder = self.encoder(input_set)
         prob = self.decoder(output_encoder)
         return prob
@@ -338,6 +363,9 @@ class TPMP(tf.keras.Model):
         '''
         Output probability over the input_set
         '''
+        #Embeddings process
+        for layer in self.embedding_layers:
+            input_set = layer(input_set)
         output_encoder = self.encoder(input_set)
         prob = self.decoder(output_encoder)
         return prob
