@@ -5,11 +5,13 @@ dependencies:
   - matplotlib
   - numpy
   - pandas
+  - scikit-learn
   - scipy
   - seaborn
   - sympy
+  - tensorflow-gpu
   - pytest
   - pip
   - pip:
-    - tensorflow
     - gym[box2d]
+    - pyinstrument
