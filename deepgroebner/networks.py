@@ -333,7 +333,7 @@ class TPMP(tf.keras.Model):
 
         Params:
             num_layers: number of encoder and decoder blocks
-            num_heads: number of multi-attention heads. NOTE: It must divide input_dim or the last element of external_ff_size
+            num_heads: number of multi-attention heads. NOTE: It must divide input_dim or the last element of external_ff_size 
             input_dim: size of input
             internal_ff_size: Size of the feed forward network
             training: To indicate that we want dropout
@@ -592,7 +592,19 @@ class ProcessBlock(tf.keras.layers.Layer):
         # Start processing
         for _ in range(self.num_step):
             initial_state, cell_state = self.read_out(embeddings, initial_state, cell_state, input_seq.shape[0])
-        return initial_state
+        return initial_state, embeddings
+
+class PBPointerNet(tf.keras.Model):
+    def __init__(self, input_dim, hidden_layer, layer_type = 'lstm', dot_product_attention = False, prob = 'norm'):
+        super(PBPointerNet, self).__init__()
+        self.pointer = pointer(input_dim, hidden_layer, layer_type, dot_product_attention, prob)
+        self.processBlock = ProcessBlock(hidden_layer, 6)
+
+    def __call__(self, input):
+        output, embeddings = self.processBlock(input)
+        output = tf.squeeze(output, axis = 1)
+        prob = self.pointer(embeddings, output)
+        return prob
 
 # TODO: Implement some type of probability function or pointer 
 #-------------------------------------------------------## End of processing block
