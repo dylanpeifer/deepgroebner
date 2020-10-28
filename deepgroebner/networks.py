@@ -67,13 +67,16 @@ class ParallelMultilayerPerceptron:
         self.trainable_variables = self.network.trainable_variables
 
     def predict(self, X, **kwargs):
+        embedding = None
         for i, (m, b) in enumerate(self.weights):
             X = np.dot(X, m) + b
+            if i == 0:
+                embedding = tf.squeeze(X, axis = 0)
             if i == len(self.weights)-1:
-                X = sc.log_softmax(X, axis=1).squeeze(axis=-1)
+                X = tf.squeeze(tf.nn.log_softmax(X, axis=1), axis=-1)
             else:
                 X = np.maximum(X, 0, X)
-        return X
+        return X, embedding
 
     def __call__(self, inputs):
         return self.network(inputs)[0]
@@ -300,10 +303,10 @@ class Transformers(tf.keras.Model):
         '''
         super(Transformers, self).__init__()
         self.embedding_layers = []
-        for layer_size in external_ff_size:
-            self.embedding_layers.append(tf.keras.layers.Dense(layer_size)) # embedding networks
+        for layer in external_ff_size:
+            self.embedding_layers.append(tf.keras.layers.Dense(layer[0], activation=layer[1])) # embedding networks
         if external_ff_size:
-            self.input_dim = external_ff_size[-1]
+            self.input_dim = external_ff_size[-1][0]
         else:
             self.input_dim = input_dim
         self.encoder = TransformersEncoder(num_layers, num_heads, self.input_dim, internal_ff_size, training)
