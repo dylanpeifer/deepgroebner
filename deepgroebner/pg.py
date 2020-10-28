@@ -461,7 +461,7 @@ class Agent:
                 else:  # with a PGAgent/PPOAgent
                     value = self.value_model.predict(env)
             else:
-                value = self.value_model.predict(state[np.newaxis])[0][0]
+                value = self.value_model(state[np.newaxis])[0][0]
             next_state, reward, done, _ = env.step(action)
             if buffer is not None:
                 buffer.store(state, logp, value, action, reward)

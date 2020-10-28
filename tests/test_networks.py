@@ -7,10 +7,13 @@ from deepgroebner.networks import *
 
 
 def test_MultilayerPerceptron_0():
-    policy = MultilayerPerceptron(4, [128], 2, final_activation='linear')
-    np.random.seed(123)
-    X = np.random.randn(10, 4)
-    assert np.allclose(policy.predict(X), policy.network.predict(X))
+    mlp = MultilayerPerceptron(2, [128], final_activation='log_softmax')
+    states = tf.random.uniform((64, 4))
+    logprobs = mlp(states)
+    assert logprobs.shape == [64, 2]
+    assert np.allclose(np.sum(np.exp(logprobs), axis=-1), 1)
+    actions = tf.random.categorical(logprobs, 1)
+    assert actions.shape == [64, 1]
 
 
 def test_ParallelMultilayerPerceptron():

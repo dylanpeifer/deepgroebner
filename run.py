@@ -242,7 +242,7 @@ def make_policy_network(args):
     if args.environment in ['RandomBinomialIdeal', 'MixedRandomBinomialIdeal', 'RandomPolynomialIdeal']:
         policy_network = ParallelMultilayerPerceptron(dims[0], args.policy_hl)
     else:
-        policy_network = MultilayerPerceptron(dims[0], args.policy_hl, dims[1])
+        policy_network = MultilayerPerceptron(dims[1], args.policy_hl)
 
     if args.policy_weights != "":
         policy_network.load_weights(args.policy_weights)
@@ -263,7 +263,7 @@ def make_value_network(args):
         if args.value_model == 'none':
             value_network = None
         else:
-            value_network = MultilayerPerceptron(dims[0], args.value_hl, 1, final_activation='linear')
+            value_network = MultilayerPerceptron(1, args.value_hl, final_activation='linear')
     else:
         if args.value_model == 'none':
             value_network = None

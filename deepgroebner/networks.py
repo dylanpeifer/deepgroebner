@@ -11,51 +11,45 @@ import scipy.special as sc
 import tensorflow as tf
 
 
-class MultilayerPerceptron:
-    """A multilayer perceptron network with fast predict calls."""
+class MultilayerPerceptron(tf.keras.Model):
+    """A basic multilayer perceptron network.
 
-    def __init__(self, input_dim, hidden_layers, output_dim, final_activation=tf.nn.log_softmax):
-        self.network = self._build_network(input_dim, hidden_layers, output_dim, final_activation)
-        self.weights = self.get_weights()
-        self.trainable_variables = self.network.trainable_variables
-        self.final_activation = final_activation
+    Parameters
+    ----------
+    output_dim : int
+        The output positive integer dimension of the network.
+    hidden_layers : list
+        The list of positive integer hidden layer dimensions.
+    activation : {'relu', 'selu', 'elu', 'tanh', 'sigmoid'}, optional
+        The activation used for the hidden layers.
+    final_activation : {'log_softmax', 'softmax', 'linear', 'exponential'}
+        The activation used for the final output layer.
 
-    def predict(self, X, **kwargs):
-        for i, (m, b) in enumerate(self.weights):
-            X = np.dot(X, m) + b
-            if i == len(self.weights)-1:
-                if self.final_activation != 'linear':
-                    X = sc.log_softmax(X, axis=1)
-            else:
-                X = np.maximum(X, 0, X)
+    Examples
+    --------
+    >>> import tensorflow as tf
+    >>> mlp = MultilayerPerceptron(2, [128])
+    >>> states = tf.random.uniform((64, 4))
+    >>> logprobs = mlp(states)
+    >>> logprobs.shape
+    TensorShape([64, 2])
+    >>> actions = tf.random.categorical(logprobs, 1)
+    >>> actions.shape
+    TensorShape([64, 1])
+
+    """
+
+    def __init__(self, output_dim, hidden_layers, activation='relu', final_activation='log_softmax'):
+        super(MultilayerPerceptron, self).__init__()
+        final_activation = tf.nn.log_softmax if final_activation == 'log_softmax' else final_activation
+        self.hidden_layers = [tf.keras.layers.Dense(u, activation=activation) for u in hidden_layers]
+        self.final_layer = tf.keras.layers.Dense(output_dim, activation=final_activation)
+
+    def call(self, X):
+        for layer in self.hidden_layers:
+            X = layer(X)
+        X = self.final_layer(X)
         return X
-
-    def __call__(self, inputs):
-        return self.network(inputs)
-
-    def save_weights(self, filename):
-        self.network.save_weights(filename)
-
-    def load_weights(self, filename):
-        self.network.load_weights(filename)
-        self.weights = self.get_weights()
-
-    def get_weights(self):
-        network_weights = self.network.get_weights()
-        self.weights = []
-        for i in range(len(network_weights)//2):
-            m = network_weights[2*i]
-            b = network_weights[2*i + 1]
-            self.weights.append((m, b))
-        return self.weights
-
-    def _build_network(self, input_dim, hidden_layers, output_dim, final_activation):
-        model = tf.keras.models.Sequential()
-        model.add(tf.keras.layers.InputLayer(input_shape=(input_dim,)))
-        for hidden in hidden_layers:
-            model.add(tf.keras.layers.Dense(hidden, activation='relu'))
-        model.add(tf.keras.layers.Dense(output_dim, activation=final_activation))
-        return model
 
 
 class ParallelMultilayerPerceptron:
