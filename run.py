@@ -114,7 +114,7 @@ def make_parser():
 
     # value model
     parser.add_argument('--value_model',
-                        choices=['none', 'mlp', 'pairsleft', 'agent', 'rnn', 'degree'],
+                        choices=['none', 'mlp', 'pairsleft', 'agent', 'degree'],
                         default='none',
                         help='the value network type')
     parser.add_argument('--value_hl',
@@ -275,11 +275,6 @@ def make_value_network(args):
             agent = PPOAgent(ParallelMultilayerPerceptron(dims[0], args.policy_hl))
             agent.load_policy_weights(args.value_weights)
             value_network = AgentBaseline(agent, gam=args.gam)
-        elif args.value_model == 'rnn' and args.value_weights != "":
-            value_network = ValueRNN(dims[0], args.value_hl[0])
-            value_network.load_weights(args.value_weights)
-        elif args.value_model == 'rnn':
-            value_network = ValueRNN(dims[0], args.value_hl[0])
 
     return value_network
 
