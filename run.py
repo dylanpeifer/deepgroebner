@@ -175,6 +175,10 @@ def make_parser():
                         type=lambda x: str(x).lower() == 'true',
                         default=True,
                         help='whether to parallelize rollouts')
+    parser.add_argument('--use_gpu',
+                        type=lambda x: str(x).lower() == 'true',
+                        default=True,
+                        help='whether to use a GPU if available')
 
     return parser
 
@@ -334,6 +338,8 @@ def save_args(logdir, args):
 
 if __name__ == '__main__':
     args = make_parser().parse_args()
+    if not args.use_gpu:
+        os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
     env = make_env(args)
     test_env = make_test_env(args)
     agent = make_agent(args)
