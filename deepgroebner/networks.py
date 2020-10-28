@@ -1,13 +1,6 @@
-"""Neural networks for agents.
-
-The two network classes are designed to be fast wrappers around tf.keras models.
-In particular, they store their weights in NumPy arrays and do predict calls in
-pure NumPy, which in testing is at least on order of magnitude faster than
-TensorFlow when called repeatedly.
-"""
+"""Neural networks for agents."""
 
 import numpy as np
-import scipy.special as sc
 import tensorflow as tf
 
 
@@ -27,7 +20,6 @@ class MultilayerPerceptron(tf.keras.Model):
 
     Examples
     --------
-    >>> import tensorflow as tf
     >>> mlp = MultilayerPerceptron(2, [128])
     >>> states = tf.random.uniform((64, 4))
     >>> logprobs = mlp(states)
@@ -52,54 +44,122 @@ class MultilayerPerceptron(tf.keras.Model):
         return X
 
 
-class ParallelMultilayerPerceptron:
-    """A parallel multilayer perceptron network with fast predict calls."""
+class EmbeddingLayer(tf.keras.layers.Layer):
+    """A layer for computing a nonlinear embedding of non-negative integer feature vectors.
+    
+    This layer expects an input with shape (batch_dim, padded_dim, feature_dim), where
+    entries are non-negative integers and padding is by -1. It returns a tensor with shape
+    (batch_dim, padded_dim, embed_dim) and a mask of shape (batch_dim, padded_dim) that
+    indicates which rows were padded.
 
-    def __init__(self, input_dim, hidden_layers):
-        self.network = self._build_network(input_dim, hidden_layers)
-        self.weights = self.get_weights()
-        self.trainable_variables = self.network.trainable_variables
+    Parameters
+    ----------
+    embed_dim : int
+        The positive integer output dimension of the embedding.
+    hidden_layers : list
+        The list of positive integer hidden layer dimensions.
+    activation : {'relu', 'selu', 'elu', 'tanh', 'sigmoid'}, optional
+        The activation used for the hidden layers.
+    final_activation : {'linear', 'exponential'}
+        The activation used for the final output embedding layer.
 
-    def predict(self, X, **kwargs):
-        for i, (m, b) in enumerate(self.weights):
-            X = np.dot(X, m) + b
-            if i == len(self.weights)-1:
-                X = sc.log_softmax(X, axis=1).squeeze(axis=-1)
-            else:
-                X = np.maximum(X, 0, X)
+    """
+
+    def __init__(self, embed_dim, hidden_layers, activation='relu', final_activation='linear'):
+        super(EmbeddingLayer, self).__init__()
+        self.hidden_layers = [tf.keras.layers.Dense(u, activation=activation) for u in hidden_layers]
+        self.final_layer = tf.keras.layers.Dense(embed_dim, activation=final_activation)
+
+    def call(self, X):
+        mask = tf.cast(tf.math.equal(X[:, :, -1], -1), tf.float32)
+        X = tf.cast(X, tf.float32)
+        for layer in self.hidden_layers:
+            X = layer(X)
+        X = self.final_layer(X)
+        return X, mask
+
+
+class DecidingLayer(tf.keras.layers.Layer):
+    """A layer for computing softmaxed probability distributions over arbitrary numbers of rows.
+
+    This layer expects input with shape (batch_dim, padded_dim, feature_dim) and a mask of
+    shape (batch_dim, padded_dim) that indicates which rows were padded. It returns a tensor
+    of shape (batch_dim, padded_dim) where each batch is a softmaxed distribution over the rows
+    with zero probability on any padded row.
+
+    Parameters
+    ----------
+    hidden_layers : list
+        The list of positive integer hidden layer dimensions.
+    activation : {'relu', 'selu', 'elu', 'tanh', 'sigmoid'}, optional
+        The activation for the hidden layers.
+    final_activation : {'log_softmax', 'softmax'}, optional
+        The activation for the final output embedding layer.
+
+    """
+
+    def __init__(self, hidden_layers, activation='relu', final_activation='log_softmax'):
+        super(DecidingLayer, self).__init__()
+        self.hidden_layers = [tf.keras.layers.Dense(u, activation=activation) for u in hidden_layers]
+        self.final_layer = tf.keras.layers.Dense(1, activation='linear')
+        self.final_activation = tf.nn.log_softmax if final_activation == 'log_softmax' else tf.nn.softmax
+
+    def call(self, X, mask):
+        for layer in self.hidden_layers:
+            X = layer(X)
+        X = self.final_activation(tf.squeeze(self.final_layer(X), axis=-1) + mask * -1e9)
         return X
 
-    def __call__(self, inputs):
-        return self.network(inputs)[0]
 
-    def get_logits(self, inputs):
-        return self.network(inputs)[1]
+class ParallelMultilayerPerceptron(tf.keras.Model):
+    """A parallel multilayer perceptron network.
 
-    def save_weights(self, filename):
-        self.network.save_weights(filename)
+    This model expects an input with shape (batch_dim, padded_dim, feature_dim), where
+    entries are non-negative integers and padding is by -1. It returns a tensor
+    of shape (batch_dim, padded_dim) where each batch is a softmaxed distribution over the rows
+    with zero probability on any padded row.
 
-    def load_weights(self, filename):
-        self.network.load_weights(filename)
-        self.weights = self.get_weights()
+    Parameters
+    ----------
+    hidden_layers : list
+        The list of positive integer hidden layer dimensions.
+    activation : {'relu', 'tanh'}, optional
+        The activation for the hidden layers.
+    final_activation : {'log_softmax', 'softmax'}, optional
+        The activation for the final output layer.
 
-    def get_weights(self):
-        network_weights = self.network.get_weights()
-        self.weights = []
-        for i in range(len(network_weights)//2):
-            m = network_weights[2*i].squeeze(axis=0)
-            b = network_weights[2*i + 1]
-            self.weights.append((m, b))
-        return self.weights
+    Examples
+    --------
+    >>> pmlp = ParallelMultilayerPerceptron([128])
+    >>> states = tf.constant([
+            [[ 0,  1],
+             [ 3,  0],
+             [-1, -1]],
+            [[ 8,  5],
+             [ 3,  3],
+             [ 3,  5]],
+            [[ 6,  7],
+             [ 6,  8],
+             [-1, -1]],
+        ])
+    >>> logprobs = pmlp(states)
+    >>> logprobs.shape
+    TensorShape([3, 3])
+    >>> actions = tf.random.categorical(logprobs, 1)
+    >>> actions.shape
+    TensorShape([3, 1])
 
-    def _build_network(self, input_dim, hidden_layers):
-        inputs = tf.keras.Input(shape=(None, input_dim))
-        x = inputs
-        for hidden in hidden_layers:
-            x = tf.keras.layers.Conv1D(hidden, 1, activation='relu')(x)
-        x = tf.keras.layers.Conv1D(1, 1, activation='linear')(x)
-        outputs = tf.nn.log_softmax(x, axis=1)
-        logprobs = tf.keras.layers.Flatten()(outputs)
-        return tf.keras.Model(inputs=inputs, outputs=[logprobs, outputs])
+    """
+
+    def __init__(self, hidden_layers, activation='relu', final_activation='log_softmax'):
+        super(ParallelMultilayerPerceptron, self).__init__()
+        self.embedding = EmbeddingLayer(hidden_layers[-1], hidden_layers[:-1], activation=activation)
+        self.decider = DecidingLayer([], final_activation=final_activation)
+
+    def call(self, X):
+        X, mask = self.embedding(X)
+        X = self.decider(X, mask)
+        return X
 
 
 class PairsLeftBaseline:

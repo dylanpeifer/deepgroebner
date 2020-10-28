@@ -7,6 +7,7 @@ from deepgroebner.networks import *
 
 
 def test_MultilayerPerceptron_0():
+    tf.random.set_seed(123)
     mlp = MultilayerPerceptron(2, [128], final_activation='log_softmax')
     states = tf.random.uniform((64, 4))
     logprobs = mlp(states)
@@ -17,10 +18,25 @@ def test_MultilayerPerceptron_0():
 
 
 def test_ParallelMultilayerPerceptron():
-    policy = ParallelMultilayerPerceptron(6, [24])
-    np.random.seed(123)
-    X = np.random.randn(10, 15, 6)
-    assert np.allclose(policy.predict(X), policy.network.predict(X)[0])
+    tf.random.set_seed(123)
+    pmlp = ParallelMultilayerPerceptron([128])
+    states = tf.constant([
+        [[ 0,  1],
+         [ 3,  0],
+         [-1, -1]],
+        [[ 8,  5],
+         [ 3,  3],
+         [ 3,  5]],
+        [[ 6,  7],
+         [ 6,  8],
+         [-1, -1]],
+    ])
+    logprobs = pmlp(states)
+    assert logprobs.shape == [3, 3]
+    assert np.allclose(np.sum(np.exp(logprobs), axis=-1), 1)
+    assert np.isclose(np.exp(logprobs)[0, 2], 0) and np.isclose(np.exp(logprobs)[2, 2], 0)
+    actions = tf.random.categorical(logprobs, 1)
+    assert actions.shape == [3, 1]
 
 
 @pytest.mark.parametrize("gam, states, values", [

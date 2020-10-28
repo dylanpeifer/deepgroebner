@@ -244,7 +244,7 @@ def make_policy_network(args):
             'RandomPolynomialIdeal': (2 * args.variables * args.k, 1)}[args.environment]
 
     if args.environment in ['RandomBinomialIdeal', 'MixedRandomBinomialIdeal', 'RandomPolynomialIdeal']:
-        policy_network = ParallelMultilayerPerceptron(dims[0], args.policy_hl)
+        policy_network = ParallelMultilayerPerceptron(args.policy_hl)
     else:
         policy_network = MultilayerPerceptron(dims[1], args.policy_hl)
 
@@ -276,7 +276,7 @@ def make_value_network(args):
         elif args.value_model == 'degree':
             value_network = AgentBaseline(BuchbergerAgent('degree'), gam=args.gam)
         elif args.value_model == 'agent':
-            agent = PPOAgent(ParallelMultilayerPerceptron(dims[0], args.policy_hl))
+            agent = PPOAgent(ParallelMultilayerPerceptron(args.policy_hl))
             agent.load_policy_weights(args.value_weights)
             value_network = AgentBaseline(agent, gam=args.gam)
 
