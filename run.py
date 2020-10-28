@@ -12,7 +12,7 @@ import sympy as sp
 from deepgroebner.buchberger import BuchbergerEnv, LeadMonomialsWrapper, BuchbergerAgent
 from deepgroebner.ideals import RandomBinomialIdealGenerator, FromDirectoryIdealGenerator, MixedRandomBinomialIdealGenerator, RandomIdealGenerator
 from deepgroebner.pg import PGAgent, PPOAgent
-from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, PairsLeftBaseline, AgentBaseline, ValueRNN
+from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, PairsLeftBaseline, AgentBaseline
 
 def make_parser():
     """Return the command line argument parser for this script."""
