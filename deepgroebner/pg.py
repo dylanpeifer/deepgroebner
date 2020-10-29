@@ -14,19 +14,19 @@ PACKET_SIZE = 10 # this must divide the number of episodes, and ideally should d
 
 
 def discount_rewards(rewards, gam):
-    """Discount the list or array of rewards by gamma in-place.
+    """Return discounted rewards-to-go computed from inputs.
 
     Parameters
     ----------
-    rewards : list or ndarray of ints or floats
-        A list of rewards from a single complete trajectory.
+    rewards : array_like
+        List or 1D array of rewards from a single complete trajectory.
     gam : float
-        The discount rate.
+        Discount rate.
 
     Returns
     -------
-    rewards : list or ndarray
-        The input array with each reward replaced by discounted reward-to-go.
+    rewards : array_like
+        Input list or array with each reward replaced by discounted reward-to-go.
 
     Examples
     --------
@@ -34,26 +34,52 @@ def discount_rewards(rewards, gam):
     >>> discount_rewards(rewards, 0.5)
     [1, 2, 6.25, 6.5, 5]
 
-    Note that the input rewards list is modified in place. The return
-    value is just a reference to the original list.
-
-    >>> rewards = [1, 2, 3, 4, 5]
-    >>> discounted_rewards = discount_rewards(rewards, 0.5)
-    >>> rewards
-    [1, 2, 6.25, 6.5, 5]
-
     """
     cumulative_reward = 0
+    discounted_rewards = np.zeros_like(rewards, dtype=np.float)
     for i in reversed(range(len(rewards))):
         cumulative_reward = rewards[i] + gam * cumulative_reward
-        rewards[i] = cumulative_reward
-    return rewards
+        discounted_rewards[i] = cumulative_reward
+    return discounted_rewards
 
 
-def np_one_hot(length, index):
-    a = np.zeros(length)
-    a[index] = 1
-    return a.astype('int')
+def compute_advantages(rewards, values, gam, lam):
+    """Return generalized advantage estimates computed from inputs.
+
+    Parameters
+    ----------
+    rewards : array_like
+        List or 1D array of rewards from a single complete trajectory.
+    values : array_like
+        List or 1D array of value predictions from a single complete trajectory.
+    gam : float
+        Discount rate.
+    lam : float
+        Parameter for generalized advantage estimation.
+
+    Returns
+    -------
+    advantages : ndarray
+        1D array of computed advantage scores.
+
+    References
+    ----------
+    .. [1] Schulman et al, "High-Dimensional Continuous Control Using
+       Generalized Advantage Estimation," ICLR 2016.
+
+    Examples
+    --------
+    >>> rewards = [1, 1, 1, 1, 1]
+    >>> values = [0, 0, 0, 0, 0]
+    >>> compute_advantages(rewards, values, 0.5, 0.5)
+    array([1.33203125, 1.328125  , 1.3125    , 1.25      , 1.        ])
+
+    """
+    rewards = np.array(rewards, dtype=np.float)
+    values = np.array(values, dtype=np.float)
+    delta = rewards - values
+    delta[:-1] += gam * values[1:]
+    return discount_rewards(delta, gam * lam)
 
 
 class TrajectoryBuffer:
@@ -75,6 +101,7 @@ class TrajectoryBuffer:
     See Also
     --------
     discount_rewards : Discount the list or array of rewards by gamma in-place.
+    compute_advantages : Return generalized advantage estimates computed from inputs.
 
     Notes
     -----
@@ -84,11 +111,6 @@ class TrajectoryBuffer:
     difference is that we allow for different sized states and action
     dimensions, and only assume that each state shape corresponds to some fixed
     action dimension.
-
-    References
-    ----------
-    .. [1] Schulman et al, "High-Dimensional Continuous Control Using
-       Generalized Advantage Estimation," ICLR 2016.
 
     Examples
     --------
@@ -149,12 +171,10 @@ class TrajectoryBuffer:
         stored in place of `rewards` for the current trajectory.
         """
         tau = slice(self.start, self.end)
-        rewards = np.array(self.rewards[tau], dtype=np.float)
-        values = np.array(self.values[tau], dtype=np.float)
-        delta = rewards - values
-        delta[:-1] += self.gam * values[1:]
-        self.rewards[tau] = list(discount_rewards(rewards, self.gam))
-        self.values[tau] = list(discount_rewards(delta, self.gam * self.lam))
+        rewards = discount_rewards(self.rewards[tau], self.gam)
+        values = compute_advantages(self.rewards[tau], self.values[tau], self.gam, self.lam)
+        self.rewards[tau] = rewards
+        self.values[tau] = values
         self.start = self.end
 
     def clear(self):
@@ -452,6 +472,7 @@ class Agent:
         episode_length = 0
         total_reward = 0
         while not done:
+            state = state.astype(np.float32)
             action, logp = self.act(state, return_logp=True)
             if self.value_model is None:
                 value = 0
