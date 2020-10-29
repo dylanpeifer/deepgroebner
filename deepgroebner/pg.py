@@ -25,8 +25,8 @@ def discount_rewards(rewards, gam):
 
     Returns
     -------
-    rewards : array_like
-        Input list or array with each reward replaced by discounted reward-to-go.
+    rewards : ndarray
+        1D array of discounted rewards-to-go.
 
     Examples
     --------
@@ -88,42 +88,20 @@ class TrajectoryBuffer:
     The buffer is used to store information from each step of interaction
     between the agent and environment. When a trajectory is finished it
     computes the discounted rewards and generalized advantage estimates. After
-    some number of trajectories are finished it can return batches grouped by
-    state shape with normalized advantage estimates.
+    some number of trajectories are finished it can return a tf.Dataset of the
+    training data for policy gradient algorithms.
 
     Parameters
     ----------
     gam : float, optional
-        The discount rate.
+        Discount rate.
     lam : float, optional
-        The parameter for generalized advantage estimation.
+        Parameter for generalized advantage estimation.
 
     See Also
     --------
     discount_rewards : Discount the list or array of rewards by gamma in-place.
     compute_advantages : Return generalized advantage estimates computed from inputs.
-
-    Notes
-    -----
-    The implementation is based on the implementation of buffers used in the
-    policy gradient algorithms from OpenAI Spinning Up. Formulas for
-    generalized advantage estimation are from [1]_. The major implementation
-    difference is that we allow for different sized states and action
-    dimensions, and only assume that each state shape corresponds to some fixed
-    action dimension.
-
-    Examples
-    --------
-    >>> buffer = TrajectoryBuffer()
-    >>> tau = [(np.array([3]), 0.4, 3, 1, 1),
-    ...        (np.array([1, 3, 7]), 0.1, 2, 0, 0),
-    ...        (np.array([1, 4, 2]), 0.7, 1, 2, 2),
-    ...        (np.array([2, 5]), 0.6, 2, 1, 1),
-    ...        (np.array([1, 7]), 0.3, 0, 0, 1)]
-    >>> for t in tau:
-    ...     buffer.store(*t)
-    >>> buffer.finish()
-    >>> buffer.get()
 
     """
 
@@ -131,41 +109,39 @@ class TrajectoryBuffer:
         self.gam = gam
         self.lam = lam
         self.states = []
-        self.logps = []
-        self.values = []
-        self.pred_values = []
         self.actions = []
         self.rewards = []
-        self.start = 0
-        self.end = 0
+        self.logprobs = []
+        self.values = []
+        self.start = 0  # index to start of current episode
+        self.end = 0  # index to one past end of current episode
 
-    def store(self, state, logp, value, action, reward):
+    def store(self, state, action, reward, logprob, value):
         """Store the information from one interaction with the environment.
 
         Parameters
         ----------
         state : ndarray
-           The observation of the state.
-        logp : float
-           The agent's logged probability of picking the chosen action.
-        value : float
-           The agent's computed value of the state.
+           Observation of the state.
         action : int
-           The chosen action in this trajectory.
+           Chosen action in this trajectory.
         reward : float
-           The reward received in the next transition.
+           Reward received in the next transition.
+        logprob : float
+           Agent's logged probability of picking the chosen action.
+        value : float
+           Agent's computed value of the state.
 
         """
         self.states.append(state)
-        self.logps.append(logp)
-        self.values.append(value)
-        self.pred_values.append(value)
         self.actions.append(action)
         self.rewards.append(reward)
+        self.logprobs.append(logprob)
+        self.values.append(value)
         self.end += 1
 
     def finish(self):
-        """Finish an episode and compute advantages and discounted rewards in-place.
+        """Finish an episode and compute advantages and discounted rewards.
 
         Advantages are stored in place of `values` and discounted rewards are
         stored in place of `rewards` for the current trajectory.
@@ -180,56 +156,89 @@ class TrajectoryBuffer:
     def clear(self):
         """Reset the buffer."""
         self.states.clear()
-        self.logps.clear()
-        self.values.clear()
-        self.pred_values.clear()
         self.actions.clear()
         self.rewards.clear()
+        self.logprobs.clear()
+        self.values.clear()
         self.start = 0
         self.end = 0
 
-    def get(self, normalize_advantages=True):
-        """Return a dictionary of state shapes to training data.
+    def get(self, batch_size=64, normalize_advantages=True, sort=False, drop_remainder=True):
+        """Return a tf.Dataset of training data from this TrajectoryBuffer.
 
         Parameters
         ----------
+        batch_size : int, optional
+            Batch size in the returned tf.Dataset.
         normalize_advantages : bool, optional
             Whether to normalize the returned advantages.
+        sort : bool, optional
+            Whether to sort by state shape before batching to minimize padding.
+        drop_remainder : bool, optional
+            Whether to drop the last batch if it has fewer than batch_size elements.
 
         Returns
         -------
-        data : dict
-            A dictionary mapping state shape to training data.
-
-            Each value of the dictionary is a dictionary with keys
-            'states', 'logps', 'values', 'actions', 'advants', and values
-            ndarrays.
+        dataset : tf.Dataset
 
         """
-        advantages = np.array(self.values[:self.start])
+        actions = np.array(self.actions[:self.start], dtype=np.int32)
+        logprobs = np.array(self.logprobs[:self.start], dtype=np.float32)
+        advantages = np.array(self.values[:self.start], dtype=np.float32)
+        values = np.array(self.rewards[:self.start], dtype=np.float32)
+
         if normalize_advantages:
             advantages -= np.mean(advantages)
             advantages /= np.std(advantages)
-        shapes = {}
-        for i, state in enumerate(self.states[:self.start]):
-            shapes.setdefault(state.shape, []).append(i)
-        data = {}
-        for shape, indices in shapes.items():
-            data[shape] = {
-                'states': np.array([self.states[i] for i in indices],
-                                   dtype=np.float32),
-                'logps': np.array([self.logps[i] for i in indices],
-                                   dtype=np.float32),
-                'values': np.array([[self.rewards[i]] for i in indices],
-                                   dtype=np.float32),
-                'actions': np.array([self.actions[i] for i in indices],
-                                    dtype=np.int),
-                'advants': np.array([advantages[i] for i in indices],
-                                    dtype=np.float32),
-                'pred_values': np.array([[self.pred_values[i]] for i in indices],
-                                        dtype=np.float32),
-            }
-        return data
+
+        if self.states and self.states[0].ndim == 2:
+
+            # filter any states with only one action available
+            indices = [i for i in range(len(self.states)) if self.states[i].shape[0] != 1]
+            states = [s.astype(np.int32) for s in self.states[:self.start]]
+            actions = actions[indices]
+            logprobs = logprobs[indices]
+            advantages = advantages[indices]
+            values = values[indices]
+            
+            if sort:
+                indices = np.argsort([s.shape[0] for s in states])
+                states = [states[i] for i in indices]
+                actions = actions[indices]
+                logprobs = logprobs[indices]
+                advantages = advantages[indices]
+                values = values[indices]
+
+            dataset = tf.data.Dataset.zip((
+                tf.data.Dataset.from_generator(lambda: states, tf.int32),
+                tf.data.Dataset.from_tensor_slices(actions),
+                tf.data.Dataset.from_tensor_slices(logprobs),
+                tf.data.Dataset.from_tensor_slices(advantages),
+                tf.data.Dataset.from_tensor_slices(values),
+            ))
+            padded_shapes = ([None, self.states[0].shape[1]], [], [], [], [])
+            padding_values = (tf.constant(-1, dtype=tf.int32),
+                              tf.constant(0, dtype=tf.int32),
+                              tf.constant(0.0, dtype=tf.float32),
+                              tf.constant(0.0, dtype=tf.float32),
+                              tf.constant(0.0, dtype=tf.float32))
+            dataset = dataset.padded_batch(batch_size,
+                                           padded_shapes=padded_shapes,
+                                           padding_values=padding_values,
+                                           drop_remainder=drop_remainder)
+
+        else:
+            states = np.array(self.states[:self.start], dtype=np.float32)
+            dataset = tf.data.Dataset.zip((
+                tf.data.Dataset.from_tensor_slices(states),
+                tf.data.Dataset.from_tensor_slices(actions),
+                tf.data.Dataset.from_tensor_slices(logprobs),
+                tf.data.Dataset.from_tensor_slices(advantages),
+                tf.data.Dataset.from_tensor_slices(values),
+            ))
+            dataset = dataset.batch(batch_size, drop_remainder=drop_remainder)
+
+        return dataset
 
     def __len__(self):
         return len(self.states)
@@ -237,15 +246,14 @@ class TrajectoryBuffer:
 
 def _merge_buffers(bufferlist):
     output = bufferlist[0]
-    assert output.start==output.end, "Must apply self.finish() before merging buffers"
+    assert output.start == output.end, "Must apply self.finish() before merging buffers"
     for b in bufferlist[1:]:
-        assert b.start==b.end, "Must apply self.finish() before merging buffers"
+        assert b.start == b.end, "Must apply self.finish() before merging buffers"
         output.states += b.states
-        output.logps += b.logps
-        output.values += b.values
-        output.pred_values += b.pred_values
         output.actions += b.actions
         output.rewards += b.rewards
+        output.logprobs += b.logprobs
+        output.values += b.values
     output.end = len(output.states)
     output.start = output.end
     return output
@@ -314,7 +322,7 @@ class Agent:
         self.action_dim_fn = action_dim_fn
         self.kld_limit = kld_limit
 
-    def act(self, state, greedy=False, return_logp=False):
+    def act(self, state, greedy=False, return_logprob=False):
         """Return an action for the given state using the policy model.
 
         Parameters
@@ -331,7 +339,7 @@ class Agent:
             action = tf.argmax(logpi, axis=1)[0]
         else:
             action = tf.random.categorical(logpi, 1)[0, 0]
-        if return_logp:
+        if return_logprob:
             return action.numpy(), logpi[:, action][0].numpy()
         else:
             return action.numpy()
@@ -387,9 +395,9 @@ class Agent:
                 env, episodes=episodes, max_episode_length=max_episode_length,
                 store=True, parallel=parallel
             )
-            batches = self.buffer.get(normalize_advantages=self.normalize_advantages)
-            policy_history = self._fit_policy_model(batches, epochs=self.policy_updates)
-            value_history = self._fit_value_model(batches, epochs=self.value_updates)
+            dataset = self.buffer.get(normalize_advantages=self.normalize_advantages)
+            policy_history = self._fit_policy_model(dataset, epochs=self.policy_updates)
+            value_history = self._fit_value_model(dataset, epochs=self.value_updates)
 
             if test_env is not None:
                 return_history = self.run_episodes(
@@ -413,10 +421,6 @@ class Agent:
             history['delta_policy_loss'][i] = policy_history['loss'][-1] - policy_history['loss'][0]
             history['policy_ent'][i] = policy_history['ent'][-1]
             history['policy_kld'][i] = policy_history['kld'][-1]
-            history['mean_value'][i] = np.mean(np.vstack([data['pred_values']
-                                                          for shape, data in batches.items()]))
-            history['mean_value_error'][i] = np.mean(np.square(np.vstack([data['pred_values'] - data['values']
-                                                                         for shape, data in batches.items()])))
 
             if logdir is not None and (i+1) % save_freq == 0:
                 self.save_policy_weights(logdir + "/policy-" + str(i+1) + ".h5")
@@ -437,8 +441,6 @@ class Agent:
                     tf.summary.scalar('delta_policy_loss', history['delta_policy_loss'][i], step=i)
                     tf.summary.scalar('policy_ent', history['policy_ent'][i], step=i)
                     tf.summary.scalar('policy_kld', history['policy_kld'][i], step=i)
-                    tf.summary.scalar('mean_value', history['mean_value'][i], step=i)
-                    tf.summary.scalar('mean_value_error', history['mean_value_error'][i], step=i)
                 tb_writer.flush()
             if verbose > 0:
                 print_status_bar(i, epochs, history, verbose=verbose)
@@ -473,7 +475,7 @@ class Agent:
         total_reward = 0
         while not done:
             state = state.astype(np.float32)
-            action, logp = self.act(state, return_logp=True)
+            action, logprob = self.act(state, return_logprob=True)
             if self.value_model is None:
                 value = 0
             elif hasattr(self.value_model, 'agent'):  # this is an AgentBaseline
@@ -485,7 +487,7 @@ class Agent:
                 value = self.value_model(state[np.newaxis])[0][0]
             next_state, reward, done, _ = env.step(action)
             if buffer is not None:
-                buffer.store(state, logp, value, action, reward)
+                buffer.store(state, action, reward, logprob, value)
             episode_length += 1
             total_reward += reward
             if max_episode_length is not None and episode_length > max_episode_length:
@@ -498,7 +500,7 @@ class Agent:
     def _parallel_run_episode(self, env, max_episode_length, greedy, random_seed, output, packet_size):
         np.random.seed(random_seed)
         buff = TrajectoryBuffer(gam=self.gam, lam=self.lam)
-        results =[]
+        results = []
         for i in range(packet_size):
             results.append(self.run_episode(env, max_episode_length=max_episode_length, greedy=greedy, buffer=buff))
         output.put((results,buff))
@@ -532,7 +534,9 @@ class Agent:
             output = mp.Queue()
             assert episodes % PACKET_SIZE == 0, "PACKET_SIZE must divide the number of episodes"
             num_processes = int(episodes / PACKET_SIZE)
-            processes = [mp.Process(target = self._parallel_run_episode,args=(env, max_episode_length, greedy, seed, output, PACKET_SIZE)) for seed in np.random.randint(0,4294967295,num_processes)]
+            processes = [mp.Process(target=self._parallel_run_episode,
+                                    args=(env, max_episode_length, greedy, seed, output, PACKET_SIZE))
+                         for seed in np.random.randint(0, 4294967295, num_processes)]
             for p in processes:
                 p.start()
             results = [output.get() for p in processes]
@@ -550,35 +554,24 @@ class Agent:
 
         return history
 
-    def _fit_policy_model(self, batches, epochs=1):
+    def _fit_policy_model(self, dataset, epochs=1):
         """Fit policy model with one gradient update per epoch."""
-        history = {'loss': [], 'kld': [], 'ent': []}
+        history = {'loss': [0], 'kld': [0], 'ent': [0]}
         for epoch in range(epochs):
-            with tf.GradientTape() as tape:
-                losses, klds, ents = [], [], []
-                for shape, data in batches.items():
-                    action_dim = self.action_dim_fn(shape)
-                    if action_dim == 1:
-                        continue
-                    logpis = self.policy_model(data['states'])
-                    new_logps = tf.reduce_sum(tf.one_hot(data['actions'], action_dim) * logpis, axis=1)
-                    losses.append(self.policy_loss(new_logps, data['logps'], data['advants']))
-                    klds.append(data['logps'] - new_logps)
-                    ents.append(-new_logps)
-                loss = tf.reduce_mean(tf.concat(losses, axis=0))
-                kld = tf.reduce_mean(tf.concat(klds, axis=0))
-                ent = tf.reduce_mean(tf.concat(ents, axis=0))
-            varis = self.policy_model.trainable_variables
-            grads = tape.gradient(loss, varis)
-            self.policy_optimizer.apply_gradients(zip(grads, varis))
-            history['loss'].append(loss)
-            history['kld'].append(kld)
-            history['ent'].append(ent)
-            if self.kld_limit is not None and kld > self.kld_limit:
-                break
-            self.policy_model.get_weights()  # for fast wrappers
-        history = {k: np.array(v) for k, v in history.items()}
-        return history
+            for states, actions, logprobs, advantages, _ in dataset:
+                self._fit_policy_model_step(states, actions, logprobs, advantages)
+        return {k: np.array(v) for k, v in history.items()}
+
+    @tf.function
+    def _fit_policy_model_step(self, states, actions, logprobs, advantages):
+        """Fit policy model on one batch of data."""
+        with tf.GradientTape() as tape:
+            logpis = self.policy_model(states)
+            new_logprobs = tf.reduce_sum(tf.one_hot(actions, logpis.shape[1]) * logpis, axis=1)
+            loss = self.policy_loss(new_logprobs, logprobs, advantages)
+        varis = self.policy_model.trainable_variables
+        grads = tape.gradient(loss, varis)
+        self.policy_optimizer.apply_gradients(zip(grads, varis))
 
     def load_policy_weights(self, filename):
         """Load weights from filename into the policy model."""
@@ -588,25 +581,25 @@ class Agent:
         """Save the current weights in the policy model to filename."""
         self.policy_model.save_weights(filename)
 
-    def _fit_value_model(self, batches, epochs=1):
-        """Fit value model with one gradient update per epoch."""
+    def _fit_value_model(self, dataset, epochs=1):
+        """Fit value model to data from dataset."""
         if self.value_model is None or hasattr(self.value_model, 'agent'):
             epochs = 0
         history = {'loss': np.zeros(epochs)}
         for epoch in range(epochs):
-            with tf.GradientTape() as tape:
-                losses = []
-                for shape, data in batches.items():
-                    values = self.value_model(data['states'])
-                    losses.append(self.value_loss(values, data['values']))
-                loss = tf.reduce_mean(tf.concat(losses, axis=0))
-            varis = self.value_model.trainable_variables
-            grads = tape.gradient(loss, varis)
-            self.value_optimizer.apply_gradients(zip(grads, varis))
-            history['loss'][epoch] = loss
-        if self.value_model is not None:
-            self.value_model.get_weights()  # for fast wrappers
+            for states, _, _, _, values in dataset:
+                self._fit_value_model_step(states, values)
         return history
+
+    @tf.function
+    def _fit_value_model_step(self, states, values):
+        """Fit value model on one batch of data."""
+        with tf.GradientTape() as tape:
+            pred_values = self.value_model(states)
+            loss = self.value_loss(pred_values, values)
+        varis = self.value_model.trainable_variables
+        grads = tape.gradient(loss, varis)
+        self.value_optimizer.apply_gradients(zip(grads, varis))
 
     def load_value_weights(self, filename):
         """Load weights from filename into the value model."""
