@@ -345,9 +345,9 @@ class TPMP(tf.keras.Model):
         super(TPMP, self).__init__()
         self.embedding_layers = []
         for layer_size in external_ff_size:
-            self.embedding_layers.append(tf.keras.layers.Dense(layer_size)) # embedding networks
+            self.embedding_layers.append(tf.keras.layers.Dense(layer_size[0], activation=layer_size[1])) # embedding networks
         if external_ff_size:
-            self.input_dim = external_ff_size[-1]
+            self.input_dim = external_ff_size[-1][0]
         else:
             self.input_dim = input_dim
         self.encoder = TransformersEncoder(num_layers, num_heads, self.input_dim, internal_ff_size, training)
