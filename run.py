@@ -10,7 +10,7 @@ import gym
 import sympy as sp
 
 from deepgroebner.buchberger import BuchbergerEnv, LeadMonomialsWrapper, BuchbergerAgent
-from deepgroebner.ideals import RandomBinomialIdealGenerator, FromDirectoryIdealGenerator, MixedRandomBinomialIdealGenerator, RandomIdealGenerator
+from deepgroebner.ideals import RandomBinomialIdealGenerator, FromDirectoryIdealGenerator, RandomIdealGenerator
 from deepgroebner.pg import PGAgent, PPOAgent
 from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, PairsLeftBaseline, AgentBaseline
 
@@ -167,10 +167,6 @@ def make_parser():
                         type=str,
                         default='data/runs',
                         help='the base directory for training runs')
-    parser.add_argument('--binned',
-                        type=lambda x: str(x).lower() == 'true',
-                        default=False,
-                        help='whether to train on binned ideals')
     parser.add_argument('--parallel',
                         type=lambda x: str(x).lower() == 'true',
                         default=True,
@@ -187,17 +183,10 @@ def make_env(args):
     """Return the training environment for this run."""
     if args.environment in ['CartPole-v0', 'CartPole-v1', 'LunarLander-v2']:
         env = gym.make(args.environment)
-    elif args.binned:
-        dirname = "".join([
-            'data/bins/{0}-{1}-{2}'.format(args.variables, args.degree, args.generators),
-            '-consts' if args.constants else "",
-            '-' + args.degree_distribution,
-            '-homog' if args.homogeneous else "",
-            '-pure' if args.pure else "",
-        ])
-        ring = sp.xring('x:' + str(args.variables), sp.FF(32003), 'grevlex')[0]
-        ideal_gen = FromDirectoryIdealGenerator(dirname, ring)
-        env = BuchbergerEnv(ideal_gen, elimination=args.elimination, rewards=args.rewards) 
+    elif args.environment == "RandomPolynomialIdeal":
+        ideal_gen = RandomIdealGenerator(args.variables, args.degree, args.generators, args.l,
+                                         constants=args.constants, degrees=args.degree_distribution)
+        env = BuchbergerEnv(ideal_gen, elimination=args.elimination, rewards=args.rewards)
         env = LeadMonomialsWrapper(env, k=args.k)
     elif args.environment == "MixedRandomBinomialIdeal":
         ideal_gen = MixedRandomBinomialIdealGenerator(args.variables,
@@ -207,30 +196,12 @@ def make_env(args):
                                                       homogeneous=args.homogeneous, pure=args.pure)
         env = BuchbergerEnv(ideal_gen, elimination=args.elimination, rewards=args.rewards)
         env = LeadMonomialsWrapper(env, k=args.k)
-    elif args.environment == "RandomPolynomialIdeal":
-        ideal_gen = RandomIdealGenerator(args.variables, args.degree, args.generators, args.l,
-                                         constants=args.constants, degrees=args.degree_distribution)
-        env = BuchbergerEnv(ideal_gen, elimination=args.elimination, rewards=args.rewards)
-        env = LeadMonomialsWrapper(env, k=args.k)
     else:
         ideal_gen = RandomBinomialIdealGenerator(args.variables, args.degree, args.generators,
                                                  constants=args.constants, degrees=args.degree_distribution,
                                                  homogeneous=args.homogeneous, pure=args.pure)
         env = BuchbergerEnv(ideal_gen, elimination=args.elimination, rewards=args.rewards)
         env = LeadMonomialsWrapper(env, k=args.k)
-    return env
-
-
-def make_test_env(args):
-    """Return the test environment for this run."""
-    if args.environment == 'RandomBinomialIdeal' and args.binned:
-        ideal_gen = RandomBinomialIdealGenerator(args.variables, args.degree, args.generators,
-                                                 constants=args.constants, degrees=args.degree_distribution,
-                                                 homogeneous=args.homogeneous, pure=args.pure)
-        env = BuchbergerEnv(ideal_gen, elimination=args.elimination, rewards=args.rewards)
-        env = LeadMonomialsWrapper(env, k=args.k)
-    else:
-        env = None
     return env
 
 
@@ -303,13 +274,11 @@ def make_agent(args):
     if args.algorithm == 'pg':
         agent = PGAgent(policy_network=policy_network, policy_lr=args.policy_lr, policy_updates=args.policy_updates,
                         value_network=value_network, value_lr=args.value_lr, value_updates=args.value_updates,
-                        gam=args.gam, lam=args.lam, action_dim_fn=action_dim_fn,
-                        kld_limit=args.policy_kld_limit)
+                        gam=args.gam, lam=args.lam, kld_limit=args.policy_kld_limit)
     else:
         agent = PPOAgent(policy_network=policy_network, policy_lr=args.policy_lr, policy_updates=args.policy_updates,
                          value_network=value_network, value_lr=args.value_lr, value_updates=args.value_updates,
-                         gam=args.gam, lam=args.lam, eps=args.eps, action_dim_fn=action_dim_fn,
-                         kld_limit=args.policy_kld_limit)
+                         gam=args.gam, lam=args.lam, eps=args.eps, kld_limit=args.policy_kld_limit)
     return agent
 
 
@@ -341,12 +310,10 @@ if __name__ == '__main__':
     if not args.use_gpu:
         os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
     env = make_env(args)
-    test_env = make_test_env(args)
     agent = make_agent(args)
     logdir = make_logdir(args)
     save_args(logdir, args)
     print(logdir)
     agent.train(env, episodes=args.episodes, epochs=args.epochs,
                 save_freq=args.save_freq, logdir=logdir, verbose=args.verbose,
-                max_episode_length=args.max_episode_length, test_env=test_env,
-                parallel=args.parallel)
+                max_episode_length=args.max_episode_length, parallel=args.parallel)
