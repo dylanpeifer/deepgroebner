@@ -193,7 +193,7 @@ class TrajectoryBuffer:
 
         if self.states and self.states[0].ndim == 2:
 
-            # filter any states with only one action available
+            # filter out any states with only one action available
             indices = [i for i in range(len(self.states)) if self.states[i].shape[0] != 1]
             states = [s.astype(np.int32) for s in self.states[:self.start]]
             actions = actions[indices]
@@ -216,6 +216,8 @@ class TrajectoryBuffer:
                 tf.data.Dataset.from_tensor_slices(advantages),
                 tf.data.Dataset.from_tensor_slices(values),
             ))
+            if batch_size is None:
+                batch_size = len(states)
             padded_shapes = ([None, self.states[0].shape[1]], [], [], [], [])
             padding_values = (tf.constant(-1, dtype=tf.int32),
                               tf.constant(0, dtype=tf.int32),
@@ -236,6 +238,8 @@ class TrajectoryBuffer:
                 tf.data.Dataset.from_tensor_slices(advantages),
                 tf.data.Dataset.from_tensor_slices(values),
             ))
+            if batch_size is None:
+                batch_size = len(states)
             dataset = dataset.batch(batch_size, drop_remainder=drop_remainder)
 
         return dataset
@@ -304,7 +308,7 @@ class Agent:
                  policy_network, policy_lr=1e-4, policy_updates=1,
                  value_network=None, value_lr=1e-3, value_updates=25,
                  gam=0.99, lam=0.97, normalize_advantages=True, eps=0.2,
-                 action_dim_fn=lambda s: s[0], kld_limit=0.01):
+                 kld_limit=0.01):
         self.policy_model = policy_network
         self.policy_loss = NotImplementedError
         self.policy_optimizer = tf.keras.optimizers.Adam(lr=policy_lr)
@@ -319,7 +323,6 @@ class Agent:
         self.gam = gam
         self.buffer = TrajectoryBuffer(gam=gam, lam=lam)
         self.normalize_advantages = normalize_advantages
-        self.action_dim_fn = action_dim_fn
         self.kld_limit = kld_limit
 
     def act(self, state, greedy=False, return_logprob=False):
@@ -385,9 +388,7 @@ class Agent:
                    'policy_updates': np.zeros(epochs),
                    'delta_policy_loss': np.zeros(epochs),
                    'policy_ent': np.zeros(epochs),
-                   'policy_kld': np.zeros(epochs),
-                   'mean_value': np.zeros(epochs),
-                   'mean_value_error': np.zeros(epochs)}
+                   'policy_kld': np.zeros(epochs)}
 
         for i in range(epochs):
             self.buffer.clear()
@@ -474,7 +475,8 @@ class Agent:
         episode_length = 0
         total_reward = 0
         while not done:
-            state = state.astype(np.float32)
+            if state.dtype == np.float64:
+                state = state.astype(np.float32)
             action, logprob = self.act(state, return_logprob=True)
             if self.value_model is None:
                 value = 0
@@ -555,11 +557,21 @@ class Agent:
         return history
 
     def _fit_policy_model(self, dataset, epochs=1):
-        """Fit policy model with one gradient update per epoch."""
-        history = {'loss': [0], 'kld': [0], 'ent': [0]}
+        """Fit policy model using data from dataset."""
+        history = {'loss': [], 'kld': [], 'ent': []}
         for epoch in range(epochs):
+            loss, kld, ent, batches = 0, 0, 0, 0
             for states, actions, logprobs, advantages, _ in dataset:
-                self._fit_policy_model_step(states, actions, logprobs, advantages)
+                batch_loss, batch_kld, batch_ent = self._fit_policy_model_step(states, actions, logprobs, advantages)
+                loss += batch_loss
+                kld += batch_kld
+                ent += batch_ent
+                batches += 1
+            history['loss'].append(loss / batches)
+            history['kld'].append(kld / batches)
+            history['ent'].append(ent / batches)
+            if self.kld_limit is not None and kld > self.kld_limit:
+                break
         return {k: np.array(v) for k, v in history.items()}
 
     @tf.function
@@ -568,10 +580,13 @@ class Agent:
         with tf.GradientTape() as tape:
             logpis = self.policy_model(states)
             new_logprobs = tf.reduce_sum(tf.one_hot(actions, logpis.shape[1]) * logpis, axis=1)
-            loss = self.policy_loss(new_logprobs, logprobs, advantages)
+            loss = tf.reduce_mean(self.policy_loss(new_logprobs, logprobs, advantages))
+            kld = tf.reduce_mean(logprobs - new_logprobs)
+            ent = -tf.reduce_mean(new_logprobs)
         varis = self.policy_model.trainable_variables
         grads = tape.gradient(loss, varis)
         self.policy_optimizer.apply_gradients(zip(grads, varis))
+        return loss, kld, ent
 
     def load_policy_weights(self, filename):
         """Load weights from filename into the policy model."""
@@ -582,24 +597,29 @@ class Agent:
         self.policy_model.save_weights(filename)
 
     def _fit_value_model(self, dataset, epochs=1):
-        """Fit value model to data from dataset."""
+        """Fit value model using data from dataset."""
         if self.value_model is None or hasattr(self.value_model, 'agent'):
             epochs = 0
-        history = {'loss': np.zeros(epochs)}
+        history = {'loss': []}
         for epoch in range(epochs):
+            loss, batches = 0, 0
             for states, _, _, _, values in dataset:
-                self._fit_value_model_step(states, values)
-        return history
+                batch_loss = self._fit_value_model_step(states, values)
+                loss += batch_loss
+                batches += 1
+            history['loss'].append(loss / batches)
+        return {k: np.array(v) for k, v in history.items()}
 
     @tf.function
     def _fit_value_model_step(self, states, values):
         """Fit value model on one batch of data."""
         with tf.GradientTape() as tape:
             pred_values = self.value_model(states)
-            loss = self.value_loss(pred_values, values)
+            loss = tf.reduce_mean(self.value_loss(pred_values, values))
         varis = self.value_model.trainable_variables
         grads = tape.gradient(loss, varis)
         self.value_optimizer.apply_gradients(zip(grads, varis))
+        return loss
 
     def load_value_weights(self, filename):
         """Load weights from filename into the value model."""
