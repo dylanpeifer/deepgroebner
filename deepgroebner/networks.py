@@ -162,6 +162,87 @@ class ParallelMultilayerPerceptron(tf.keras.Model):
         return X
 
 
+def scaled_dot_product_attention(Q, K, V, mask):
+    """Return calculated vector and attention weights.
+
+    Parameters
+    ----------
+    Q : tensor of shape (..., dq, d)
+        Tensor of queries as rows.
+    K : tensor of shape (..., dk, d)
+        Tensor of keys as rows.
+    V : tensor of shape (..., dk, dv)
+        Tensor of values as rows.
+    mask : boolean tensor of shape broadcastable to (..., dq, dk)
+        The mask representing valid rows.
+
+    Returns
+    -------
+    X : tensor
+    attention_weights : tensor
+    """
+
+    QK = tf.matmul(Q, K, transpose_b=True)
+    d = tf.cast(tf.shape(K)[-1], tf.float32)
+    attention_logits = QK / tf.math.sqrt(d)
+    if mask is not None:
+        attention_logits += (mask * -1e9)
+    attention_weights = tf.nn.softmax(attention_logits)
+    X = tf.matmul(attention_weights, V)
+    return X, attention_weights
+
+
+class MultiHeadSelfAttentionLayer(tf.keras.layers.Layer):
+    """A multi head self attention layer.
+
+    Adapted from https://www.tensorflow.org/tutorials/text/transformer.
+
+    """
+
+    def __init__(self, dim, n_heads):
+        super(MultiHeadSelfAttentionLayer, self).__init__()
+        assert dim % n_heads == 0
+        self.dim = dim
+        self.n_heads = n_heads
+        self.depth = dim // n_heads
+        self.Wq = tf.keras.layers.Dense(dim)
+        self.Wk = tf.keras.layers.Dense(dim)
+        self.Wv = tf.keras.layers.Dense(dim)
+        self.dense = tf.keras.layers.Dense(dim)
+
+    def split_heads(self, X, batch_size):
+        X = tf.reshape(X, (batch_size, -1, self.n_heads, self.depth))
+        return tf.transpose(X, perm=[0, 2, 1, 3])
+
+    def call(self, X, mask):
+        batch_size = tf.shape(X)[0]
+        Q = self.split_heads(self.Wq(X), batch_size)
+        K = self.split_heads(self.Wk(X), batch_size)
+        V = self.split_heads(self.Wv(X), batch_size)
+        mask = mask[:, tf.newaxis, tf.newaxis, :]
+        scaled_attention, attention_weights = scaled_dot_product_attention(Q, K, V, mask)
+        scaled_attention = tf.transpose(scaled_attention, perm=[0, 2, 1, 3])
+        concat_attention = tf.reshape(scaled_attention, (batch_size, -1, self.dim))
+        X = self.dense(concat_attention)
+        return X, attention_weights
+
+
+class TransformerPMLP(tf.keras.Model):
+    """A parallel multilayer perceptron network with multihead self attention layer."""
+
+    def __init__(self, embed_dim, embed_hl, num_heads, activation='relu', final_activation='log_softmax'):
+        super(TransformerPMLP, self).__init__()
+        self.embedding = EmbeddingLayer(embed_dim, embed_hl, activation=activation)
+        self.mhsa = MultiHeadSelfAttentionLayer(embed_dim, num_heads)
+        self.decider = DecidingLayer([], final_activation=final_activation)
+
+    def call(self, X):
+        X, mask = self.embedding(X)
+        X, attention_weights = self.mhsa(X, mask)
+        X = self.decider(X, mask)
+        return X
+
+
 class PairsLeftBaseline:
     """A Buchberger value network that returns discounted pairs left."""
 
