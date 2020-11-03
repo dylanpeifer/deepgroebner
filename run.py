@@ -159,6 +159,10 @@ def make_parser():
                         type=lambda x: int(x) if x.lower() != 'none' else None,
                         default=500,
                         help='the max number of interactions per episode')
+    parser.add_argument('--batch_size',
+                        type=lambda x: int(x) if x.lower() != 'none' else None,
+                        default=64,
+                        help='the size of batches in training')
     parser.add_argument('--verbose',
                         type=int,
                         default=0,
@@ -323,4 +327,5 @@ if __name__ == '__main__':
     print(logdir)
     agent.train(env, episodes=args.episodes, epochs=args.epochs,
                 save_freq=args.save_freq, logdir=logdir, verbose=args.verbose,
-                max_episode_length=args.max_episode_length, parallel=args.parallel)
+                max_episode_length=args.max_episode_length, parallel=args.parallel,
+                batch_size=args.batch_size)

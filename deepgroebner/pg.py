@@ -163,7 +163,7 @@ class TrajectoryBuffer:
         self.start = 0
         self.end = 0
 
-    def get(self, batch_size=1024, normalize_advantages=True, sort=False, drop_remainder=True):
+    def get(self, batch_size=64, normalize_advantages=True, sort=False, drop_remainder=True):
         """Return a tf.Dataset of training data from this TrajectoryBuffer.
 
         Parameters
@@ -348,7 +348,7 @@ class Agent:
             return action.numpy()
 
     def train(self, env, episodes=10, epochs=1, max_episode_length=None, verbose=0, save_freq=1,
-              logdir=None, parallel=True):
+              logdir=None, parallel=True, batch_size=64):
         """Train the agent on env.
 
         Parameters
@@ -367,6 +367,10 @@ class Agent:
             How often to save the model weights, measured in epochs.
         logdir : str, optional
             The directory to store Tensorboard logs and model weights.
+        parallel : bool, optional
+            Whether to run parallel rollouts.
+        batch_size : int or None, optional
+            The batch sizes for training (None indicates one large batch).
 
         Returns
         -------
@@ -394,7 +398,7 @@ class Agent:
                 env, episodes=episodes, max_episode_length=max_episode_length,
                 store=True, parallel=parallel
             )
-            dataset = self.buffer.get(normalize_advantages=self.normalize_advantages)
+            dataset = self.buffer.get(normalize_advantages=self.normalize_advantages, batch_size=batch_size)
             policy_history = self._fit_policy_model(dataset, epochs=self.policy_updates)
             value_history = self._fit_value_model(dataset, epochs=self.value_updates)
 
