@@ -274,11 +274,6 @@ def make_agent(args):
             'MixedRandomBinomialIdeal': (2 * args.variables * args.k, 1),
             'RandomPolynomialIdeal': (2 * args.variables * args.k, 1)}[args.environment]
 
-    if args.environment in ['RandomBinomialIdeal', 'MixedRandomBinomialIdeal', 'RandomPolynomialIdeal']:
-        action_dim_fn = lambda s: s[0]
-    else:
-        action_dim_fn = lambda s: dims[1]
-
     policy_network = make_policy_network(args)
     value_network = make_value_network(args)
 

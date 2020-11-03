@@ -325,23 +325,19 @@ class Agent:
         self.normalize_advantages = normalize_advantages
         self.kld_limit = kld_limit
 
-    def act(self, state, greedy=False, return_logprob=False):
+    def act(self, state, return_logprob=False):
         """Return an action for the given state using the policy model.
 
         Parameters
         ----------
         state : np.array
             The state of the environment.
-        greedy : bool, optional
-            Whether to sample or pick the action with max probability.
         return_logp : bool, optional
             Whether to return the log probability of choosing the chosen action.
+
         """
         logpi = self.policy_model(state[np.newaxis])
-        if greedy:
-            action = tf.argmax(logpi, axis=1)[0]
-        else:
-            action = tf.random.categorical(logpi, 1)[0, 0]
+        action = tf.random.categorical(logpi, 1)[0, 0]
         if return_logprob:
             return action.numpy(), logpi[:, action][0].numpy()
         else:
@@ -441,7 +437,7 @@ class Agent:
         return history
 
 
-    def run_episode(self, env, max_episode_length=None, greedy=False, buffer=None):
+    def run_episode(self, env, max_episode_length=None, buffer=None):
         """Run an episode and return total reward and episode length.
 
         Parameters
@@ -450,8 +446,6 @@ class Agent:
             The environment to interact with.
         max_episode_length : int, optional
             The maximum number of interactions before the episode ends.
-        greedy : bool, optional
-            Whether to choose the maximum probability or sample.
         buffer : TrajectoryBuffer object, optional
             If included, it will store the whole rollout in the given buffer.
 
@@ -491,16 +485,15 @@ class Agent:
             buffer.finish()
         return total_reward, episode_length
 
-    def _parallel_run_episode(self, env, max_episode_length, greedy, random_seed, output, packet_size):
+    def _parallel_run_episode(self, env, max_episode_length, random_seed, output, packet_size):
         np.random.seed(random_seed)
         buff = TrajectoryBuffer(gam=self.gam, lam=self.lam)
         results = []
         for i in range(packet_size):
-            results.append(self.run_episode(env, max_episode_length=max_episode_length, greedy=greedy, buffer=buff))
+            results.append(self.run_episode(env, max_episode_length=max_episode_length, buffer=buff))
         output.put((results,buff))
 
-    def run_episodes(self, env, episodes=100, max_episode_length=None, greedy=False, store=False,
-                     parallel=True):
+    def run_episodes(self, env, episodes=100, max_episode_length=None, store=False, parallel=True):
         """Run several episodes, store interaction in buffer, and return history.
 
         Parameters
@@ -511,10 +504,9 @@ class Agent:
             The number of episodes to perform.
         max_episode_length : int, optional
             The maximum number of steps before the episode is terminated.
-        greedy: bool, optional
-            Whether to choose the maximum probability or sample.
-        store: bool, optional
-            Whether or not to store the rollout in self.buffer
+        store : bool, optional
+            Whether or not to store the rollout in self.buffer.
+        parallel : bool, optional
 
         Returns
         -------
@@ -529,7 +521,7 @@ class Agent:
             assert episodes % PACKET_SIZE == 0, "PACKET_SIZE must divide the number of episodes"
             num_processes = int(episodes / PACKET_SIZE)
             processes = [mp.Process(target=self._parallel_run_episode,
-                                    args=(env, max_episode_length, greedy, seed, output, PACKET_SIZE))
+                                    args=(env, max_episode_length, seed, output, PACKET_SIZE))
                          for seed in np.random.randint(0, 4294967295, num_processes)]
             for p in processes:
                 p.start()
@@ -542,7 +534,7 @@ class Agent:
                 (history['returns'][i], history['lengths'][i]) = returns[i]
         else:
             for i in range(episodes):
-                R, L = self.run_episode(env,max_episode_length=max_episode_length, greedy=greedy, buffer=self.buffer)
+                R, L = self.run_episode(env, max_episode_length=max_episode_length, buffer=self.buffer)
                 history['returns'][i] = R
                 history['lengths'][i] = L
 
