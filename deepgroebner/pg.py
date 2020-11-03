@@ -163,7 +163,7 @@ class TrajectoryBuffer:
         self.start = 0
         self.end = 0
 
-    def get(self, batch_size=64, normalize_advantages=True, sort=False, drop_remainder=True):
+    def get(self, batch_size=1024, normalize_advantages=True, sort=False, drop_remainder=True):
         """Return a tf.Dataset of training data from this TrajectoryBuffer.
 
         Parameters
@@ -194,8 +194,8 @@ class TrajectoryBuffer:
         if self.states and self.states[0].ndim == 2:
 
             # filter out any states with only one action available
-            indices = [i for i in range(len(self.states)) if self.states[i].shape[0] != 1]
-            states = [s.astype(np.int32) for s in self.states[:self.start]]
+            indices = [i for i in range(len(self.states[:self.start])) if self.states[i].shape[0] != 1]
+            states = [self.states[i].astype(np.int32) for i in indices]
             actions = actions[indices]
             logprobs = logprobs[indices]
             advantages = advantages[indices]
