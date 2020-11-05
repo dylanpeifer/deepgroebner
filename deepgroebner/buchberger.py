@@ -378,14 +378,6 @@ class LeadMonomialsAgent:
             return np.argmin(np.sum(np.maximum(state[:, :n], state[:, m:m+n]), axis=1))
         elif self.strategy == 'random':
             return np.random.choice(len(state))
-        elif self.strategy == 'normal':
-            n = state.shape[1] // (2 * self.k)
-            m = state.shape[1] // 2
-            all_lcm = np.maximum(state[:, :n], state[:, m:m+n])
-            min_lcm = sorted(all_lcm, key = lambda i:[n for n in i])[0]
-            for i, lcm in enumerate(all_lcm):
-                if np.sum(min_lcm == lcm) == n:
-                    return i
 
             
 
