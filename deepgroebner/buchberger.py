@@ -378,3 +378,6 @@ class LeadMonomialsAgent:
             return np.argmin(np.sum(np.maximum(state[:, :n], state[:, m:m+n]), axis=1))
         elif self.strategy == 'random':
             return np.random.choice(len(state))
+
+            
+
