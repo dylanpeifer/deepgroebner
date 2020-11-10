@@ -14,19 +14,19 @@ PACKET_SIZE = 10 # this must divide the number of episodes, and ideally should d
 
 
 def discount_rewards(rewards, gam):
-    """Discount the list or array of rewards by gamma in-place.
+    """Return discounted rewards-to-go computed from inputs.
 
     Parameters
     ----------
-    rewards : list or ndarray of ints or floats
-        A list of rewards from a single complete trajectory.
+    rewards : array_like
+        List or 1D array of rewards from a single complete trajectory.
     gam : float
-        The discount rate.
+        Discount rate.
 
     Returns
     -------
-    rewards : list or ndarray
-        The input array with each reward replaced by discounted reward-to-go.
+    rewards : ndarray
+        1D array of discounted rewards-to-go.
 
     Examples
     --------
@@ -34,56 +34,33 @@ def discount_rewards(rewards, gam):
     >>> discount_rewards(rewards, 0.5)
     [1, 2, 6.25, 6.5, 5]
 
-    Note that the input rewards list is modified in place. The return
-    value is just a reference to the original list.
-
-    >>> rewards = [1, 2, 3, 4, 5]
-    >>> discounted_rewards = discount_rewards(rewards, 0.5)
-    >>> rewards
-    [1, 2, 6.25, 6.5, 5]
-
     """
     cumulative_reward = 0
+    discounted_rewards = np.zeros_like(rewards, dtype=np.float)
     for i in reversed(range(len(rewards))):
         cumulative_reward = rewards[i] + gam * cumulative_reward
-        rewards[i] = cumulative_reward
-    return rewards
+        discounted_rewards[i] = cumulative_reward
+    return discounted_rewards
 
 
-def np_one_hot(length, index):
-    a = np.zeros(length)
-    a[index] = 1
-    return a.astype('int')
-
-
-class TrajectoryBuffer:
-    """A buffer to store and compute with trajectories.
-
-    The buffer is used to store information from each step of interaction
-    between the agent and environment. When a trajectory is finished it
-    computes the discounted rewards and generalized advantage estimates. After
-    some number of trajectories are finished it can return batches grouped by
-    state shape with normalized advantage estimates.
+def compute_advantages(rewards, values, gam, lam):
+    """Return generalized advantage estimates computed from inputs.
 
     Parameters
     ----------
-    gam : float, optional
-        The discount rate.
-    lam : float, optional
-        The parameter for generalized advantage estimation.
+    rewards : array_like
+        List or 1D array of rewards from a single complete trajectory.
+    values : array_like
+        List or 1D array of value predictions from a single complete trajectory.
+    gam : float
+        Discount rate.
+    lam : float
+        Parameter for generalized advantage estimation.
 
-    See Also
-    --------
-    discount_rewards : Discount the list or array of rewards by gamma in-place.
-
-    Notes
-    -----
-    The implementation is based on the implementation of buffers used in the
-    policy gradient algorithms from OpenAI Spinning Up. Formulas for
-    generalized advantage estimation are from [1]_. The major implementation
-    difference is that we allow for different sized states and action
-    dimensions, and only assume that each state shape corresponds to some fixed
-    action dimension.
+    Returns
+    -------
+    advantages : ndarray
+        1D array of computed advantage scores.
 
     References
     ----------
@@ -92,16 +69,39 @@ class TrajectoryBuffer:
 
     Examples
     --------
-    >>> buffer = TrajectoryBuffer()
-    >>> tau = [(np.array([3]), 0.4, 3, 1, 1),
-    ...        (np.array([1, 3, 7]), 0.1, 2, 0, 0),
-    ...        (np.array([1, 4, 2]), 0.7, 1, 2, 2),
-    ...        (np.array([2, 5]), 0.6, 2, 1, 1),
-    ...        (np.array([1, 7]), 0.3, 0, 0, 1)]
-    >>> for t in tau:
-    ...     buffer.store(*t)
-    >>> buffer.finish()
-    >>> buffer.get()
+    >>> rewards = [1, 1, 1, 1, 1]
+    >>> values = [0, 0, 0, 0, 0]
+    >>> compute_advantages(rewards, values, 0.5, 0.5)
+    array([1.33203125, 1.328125  , 1.3125    , 1.25      , 1.        ])
+
+    """
+    rewards = np.array(rewards, dtype=np.float)
+    values = np.array(values, dtype=np.float)
+    delta = rewards - values
+    delta[:-1] += gam * values[1:]
+    return discount_rewards(delta, gam * lam)
+
+
+class TrajectoryBuffer:
+    """A buffer to store and compute with trajectories.
+
+    The buffer is used to store information from each step of interaction
+    between the agent and environment. When a trajectory is finished it
+    computes the discounted rewards and generalized advantage estimates. After
+    some number of trajectories are finished it can return a tf.Dataset of the
+    training data for policy gradient algorithms.
+
+    Parameters
+    ----------
+    gam : float, optional
+        Discount rate.
+    lam : float, optional
+        Parameter for generalized advantage estimation.
+
+    See Also
+    --------
+    discount_rewards : Discount the list or array of rewards by gamma in-place.
+    compute_advantages : Return generalized advantage estimates computed from inputs.
 
     """
 
@@ -109,216 +109,140 @@ class TrajectoryBuffer:
         self.gam = gam
         self.lam = lam
         self.states = []
-        self.probas = []
-        self.values = []
-        self.pred_values = []
         self.actions = []
         self.rewards = []
-        self.start = 0
-        self.end = 0
+        self.logprobs = []
+        self.values = []
+        self.start = 0  # index to start of current episode
+        self.end = 0  # index to one past end of current episode
 
-    def store(self, state, proba, value, action, reward):
+    def store(self, state, action, reward, logprob, value):
         """Store the information from one interaction with the environment.
 
         Parameters
         ----------
         state : ndarray
-           The observation of the state.
-        proba : float
-           The agent's previous probability of picking the chosen action.
-        value : float
-           The agent's computed value of the state.
+           Observation of the state.
         action : int
-           The chosen action in this trajectory.
+           Chosen action in this trajectory.
         reward : float
-           The reward received in the next transition.
+           Reward received in the next transition.
+        logprob : float
+           Agent's logged probability of picking the chosen action.
+        value : float
+           Agent's computed value of the state.
 
         """
         self.states.append(state)
-        self.probas.append(proba)
-        self.values.append(value)
-        self.pred_values.append(value)
         self.actions.append(action)
         self.rewards.append(reward)
+        self.logprobs.append(logprob)
+        self.values.append(value)
         self.end += 1
 
     def finish(self):
-        """Finish an episode and compute advantages and discounted rewards in-place.
+        """Finish an episode and compute advantages and discounted rewards.
 
         Advantages are stored in place of `values` and discounted rewards are
         stored in place of `rewards` for the current trajectory.
         """
         tau = slice(self.start, self.end)
-        rewards = np.array(self.rewards[tau], dtype=np.float)
-        values = np.array(self.values[tau], dtype=np.float)
-        delta = rewards - values
-        delta[:-1] += self.gam * values[1:]
-        self.rewards[tau] = list(discount_rewards(rewards, self.gam))
-        self.values[tau] = list(discount_rewards(delta, self.gam * self.lam))
+        rewards = discount_rewards(self.rewards[tau], self.gam)
+        values = compute_advantages(self.rewards[tau], self.values[tau], self.gam, self.lam)
+        self.rewards[tau] = rewards
+        self.values[tau] = values
         self.start = self.end
 
     def clear(self):
         """Reset the buffer."""
         self.states.clear()
-        self.probas.clear()
-        self.values.clear()
-        self.pred_values.clear()
         self.actions.clear()
         self.rewards.clear()
+        self.logprobs.clear()
+        self.values.clear()
         self.start = 0
         self.end = 0
 
-    def get_batched(self, normalize_advantages=True):
-        """Return a dictionary of state shapes to training data.
+    def get(self, batch_size=64, normalize_advantages=True, sort=False, drop_remainder=True):
+        """Return a tf.Dataset of training data from this TrajectoryBuffer.
 
         Parameters
         ----------
+        batch_size : int, optional
+            Batch size in the returned tf.Dataset.
         normalize_advantages : bool, optional
             Whether to normalize the returned advantages.
+        sort : bool, optional
+            Whether to sort by state shape before batching to minimize padding.
+        drop_remainder : bool, optional
+            Whether to drop the last batch if it has fewer than batch_size elements.
 
         Returns
         -------
-        data : dict
-            A dictionary mapping state shape to training data.
-
-            Each value of the dictionary is a dictionary with keys
-            'states', 'probas', 'values', 'actions', 'advants', and values
-            ndarrays.
+        dataset : tf.Dataset
 
         """
-        advantages = np.array(self.values[:self.start])
-        if normalize_advantages:
-            advantages -= np.mean(advantages)
-            advantages /= np.std(advantages)
-        shapes = {}
-        for i, state in enumerate(self.states[:self.start]):
-            shapes.setdefault(state.shape, []).append(i)
-        data = {}
-        for shape, indices in shapes.items():
-            data[shape] = {
-                'states': np.array([self.states[i] for i in indices],
-                                   dtype=np.float32),
-                'probas': np.array([self.probas[i] for i in indices],
-                                   dtype=np.float32),
-                'values': np.array([[self.rewards[i]] for i in indices],
-                                   dtype=np.float32),
-                'actions': np.array([self.actions[i] for i in indices],
-                                    dtype=np.int),
-                'advants': np.array([advantages[i] for i in indices],
-                                    dtype=np.float32),
-                'pred_values': np.array([[self.pred_values[i]] for i in indices],
-                                        dtype=np.float32),
-            }
-        return data
+        actions = np.array(self.actions[:self.start], dtype=np.int32)
+        logprobs = np.array(self.logprobs[:self.start], dtype=np.float32)
+        advantages = np.array(self.values[:self.start], dtype=np.float32)
+        values = np.array(self.rewards[:self.start], dtype=np.float32)
 
-    def get_stacked(self, normalize_advantages=True, stack_size=-1, pad=False):
-        """Return a list of training data.
-
-        If stack_size is not -1 and state size is larger than stack_size
-        that state will be ignored
-
-        Parameters
-        ----------
-        stack_size : integer
-            the number of pairs to include in each batch.
-            if stack_size==-1, all pairs are included in a single batch
-        normalize_advantages : bool, optional
-            Whether to normalize the returned advantages.
-
-        Returns
-        -------
-        data : list
-            A list of training data
-
-            Each element of the list is a dictionary with keys
-            'states', 'starts', 'probas', 'values', 'actions', and 'advants' values
-            ndarrays.
-        """
-        assert self.start == self.end, "Must apply self.finish() before getting stacked data"
-        advantages = np.array(self.values[:self.start])
         if normalize_advantages:
             advantages -= np.mean(advantages)
             advantages /= np.std(advantages)
 
-        if stack_size == -1:
-            starts = np.concatenate([np_one_hot(len(s),0) for s in self.states]).astype('int') # shape: (#pairs)
-            data = [{
-                'states': np.concatenate([[s] for s in self.states], axis=1).astype('float32'), # shape: (1,#pairs,#variables)
-                'probas': np.array(self.probas, dtype=np.float32), # shape: (#states)
-                'values': np.array([[val] for val in self.rewards], dtype=np.float32), # shape: (#states,1)
-                'actions': np.concatenate([np_one_hot(len(self.states[k]), self.actions[k])
-                                           for k in range(self.start)]).astype('bool'), # shape: (#pairs)
-                'advants': np.array(advantages, dtype=np.float32), # shape: (#states)
-                'starts' : starts,
-                'seg_id' : np.cumsum(starts)-1, # shape: (#pairs)
-            }]
+        if self.states and self.states[0].ndim == 2:
+
+            # filter out any states with only one action available
+            indices = [i for i in range(len(self.states[:self.start])) if self.states[i].shape[0] != 1]
+            states = [self.states[i].astype(np.int32) for i in indices]
+            actions = actions[indices]
+            logprobs = logprobs[indices]
+            advantages = advantages[indices]
+            values = values[indices]
+
+            if sort:
+                indices = np.argsort([s.shape[0] for s in states])
+                states = [states[i] for i in indices]
+                actions = actions[indices]
+                logprobs = logprobs[indices]
+                advantages = advantages[indices]
+                values = values[indices]
+
+            dataset = tf.data.Dataset.zip((
+                tf.data.Dataset.from_generator(lambda: states, tf.int32),
+                tf.data.Dataset.from_tensor_slices(actions),
+                tf.data.Dataset.from_tensor_slices(logprobs),
+                tf.data.Dataset.from_tensor_slices(advantages),
+                tf.data.Dataset.from_tensor_slices(values),
+            ))
+            if batch_size is None:
+                batch_size = len(states)
+            padded_shapes = ([None, self.states[0].shape[1]], [], [], [], [])
+            padding_values = (tf.constant(-1, dtype=tf.int32),
+                              tf.constant(0, dtype=tf.int32),
+                              tf.constant(0.0, dtype=tf.float32),
+                              tf.constant(0.0, dtype=tf.float32),
+                              tf.constant(0.0, dtype=tf.float32))
+            dataset = dataset.padded_batch(batch_size,
+                                           padded_shapes=padded_shapes,
+                                           padding_values=padding_values,
+                                           drop_remainder=drop_remainder)
+
         else:
-            # This loop decides how to assign states to batches. Each state is assigned
-            # greedily to the first batch which has room
-            batch_id = self.start * [-1]
-            space_left = [stack_size]
-            for i in range(self.start):
-                if len(self.states[i]) > stack_size:
-                    continue
-                else:
-                    where_fits = [len(self.states[i]) <= x for x in space_left]
-                    if True in where_fits:
-                        idx = where_fits.index(True)
-                        batch_id[i] = idx
-                        space_left[idx] -= len(self.states[i])
-                    else:
-                        batch_id[i] = len(space_left)
-                        space_left.append(stack_size - len(self.states[i]))
+            states = np.array(self.states[:self.start], dtype=np.float32)
+            dataset = tf.data.Dataset.zip((
+                tf.data.Dataset.from_tensor_slices(states),
+                tf.data.Dataset.from_tensor_slices(actions),
+                tf.data.Dataset.from_tensor_slices(logprobs),
+                tf.data.Dataset.from_tensor_slices(advantages),
+                tf.data.Dataset.from_tensor_slices(values),
+            ))
+            if batch_size is None:
+                batch_size = len(states)
+            dataset = dataset.batch(batch_size, drop_remainder=drop_remainder)
 
-            # now we stack the datapoints in each batch, and pad by 0's if that option is selected
-            data = []
-            for idx in range(len(space_left)):
-                starts = np.concatenate([np_one_hot(len(self.states[k]),0)
-                                         for k in range(self.start) if batch_id[k]==idx]) # shape: (#pairs)
-                if pad:
-                    starts = np.pad(starts,(0,space_left[idx]),constant_values=(1,)) # shape: (stack_size)
-                data.append({
-                    'states': np.concatenate([[val] for k, val in enumerate(self.states) if batch_id[k] == idx], 
-                                             axis=1).astype('float32'), # shape: (1,#pairs,#variables)
-                    'probas': np.array([val for k, val in enumerate(self.probas) if batch_id[k] == idx], dtype=np.float32), # shape: (#states)
-                    'values': np.array([[val] for k, val in enumerate(self.rewards) if batch_id[k] == idx], dtype=np.float32), # shape: (#states,1)
-                    'actions': np.concatenate([np_one_hot(len(self.states[k]), self.actions[k])
-                                               for k in range(self.start)
-                                               if batch_id[k] == idx]).astype('bool'), # shape: (#pairs)
-                    'advants': np.array([val for k, val in enumerate(advantages) if batch_id[k] == idx], dtype=np.float32), # shape: (#states)
-                    'starts' : starts,
-                    'seg_id' : np.cumsum(starts)-1,
-                })
-                if pad:
-                    data[-1]['states'] = np.pad(data[-1]['states'],((0,0),(0,space_left[idx]),(0,0)),constant_values=(0.,)) # shape: (1,stack_size,#variables)
-                    data[-1]['actions'] = np.pad(data[-1]['actions'],(0,space_left[idx]),constant_values=(True,)) # shape: (stack_size)
-        return data
-
-    def get(self, method='batched', normalize_advantages=True, stack_size=-1, pad=False):
-        """Return training data.
-
-        Parameters
-        ----------
-        method : {'batched', 'stacked'}, optional
-            The method for aggregating the training data.
-        normalize_advantages: bool, optional
-            Whether to normalize the computed advantages.
-        stack_size : integer, optional
-            The number of pairs to include in each batch if stacking.
-            If stack_size==-1, all pairs are included in a single batch.
-        pad : bool, optional
-            Whether to pad batches if stacking.
-
-        Returns
-        -------
-        data : dict or list
-            The training data.
-
-        """
-        if method == 'batched':
-            return self.get_batched(normalize_advantages=normalize_advantages)
-        elif method == 'stacked':
-            return self.get_stacked(normalize_advantages=normalize_advantages, stack_size=stack_size, pad=pad)
+        return dataset
 
     def __len__(self):
         return len(self.states)
@@ -326,15 +250,14 @@ class TrajectoryBuffer:
 
 def _merge_buffers(bufferlist):
     output = bufferlist[0]
-    assert output.start==output.end, "Must apply self.finish() before merging buffers"
+    assert output.start == output.end, "Must apply self.finish() before merging buffers"
     for b in bufferlist[1:]:
-        assert b.start==b.end, "Must apply self.finish() before merging buffers"
+        assert b.start == b.end, "Must apply self.finish() before merging buffers"
         output.states += b.states
-        output.probas += b.probas
-        output.values += b.values
-        output.pred_values += b.pred_values
         output.actions += b.actions
         output.rewards += b.rewards
+        output.logprobs += b.logprobs
+        output.values += b.values
     output.end = len(output.states)
     output.start = output.end
     return output
@@ -350,7 +273,7 @@ def print_status_bar(i, epochs, history, verbose=1):
 
 class Agent:
     """Abstract base class for policy gradient agents.
-    
+
     All functionality for policy gradient is implemented in this
     class. Derived classes must define the property `policy_loss`
     which is used to train the policy.
@@ -373,10 +296,8 @@ class Agent:
         The discount rate.
     lam : float, optional
         The parameter for generalized advantage estimation.
-    normalize : bool, optional
+    normalize_advantages : bool, optional
         Whether to normalize advantages.
-    action_dim_fn : function, optional
-        The function that maps state shape to action dimension.
     kld_limit : float, optional
         The limit on KL divergence for early stopping policy updates.
     """
@@ -385,7 +306,7 @@ class Agent:
                  policy_network, policy_lr=1e-4, policy_updates=1,
                  value_network=None, value_lr=1e-3, value_updates=25,
                  gam=0.99, lam=0.97, normalize_advantages=True, eps=0.2,
-                 action_dim_fn=lambda s: s[0], kld_limit=0.01):
+                 kld_limit=0.01):
         self.policy_model = policy_network
         self.policy_loss = NotImplementedError
         self.policy_optimizer = tf.keras.optimizers.Adam(lr=policy_lr)
@@ -400,28 +321,28 @@ class Agent:
         self.gam = gam
         self.buffer = TrajectoryBuffer(gam=gam, lam=lam)
         self.normalize_advantages = normalize_advantages
-        self.action_dim_fn = action_dim_fn
         self.kld_limit = kld_limit
 
-    def act(self, state, greedy=False, return_probs=False):
+    def act(self, state, return_logprob=False):
         """Return an action for the given state using the policy model.
 
         Parameters
         ----------
         state : np.array
             The state of the environment.
-        greedy : bool, optional
-            Whether to sample or pick the action with max probability.
-        return_probs : bool, optional
-            Whether to return the probability vector.
-        """
-        probs = self.policy_model.predict(state[np.newaxis])[0]
-        action = np.argmax(probs) if greedy else np.random.choice(len(probs), p=probs)
-        return (action, probs[action]) if return_probs else action
+        return_logp : bool, optional
+            Whether to return the log probability of choosing the chosen action.
 
-    def train(self, env, episodes=10, epochs=1, max_episode_length=None, stacked=False,
-              stack_size=-1, pad=False, verbose=0, save_freq=1, logdir=None, test_env=None,
-              parallel=True):
+        """
+        logpi = self.policy_model(state[np.newaxis])
+        action = tf.random.categorical(logpi, 1)[0, 0]
+        if return_logprob:
+            return action.numpy(), logpi[:, action][0].numpy()
+        else:
+            return action.numpy()
+
+    def train(self, env, episodes=10, epochs=1, max_episode_length=None, verbose=0, save_freq=1,
+              logdir=None, parallel=True, batch_size=64):
         """Train the agent on env.
 
         Parameters
@@ -434,20 +355,16 @@ class Agent:
             The number of epochs to train.
         max_episode_length : int, optional
             The maximum number of steps of interaction in an episode.
-        stacked : bool, optional
-            Whether to use stacking of training data.
-        stack_size : int, optional
-            Size of stacks in stacked training (-1 means one big stack).
-        pad : bool, optional
-            Whether to pad stacks in stacked training.
         verbose : int, optional
             How much information to print to the user.
         save_freq : int, optional
             How often to save the model weights, measured in epochs.
         logdir : str, optional
             The directory to store Tensorboard logs and model weights.
-        test_env : environment, optional
-            The environment to report performance on.
+        parallel : bool, optional
+            Whether to run parallel rollouts.
+        batch_size : int or None, optional
+            The batch sizes for training (None indicates one large batch).
 
         Returns
         -------
@@ -467,30 +384,17 @@ class Agent:
                    'policy_updates': np.zeros(epochs),
                    'delta_policy_loss': np.zeros(epochs),
                    'policy_ent': np.zeros(epochs),
-                   'policy_kld': np.zeros(epochs),
-                   'mean_value': np.zeros(epochs),
-                   'mean_value_error': np.zeros(epochs)}
+                   'policy_kld': np.zeros(epochs)}
 
         for i in range(epochs):
             self.buffer.clear()
-            return_history = self.run_episodes(env, episodes=episodes, max_episode_length=max_episode_length,
-                                               store=True, parallel=parallel)
-            if stacked:
-                batches = self.buffer.get(method='stacked', stack_size=stack_size, pad=pad,
-                                          normalize_advantages=self.normalize_advantages)
-            else:
-                batches = self.buffer.get(method='batched',
-                                          normalize_advantages=self.normalize_advantages)
-            policy_history = self._fit_policy_model(batches, epochs=self.policy_updates, stacked=stacked)
-            value_history = self._fit_value_model(batches, epochs=self.value_updates, stacked=stacked)
-
-            if test_env is not None:
-                return_history = self.run_episodes(test_env, episodes=episodes, max_episode_length=max_episode_length,
-                                                   store=False, parallel=parallel)
-                try:
-                    env.env.ideal_gen.update()  # for binned training using FromDirectoryIdealGenerator
-                except AttributeError:
-                    pass
+            return_history = self.run_episodes(
+                env, episodes=episodes, max_episode_length=max_episode_length,
+                store=True, parallel=parallel
+            )
+            dataset = self.buffer.get(normalize_advantages=self.normalize_advantages, batch_size=batch_size)
+            policy_history = self._fit_policy_model(dataset, epochs=self.policy_updates)
+            value_history = self._fit_value_model(dataset, epochs=self.value_updates)
 
             history['mean_returns'][i] = np.mean(return_history['returns'])
             history['min_returns'][i] = np.min(return_history['returns'])
@@ -504,9 +408,6 @@ class Agent:
             history['delta_policy_loss'][i] = policy_history['loss'][-1] - policy_history['loss'][0]
             history['policy_ent'][i] = policy_history['ent'][-1]
             history['policy_kld'][i] = policy_history['kld'][-1]
-            history['mean_value'][i] = np.mean(np.vstack([data['pred_values'] for shape, data in batches.items()]))
-            history['mean_value_error'][i] = np.mean(np.square(np.vstack([data['pred_values'] - data['values']
-                                                                         for shape, data in batches.items()])))
 
             if logdir is not None and (i+1) % save_freq == 0:
                 self.save_policy_weights(logdir + "/policy-" + str(i+1) + ".h5")
@@ -527,8 +428,6 @@ class Agent:
                     tf.summary.scalar('delta_policy_loss', history['delta_policy_loss'][i], step=i)
                     tf.summary.scalar('policy_ent', history['policy_ent'][i], step=i)
                     tf.summary.scalar('policy_kld', history['policy_kld'][i], step=i)
-                    tf.summary.scalar('mean_value', history['mean_value'][i], step=i)
-                    tf.summary.scalar('mean_value_error', history['mean_value_error'][i], step=i)
                 tb_writer.flush()
             if verbose > 0:
                 print_status_bar(i, epochs, history, verbose=verbose)
@@ -536,7 +435,7 @@ class Agent:
         return history
 
 
-    def run_episode(self, env, max_episode_length=None, greedy=False, buffer=None):
+    def run_episode(self, env, max_episode_length=None, buffer=None):
         """Run an episode and return total reward and episode length.
 
         Parameters
@@ -545,8 +444,6 @@ class Agent:
             The environment to interact with.
         max_episode_length : int, optional
             The maximum number of interactions before the episode ends.
-        greedy : bool, optional
-            Whether to choose the maximum probability or sample.
         buffer : TrajectoryBuffer object, optional
             If included, it will store the whole rollout in the given buffer.
 
@@ -562,7 +459,9 @@ class Agent:
         episode_length = 0
         total_reward = 0
         while not done:
-            action, prob = self.act(state, return_probs=True)
+            if state.dtype == np.float64:
+                state = state.astype(np.float32)
+            action, logprob = self.act(state, return_logprob=True)
             if self.value_model is None:
                 value = 0
             elif hasattr(self.value_model, 'agent'):  # this is an AgentBaseline
@@ -571,10 +470,10 @@ class Agent:
                 else:  # with a PGAgent/PPOAgent
                     value = self.value_model.predict(env)
             else:
-                value = self.value_model.predict(state[np.newaxis])[0][0]
+                value = self.value_model(state[np.newaxis])[0][0]
             next_state, reward, done, _ = env.step(action)
             if buffer is not None:
-                buffer.store(state, prob, value, action, reward)
+                buffer.store(state, action, reward, logprob, value)
             episode_length += 1
             total_reward += reward
             if max_episode_length is not None and episode_length > max_episode_length:
@@ -584,15 +483,15 @@ class Agent:
             buffer.finish()
         return total_reward, episode_length
 
-    def _parallel_run_episode(self, env, max_episode_length, greedy, random_seed, output, packet_size):
+    def _parallel_run_episode(self, env, max_episode_length, random_seed, output, packet_size):
         np.random.seed(random_seed)
         buff = TrajectoryBuffer(gam=self.gam, lam=self.lam)
-        results =[]
+        results = []
         for i in range(packet_size):
-            results.append(self.run_episode(env, max_episode_length=max_episode_length, greedy=greedy, buffer=buff))
+            results.append(self.run_episode(env, max_episode_length=max_episode_length, buffer=buff))
         output.put((results,buff))
 
-    def run_episodes(self, env, episodes=100, max_episode_length=None, greedy=False, store=False, parallel=True):
+    def run_episodes(self, env, episodes=100, max_episode_length=None, store=False, parallel=True):
         """Run several episodes, store interaction in buffer, and return history.
 
         Parameters
@@ -603,10 +502,9 @@ class Agent:
             The number of episodes to perform.
         max_episode_length : int, optional
             The maximum number of steps before the episode is terminated.
-        greedy: bool, optional
-            Whether to choose the maximum probability or sample.
-        store: bool, optional
-            Whether or not to store the rollout in self.buffer
+        store : bool, optional
+            Whether or not to store the rollout in self.buffer.
+        parallel : bool, optional
 
         Returns
         -------
@@ -620,76 +518,57 @@ class Agent:
             output = mp.Queue()
             assert episodes % PACKET_SIZE == 0, "PACKET_SIZE must divide the number of episodes"
             num_processes = int(episodes / PACKET_SIZE)
-            processes = [mp.Process(target = self._parallel_run_episode,args=(env, max_episode_length, greedy, seed, output, PACKET_SIZE)) for seed in np.random.randint(0,4294967295,num_processes)]
+            processes = [mp.Process(target=self._parallel_run_episode,
+                                    args=(env, max_episode_length, seed, output, PACKET_SIZE))
+                         for seed in np.random.randint(0, 4294967295, num_processes)]
             for p in processes:
                 p.start()
             results = [output.get() for p in processes]
             for p in processes:
                 p.join()
-            self.buffer=_merge_buffers([b for (_,b) in results])
+            self.buffer=_merge_buffers([b for (_, b) in results])
             returns = [x for (t,_) in results for x in t]
             for i in range(episodes):
-                (history['returns'][i],history['lengths'][i]) = returns[i]
+                (history['returns'][i], history['lengths'][i]) = returns[i]
         else:
             for i in range(episodes):
-                R, L = self.run_episode(env,max_episode_length=max_episode_length, greedy=greedy, buffer=self.buffer)
+                R, L = self.run_episode(env, max_episode_length=max_episode_length, buffer=self.buffer)
                 history['returns'][i] = R
                 history['lengths'][i] = L
 
         return history
 
-    def _fit_policy_model(self, batches, epochs=1, stacked=False):
-        """Fit policy model with one gradient update per epoch."""
+    def _fit_policy_model(self, dataset, epochs=1):
+        """Fit policy model using data from dataset."""
         history = {'loss': [], 'kld': [], 'ent': []}
-        if stacked:
-            for epoch in range(epochs):
-                for datum in batches:
-                    with tf.GradientTape() as tape:
-                        logits = tf.reshape(self.policy_model.get_logits(datum['states'])[0], [-1]) # Here we drop the batch dimension. We assume batch_dim=1
-                        logits = logits - tf.reduce_mean(logits) # for numerical stability
-                        exp_logits = tf.math.exp(logits)
-                        unnormalized = tf.boolean_mask(exp_logits, datum['actions'])
-                        new_prob = unnormalized / tf.math.segment_sum(exp_logits, datum['seg_id'])
-                        loss = tf.reduce_mean(self.policy_loss(new_prob, datum['probas'], datum['advants']))
-                        kld = tf.reduce_mean(tf.math.log(datum['probas'] / new_prob))
-                        ent = tf.reduce_mean(-tf.math.log(new_prob))
-                    varis = self.policy_model.trainable_variables
-                    grads = tape.gradient(loss, varis)
-                    self.policy_optimizer.apply_gradients(zip(grads, varis))
-                # these are just the values from the last batch in batches
-                history['loss'].append(loss)
-                history['kld'].append(kld)
-                history['ent'].append(ent)
-                if self.kld_limit is not None and kld > self.kld_limit:
-                    break
-            self.policy_model.get_weights()  # for fast wrappers
-        else:
-            for epoch in range(epochs):
-                with tf.GradientTape() as tape:
-                    losses, klds, ents = [], [], []
-                    for shape, data in batches.items():
-                        action_dim = self.action_dim_fn(shape)
-                        if action_dim == 1:
-                            continue
-                        probs = self.policy_model(data['states'])
-                        new_prob = tf.reduce_sum(tf.one_hot(data['actions'], action_dim) * probs, axis=1)
-                        losses.append(self.policy_loss(new_prob, data['probas'], data['advants']))
-                        klds.append(tf.math.log(data['probas'] / new_prob))
-                        ents.append(-tf.math.log(new_prob))
-                    loss = tf.reduce_mean(tf.concat(losses, axis=0))
-                    kld = tf.reduce_mean(tf.concat(klds, axis=0))
-                    ent = tf.reduce_mean(tf.concat(ents, axis=0))
-                varis = self.policy_model.trainable_variables
-                grads = tape.gradient(loss, varis)
-                self.policy_optimizer.apply_gradients(zip(grads, varis))
-                history['loss'].append(loss)
-                history['kld'].append(kld)
-                history['ent'].append(ent)
-                if self.kld_limit is not None and kld > self.kld_limit:
-                    break
-            self.policy_model.get_weights()  # for fast wrappers
-        history = {k: np.array(v) for k, v in history.items()}
-        return history
+        for epoch in range(epochs):
+            loss, kld, ent, batches = 0, 0, 0, 0
+            for states, actions, logprobs, advantages, _ in dataset:
+                batch_loss, batch_kld, batch_ent = self._fit_policy_model_step(states, actions, logprobs, advantages)
+                loss += batch_loss
+                kld += batch_kld
+                ent += batch_ent
+                batches += 1
+            history['loss'].append(loss / batches)
+            history['kld'].append(kld / batches)
+            history['ent'].append(ent / batches)
+            if self.kld_limit is not None and kld > self.kld_limit:
+                break
+        return {k: np.array(v) for k, v in history.items()}
+
+    @tf.function
+    def _fit_policy_model_step(self, states, actions, logprobs, advantages):
+        """Fit policy model on one batch of data."""
+        with tf.GradientTape() as tape:
+            logpis = self.policy_model(states)
+            new_logprobs = tf.reduce_sum(tf.one_hot(actions, logpis.shape[1]) * logpis, axis=1)
+            loss = tf.reduce_mean(self.policy_loss(new_logprobs, logprobs, advantages))
+            kld = tf.reduce_mean(logprobs - new_logprobs)
+            ent = -tf.reduce_mean(new_logprobs)
+        varis = self.policy_model.trainable_variables
+        grads = tape.gradient(loss, varis)
+        self.policy_optimizer.apply_gradients(zip(grads, varis))
+        return loss, kld, ent
 
     def load_policy_weights(self, filename):
         """Load weights from filename into the policy model."""
@@ -699,25 +578,30 @@ class Agent:
         """Save the current weights in the policy model to filename."""
         self.policy_model.save_weights(filename)
 
-    def _fit_value_model(self, batches, epochs=1, stacked=False):
-        """Fit value model with one gradient update per epoch."""
-        if stacked or self.value_model is None or hasattr(self.value_model, 'agent'):
+    def _fit_value_model(self, dataset, epochs=1):
+        """Fit value model using data from dataset."""
+        if self.value_model is None or hasattr(self.value_model, 'agent'):
             epochs = 0
-        history = {'loss': np.zeros(epochs)}
+        history = {'loss': []}
         for epoch in range(epochs):
-            with tf.GradientTape() as tape:
-                losses = []
-                for shape, data in batches.items():
-                    values = self.value_model(data['states'])
-                    losses.append(self.value_loss(values, data['values']))
-                loss = tf.reduce_mean(tf.concat(losses, axis=0))
-            varis = self.value_model.trainable_variables
-            grads = tape.gradient(loss, varis)
-            self.value_optimizer.apply_gradients(zip(grads, varis))
-            history['loss'][epoch] = loss
-        if self.value_model is not None:
-            self.value_model.get_weights()  # for fast wrappers
-        return history
+            loss, batches = 0, 0
+            for states, _, _, _, values in dataset:
+                batch_loss = self._fit_value_model_step(states, values)
+                loss += batch_loss
+                batches += 1
+            history['loss'].append(loss / batches)
+        return {k: np.array(v) for k, v in history.items()}
+
+    @tf.function
+    def _fit_value_model_step(self, states, values):
+        """Fit value model on one batch of data."""
+        with tf.GradientTape() as tape:
+            pred_values = self.value_model(states)
+            loss = tf.reduce_mean(self.value_loss(pred_values, values))
+        varis = self.value_model.trainable_variables
+        grads = tape.gradient(loss, varis)
+        self.value_optimizer.apply_gradients(zip(grads, varis))
+        return loss
 
     def load_value_weights(self, filename):
         """Load weights from filename into the value model."""
@@ -731,15 +615,15 @@ class Agent:
 
 
 @tf.function(experimental_relax_shapes=True)
-def pg_surrogate_loss(new_prob, old_prob, advantages):
+def pg_surrogate_loss(new_logps, old_logps, advantages):
     """Return loss with gradient for policy gradient.
 
     Parameters
     ----------
-    new_probs : Tensor (batch_dim,)
+    new_logps : Tensor (batch_dim,)
         The output of the current model for the chosen action.
-    old_prob : Tensor (batch_dim,)
-        The previous probability of the chosen action.
+    old_logps : Tensor (batch_dim,)
+        The previous logged probability of the chosen action.
     advantages : Tensor (batch_dim,)
         The computed advantages.
 
@@ -749,17 +633,17 @@ def pg_surrogate_loss(new_prob, old_prob, advantages):
         The loss for each interaction.
 
     """
-    return -tf.math.log(new_prob) * advantages
+    return -new_logps * advantages
 
 
 class PGAgent(Agent):
     """A policy gradient agent.
-    
+
     Parameters
     ----------
     policy_network : network
         The network for the policy model.
-    
+
     """
 
     def __init__(self, policy_network, **kwargs):
@@ -777,15 +661,15 @@ def ppo_surrogate_loss(eps=0.2):
 
     """
     @tf.function(experimental_relax_shapes=True)
-    def loss(new_prob, old_prob, advantages):
+    def loss(new_logps, old_logps, advantages):
         """Return loss with gradient for proximal policy optimization.
 
         Parameters
         ----------
-        new_probs : Tensor (batch_dim,)
+        new_logps : Tensor (batch_dim,)
             The output of the current model for the chosen action.
-        old_probs : Tensor (batch_dim,)
-            The old model probability for the chosen action.
+        old_logps : Tensor (batch_dim,)
+            The previous logged probability for the chosen action.
         advantages : Tensor (batch_dim,)
             The computed advantages.
 
@@ -795,7 +679,7 @@ def ppo_surrogate_loss(eps=0.2):
             The loss for each interaction.
         """
         min_adv = tf.where(advantages > 0, (1 + eps) * advantages, (1 - eps) * advantages)
-        return -tf.minimum(new_prob / old_prob * advantages, min_adv)
+        return -tf.minimum(tf.exp(new_logps - old_logps) * advantages, min_adv)
     return loss
 
 
@@ -808,7 +692,7 @@ class PPOAgent(Agent):
         The network for the policy model.
     eps : float, optional
         The clip ratio for PPO.
-        
+
     """
 
     def __init__(self, policy_network, eps=0.2, **kwargs):

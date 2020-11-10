@@ -257,9 +257,9 @@ degreeDistribution(ZZ, ZZ) := List => opts -> (n, d) -> (
 
     p := if opts.Constants then 1 else 0;
     D := if opts.Degrees === "Uniform" then (
-             {p} | toList(d:1)
-         ) else if opts.Degrees === "Weighted" then (
              {p} | for i from 1 to d list binomial(n + i - 1, n - 1)
+         ) else if opts.Degrees === "Weighted" then (
+             {p} | toList(d:1)
          ) else if opts.Degrees === "Maximum" then (
              toList(d:0) | {1}
          );
@@ -679,11 +679,11 @@ assert(I == ideal(R_0 + R_1 + R_2, R_0*R_1 + R_1*R_2 + R_2*R_0, R_0*R_1*R_2 - 1)
 TEST ///
 R = ZZ/32003[x,y,z]
 assert(degreeDistribution(R, 1) == {0, 1})
-assert(degreeDistribution(R, 1, Constants => true) == {0.5, 0.5})
-assert(degreeDistribution(R, 1, Constants => true, Degrees => "Weighted") == {0.25, 0.75})
-assert(degreeDistribution(R, 5) == {0, .2, .2, .2, .2, .2})
-assert(degreeDistribution(R, 5, Constants => true) == {1, 1, 1, 1, 1, 1} / 6.0)
-assert(degreeDistribution(R, 5, Constants => true, Degrees => "Weighted") ==  {1, 3, 6, 10, 15, 21} / 56.0)
+assert(degreeDistribution(R, 1, Constants => true, Degrees => "Weighted") == {0.5, 0.5})
+assert(degreeDistribution(R, 1, Constants => true, Degrees => "Uniform") == {0.25, 0.75})
+assert(degreeDistribution(R, 5, Constants => false, Degrees => "Weighted") == {0, .2, .2, .2, .2, .2})
+assert(degreeDistribution(R, 5, Constants => true, Degrees => "Weighted") == {1, 1, 1, 1, 1, 1} / 6.0)
+assert(degreeDistribution(R, 5, Constants => true, Degrees => "Uniform") ==  {1, 3, 6, 10, 15, 21} / 56.0)
 ///
 
 end

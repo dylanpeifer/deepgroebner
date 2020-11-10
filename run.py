@@ -10,9 +10,9 @@ import gym
 import sympy as sp
 
 from deepgroebner.buchberger import BuchbergerEnv, LeadMonomialsWrapper, BuchbergerAgent
-from deepgroebner.ideals import RandomBinomialIdealGenerator, FromDirectoryIdealGenerator, MixedRandomBinomialIdealGenerator, RandomIdealGenerator
+from deepgroebner.ideals import RandomBinomialIdealGenerator, FromDirectoryIdealGenerator, RandomIdealGenerator
 from deepgroebner.pg import PGAgent, PPOAgent
-from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, PairsLeftBaseline, AgentBaseline, ValueRNN
+from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, PairsLeftBaseline, AgentBaseline
 
 def make_parser():
     """Return the command line argument parser for this script."""
@@ -91,6 +91,10 @@ def make_parser():
                         help='the clip ratio for PPO')
 
     # policy model
+    parser.add_argument('--policy_model',
+                        choices=['mlp', 'pmlp'],
+                        default='pmlp',
+                        help='the policy network type')
     parser.add_argument('--policy_hl',
                         type=int, nargs='*',
                         default=[128],
@@ -114,7 +118,7 @@ def make_parser():
 
     # value model
     parser.add_argument('--value_model',
-                        choices=['none', 'mlp', 'pairsleft', 'agent', 'rnn', 'degree'],
+                        choices=['none', 'mlp', 'pairsleft', 'agent', 'degree'],
                         default='none',
                         help='the value network type')
     parser.add_argument('--value_hl',
@@ -155,6 +159,10 @@ def make_parser():
                         type=lambda x: int(x) if x.lower() != 'none' else None,
                         default=500,
                         help='the max number of interactions per episode')
+    parser.add_argument('--batch_size',
+                        type=lambda x: int(x) if x.lower() != 'none' else None,
+                        default=64,
+                        help='the size of batches in training')
     parser.add_argument('--verbose',
                         type=int,
                         default=0,
@@ -167,26 +175,14 @@ def make_parser():
                         type=str,
                         default='data/runs',
                         help='the base directory for training runs')
-    parser.add_argument('--binned',
-                        type=lambda x: str(x).lower() == 'true',
-                        default=False,
-                        help='whether to train on binned ideals')
-    parser.add_argument('--stacked',
-                        type=lambda x: str(x).lower() == 'true',
-                        default=False,
-                        help='whether to use stacking')
-    parser.add_argument('--stack_size',
-                        type=int,
-                        default=-1,
-                        help='the stack batch size for stacking')
-    parser.add_argument('--pad',
-                        type=lambda x: str(x).lower() == 'true',
-                        default=False,
-                        help='whether to pad stacks')
     parser.add_argument('--parallel',
                         type=lambda x: str(x).lower() == 'true',
                         default=True,
                         help='whether to parallelize rollouts')
+    parser.add_argument('--use_gpu',
+                        type=lambda x: str(x).lower() == 'true',
+                        default=True,
+                        help='whether to use a GPU if available')
 
     return parser
 
@@ -195,17 +191,10 @@ def make_env(args):
     """Return the training environment for this run."""
     if args.environment in ['CartPole-v0', 'CartPole-v1', 'LunarLander-v2']:
         env = gym.make(args.environment)
-    elif args.binned:
-        dirname = "".join([
-            'data/bins/{0}-{1}-{2}'.format(args.variables, args.degree, args.generators),
-            '-consts' if args.constants else "",
-            '-' + args.degree_distribution,
-            '-homog' if args.homogeneous else "",
-            '-pure' if args.pure else "",
-        ])
-        ring = sp.xring('x:' + str(args.variables), sp.FF(32003), 'grevlex')[0]
-        ideal_gen = FromDirectoryIdealGenerator(dirname, ring)
-        env = BuchbergerEnv(ideal_gen, elimination=args.elimination, rewards=args.rewards) 
+    elif args.environment == "RandomPolynomialIdeal":
+        ideal_gen = RandomIdealGenerator(args.variables, args.degree, args.generators, args.l,
+                                         constants=args.constants, degrees=args.degree_distribution)
+        env = BuchbergerEnv(ideal_gen, elimination=args.elimination, rewards=args.rewards)
         env = LeadMonomialsWrapper(env, k=args.k)
     elif args.environment == "MixedRandomBinomialIdeal":
         ideal_gen = MixedRandomBinomialIdealGenerator(args.variables,
@@ -215,30 +204,12 @@ def make_env(args):
                                                       homogeneous=args.homogeneous, pure=args.pure)
         env = BuchbergerEnv(ideal_gen, elimination=args.elimination, rewards=args.rewards)
         env = LeadMonomialsWrapper(env, k=args.k)
-    elif args.environment == "RandomPolynomialIdeal":
-        ideal_gen = RandomIdealGenerator(args.variables, args.degree, args.generators, args.l,
-                                         constants=args.constants, degrees=args.degree_distribution)
-        env = BuchbergerEnv(ideal_gen, elimination=args.elimination, rewards=args.rewards)
-        env = LeadMonomialsWrapper(env, k=args.k)
     else:
         ideal_gen = RandomBinomialIdealGenerator(args.variables, args.degree, args.generators,
                                                  constants=args.constants, degrees=args.degree_distribution,
                                                  homogeneous=args.homogeneous, pure=args.pure)
         env = BuchbergerEnv(ideal_gen, elimination=args.elimination, rewards=args.rewards)
         env = LeadMonomialsWrapper(env, k=args.k)
-    return env
-
-
-def make_test_env(args):
-    """Return the test environment for this run."""
-    if args.environment == 'RandomBinomialIdeal' and args.binned:
-        ideal_gen = RandomBinomialIdealGenerator(args.variables, args.degree, args.generators,
-                                                 constants=args.constants, degrees=args.degree_distribution,
-                                                 homogeneous=args.homogeneous, pure=args.pure)
-        env = BuchbergerEnv(ideal_gen, elimination=args.elimination, rewards=args.rewards)
-        env = LeadMonomialsWrapper(env, k=args.k)
-    else:
-        env = None
     return env
 
 
@@ -252,9 +223,9 @@ def make_policy_network(args):
             'RandomPolynomialIdeal': (2 * args.variables * args.k, 1)}[args.environment]
 
     if args.environment in ['RandomBinomialIdeal', 'MixedRandomBinomialIdeal', 'RandomPolynomialIdeal']:
-        policy_network = ParallelMultilayerPerceptron(dims[0], args.policy_hl)
+        policy_network = ParallelMultilayerPerceptron(args.policy_hl)
     else:
-        policy_network = MultilayerPerceptron(dims[0], args.policy_hl, dims[1])
+        policy_network = MultilayerPerceptron(dims[1], args.policy_hl)
 
     if args.policy_weights != "":
         policy_network.load_weights(args.policy_weights)
@@ -275,7 +246,7 @@ def make_value_network(args):
         if args.value_model == 'none':
             value_network = None
         else:
-            value_network = MultilayerPerceptron(dims[0], args.value_hl, 1, final_activation='linear')
+            value_network = MultilayerPerceptron(1, args.value_hl, final_activation='linear')
     else:
         if args.value_model == 'none':
             value_network = None
@@ -284,14 +255,9 @@ def make_value_network(args):
         elif args.value_model == 'degree':
             value_network = AgentBaseline(BuchbergerAgent('degree'), gam=args.gam)
         elif args.value_model == 'agent':
-            agent = PPOAgent(ParallelMultilayerPerceptron(dims[0], args.policy_hl))
+            agent = PPOAgent(ParallelMultilayerPerceptron(args.policy_hl))
             agent.load_policy_weights(args.value_weights)
             value_network = AgentBaseline(agent, gam=args.gam)
-        elif args.value_model == 'rnn' and args.value_weights != "":
-            value_network = ValueRNN(dims[0], args.value_hl[0])
-            value_network.load_weights(args.value_weights)
-        elif args.value_model == 'rnn':
-            value_network = ValueRNN(dims[0], args.value_hl[0])
 
     return value_network
 
@@ -305,24 +271,17 @@ def make_agent(args):
             'MixedRandomBinomialIdeal': (2 * args.variables * args.k, 1),
             'RandomPolynomialIdeal': (2 * args.variables * args.k, 1)}[args.environment]
 
-    if args.environment in ['RandomBinomialIdeal', 'MixedRandomBinomialIdeal', 'RandomPolynomialIdeal']:
-        action_dim_fn = lambda s: s[0]
-    else:
-        action_dim_fn = lambda s: dims[1]
-
     policy_network = make_policy_network(args)
     value_network = make_value_network(args)
 
     if args.algorithm == 'pg':
         agent = PGAgent(policy_network=policy_network, policy_lr=args.policy_lr, policy_updates=args.policy_updates,
                         value_network=value_network, value_lr=args.value_lr, value_updates=args.value_updates,
-                        gam=args.gam, lam=args.lam, action_dim_fn=action_dim_fn,
-                        kld_limit=args.policy_kld_limit)
+                        gam=args.gam, lam=args.lam, kld_limit=args.policy_kld_limit)
     else:
         agent = PPOAgent(policy_network=policy_network, policy_lr=args.policy_lr, policy_updates=args.policy_updates,
                          value_network=value_network, value_lr=args.value_lr, value_updates=args.value_updates,
-                         gam=args.gam, lam=args.lam, eps=args.eps, action_dim_fn=action_dim_fn,
-                         kld_limit=args.policy_kld_limit)
+                         gam=args.gam, lam=args.lam, eps=args.eps, kld_limit=args.policy_kld_limit)
     return agent
 
 
@@ -351,14 +310,14 @@ def save_args(logdir, args):
 
 if __name__ == '__main__':
     args = make_parser().parse_args()
+    if not args.use_gpu:
+        os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
     env = make_env(args)
-    test_env = make_test_env(args)
     agent = make_agent(args)
     logdir = make_logdir(args)
     save_args(logdir, args)
     print(logdir)
     agent.train(env, episodes=args.episodes, epochs=args.epochs,
-                stacked=args.stacked, stack_size=args.stack_size, pad=args.pad,
                 save_freq=args.save_freq, logdir=logdir, verbose=args.verbose,
-                max_episode_length=args.max_episode_length, test_env=test_env,
-                parallel=args.parallel)
+                max_episode_length=args.max_episode_length, parallel=args.parallel,
+                batch_size=args.batch_size)

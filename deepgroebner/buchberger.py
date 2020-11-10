@@ -287,7 +287,7 @@ def lead_monomials_vector(g, k=1, dtype=np.int):
     return np.array([next(it, (0,) * n) for _ in range(k)]).flatten().astype(dtype)
 
 
-class LeadMonomialsWrapper():
+class LeadMonomialsWrapper:
     """A wrapper for BuchbergerEnv with state a matrix of the pairs' lead monomials.
 
     Parameters
@@ -355,3 +355,30 @@ class LeadMonomialsWrapper():
         else:
             n = self.env.G[0].ring.ngens
             return np.zeros((0, 2*n*self.k), dtype=self.dtype)
+
+
+class LeadMonomialsAgent:
+    """An agent that follows standard selection strategies.
+
+    Parameters
+    ----------
+    selection : {'first', 'degree', 'random'}
+        The selection strategy used to pick pairs.
+    """
+
+    def __init__(self, selection='degree', k=1):
+        self.strategy = selection
+        self.k = k
+
+    def act(self, state):
+        if self.strategy == 'first':
+            return 0
+        elif self.strategy == 'degree':
+            n = state.shape[1] // (2 * self.k)
+            m = state.shape[1] // 2
+            return np.argmin(np.sum(np.maximum(state[:, :n], state[:, m:m+n]), axis=1))
+        elif self.strategy == 'random':
+            return np.random.choice(len(state))
+
+            
+
