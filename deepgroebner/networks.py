@@ -192,11 +192,18 @@ class SelfAttentionLayer(tf.keras.layers.Layer):
 
     Adapted from https://www.tensorflow.org/tutorials/text/transformer.
 
+    Parameters
+    ----------
+    dim : int
+        Positive integer dimension.
+    n_heads : int, optional
+        Positive integer number of heads (must divide `dim`).
+
     """
 
-    def __init__(self, dim, n_heads):
-        super(MultiHeadSelfAttentionLayer, self).__init__()
-        assert dim % n_heads == 0
+    def __init__(self, dim, n_heads=1):
+        super(SelfAttentionLayer, self).__init__()
+        assert dim % n_heads == 0, "number of heads must divide dimension"
         self.dim = dim
         self.n_heads = n_heads
         self.depth = dim // n_heads
@@ -204,93 +211,118 @@ class SelfAttentionLayer(tf.keras.layers.Layer):
         self.Wk = tf.keras.layers.Dense(dim)
         self.Wv = tf.keras.layers.Dense(dim)
         self.dense = tf.keras.layers.Dense(dim)
+        self.supports_masking = True
 
-    def call(self, X, mask=None):
-        batch_size = tf.shape(X)[0]
-        Q = self.split_heads(self.Wq(X), batch_size)
-        K = self.split_heads(self.Wk(X), batch_size)
-        V = self.split_heads(self.Wv(X), batch_size)
-        mask = mask[:, tf.newaxis, tf.newaxis, :]
-        scaled_attention, attention_weights = scaled_dot_product_attention(Q, K, V, mask=mask)
-        scaled_attention = tf.transpose(scaled_attention, perm=[0, 2, 1, 3])
-        concat_attention = tf.reshape(scaled_attention, (batch_size, -1, self.dim))
-        X = self.dense(concat_attention)
-        return X, attention_weights
-
-    def split_heads(self, X, batch_size):
-        X = tf.reshape(X, (batch_size, -1, self.n_heads, self.depth))
-        return tf.transpose(X, perm=[0, 2, 1, 3])
-
-    def scaled_dot_product_attention(Q, K, V, mask=None):
-        """Return calculated vector and attention weights.
+    def call(self, batch, mask=None):
+        """Return the processed batch.
 
         Parameters
         ----------
-        Q : tensor of shape (..., dq, d)
-            Tensor of queries as rows.
-        K : tensor of shape (..., dk, d)
-            Tensor of keys as rows.
-        V : tensor of shape (..., dk, dv)
-            Tensor of values as rows.
-        mask : boolean tensor of shape broadcastable to (..., dq, dk)
-            The mask representing valid rows.
+        batch : `Tensor` of type `tf.float32` and shape (batch_dim, padded_dim, dim)
+            Input batch with attached mask indicating valid rows.
 
         Returns
         -------
-        X : tensor
-        attention_weights : tensor
+        output : `Tensor` of type `tf.float32` and shape (batch_dim, padded_dim, dim)
+            Processed batch with mask passed through.
+
+        """
+        batch_size = tf.shape(batch)[0]
+        Q = self.split_heads(self.Wq(batch), batch_size)
+        K = self.split_heads(self.Wk(batch), batch_size)
+        V = self.split_heads(self.Wv(batch), batch_size)
+        mask = mask[:, tf.newaxis, tf.newaxis, :]
+        X, attn_weights = self.scaled_dot_product_attention(Q, K, V, mask=mask)
+        X = tf.transpose(X, perm=[0, 2, 1, 3])
+        X = tf.reshape(X, (batch_size, -1, self.dim))
+        output = self.dense(X)
+        return output
+
+    def split_heads(self, batch, batch_size):
+        """Return batch reshaped for multihead attention."""
+        X = tf.reshape(batch, (batch_size, -1, self.n_heads, self.depth))
+        return tf.transpose(X, perm=[0, 2, 1, 3])
+
+    def scaled_dot_product_attention(self, Q, K, V, mask=None):
+        """Return calculated vectors and attention weights.
+
+        Parameters
+        ----------
+        Q : `Tensor` of type `tf.float32' and shape (..., dq, d1)
+            Tensor of queries as rows.
+        K : `Tensor` of type `tf.float32` and shape (..., dkv, d1)
+            Tensor of keys as rows.
+        V : `Tensor` of type `tf.float32` and shape (..., dkv, d2)
+            Tensor of values as rows.
+        mask : `Tensor of type `tf.bool' and shape (..., 1, dkv)
+            The mask representing valid key/value rows.
+
+        Returns
+        -------
+        output : `Tensor` of type `tf.float32` and shape (..., dq, d2)
+            Processed batch of Q, K, V.
+        attention_weights : `Tensor` of type `tf.float32` and shape (..., dq, dkv)
+            Attention weights from intermediate step.
 
         """
         QK = tf.matmul(Q, K, transpose_b=True)
         d = tf.cast(tf.shape(K)[-1], tf.float32)
         attention_logits = QK / tf.math.sqrt(d)
         if mask is not None:
-            attention_logits += (mask * -1e9)
+            attention_logits += tf.cast(~mask, tf.float32) * -1e9
         attention_weights = tf.nn.softmax(attention_logits)
-        X = tf.matmul(attention_weights, V)
-        return X, attention_weights
+        output = tf.matmul(attention_weights, V)
+        return output, attention_weights
 
 
 class TransformerLayer(tf.keras.layers.Layer):
+    """A transformer encoder layer.
 
-    def __init__(self, num_heads, input_dim, feed_forward_hidden_size, training: bool, rate = .1):
-        '''
-        Constructor.
+    Parameters
+    ----------
+    dim : int
+        Positive integer dimension of the attention layer and output.
+    hidden_dim : int
+        Positive integer dimension of the feed forward hidden layer.
+    n_heads : int, optional
+        Positive integer number of heads in attention layer (must divide `dim`).
+    dropout : float, optional
+        Dropout rate.
 
-        @Params:
-            num_heads - Number of self attention layers NOTE: num_heads must divide input_dim
-            input_dim - Dimension of input 
-            feed_forward_hidden_size - size of feed forward network at the end of the encoder
-            training - encorporate drop out 
-            rate - rate of dropout
-        '''
-        super(EncoderLayer, self).__init__()
-        self.attention = MultiHeadSelfAttentionLayer(input_dim, num_heads)
-        self.first_lt = tf.keras.layers.Dense(feed_forward_hidden_size, activation = 'relu')
-        self.second_lt = tf.keras.layers.Dense(input_dim)
+    """
 
-        self.layer_norm_mha = tf.keras.layers.LayerNormalization(epsilon=1e-6)
-        self.layer_norm_ff = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+    def __init__(self, dim, hidden_dim, n_heads=1, dropout=0.1):
+        super(TransformerLayer, self).__init__()
+        self.attention = SelfAttentionLayer(dim, n_heads=n_heads)
+        self.dense1 = tf.keras.layers.Dense(hidden_dim, activation='relu')
+        self.dense2 = tf.keras.layers.Dense(dim)
+        self.dropout1 = tf.keras.layers.Dropout(dropout)
+        self.dropout2 = tf.keras.layers.Dropout(dropout)
+        self.layer_norm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.layer_norm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.supports_masking = True
 
-        self.dropout1 = tf.keras.layers.Dropout(rate)
-        self.dropout2 = tf.keras.layers.Dropout(rate)
+    def call(self, batch, mask=None, training=False):
+        """Return the processed batch.
 
-        self.training = training
+        Parameters
+        ----------
+        batch : `Tensor` of type `tf.float32` and shape (batch_dim, padded_dim, dim)
+            Input batch with attached mask indicating valid rows.
 
-    def call(self, input_set):
+        Returns
+        -------
+        output : `Tensor` of type `tf.float32` and shape (batch_dim, padded_dim, dim)
+            Processed batch with mask passed through.
 
-        input_set = tf.cast(input_set, tf.float32)
-
-        # Multiheaded attention
-        attention_output = self.attention(input_set, input_set, input_set)
-        attention_output = self.dropout1(attention_output, training= self.training) # Only use drop out when training
-        att_norm = self.layer_norm_mha(input_set + attention_output) # Residual connection and norm
-
-        # Feed forward network stage
-        ff = self.second_lt(self.first_lt(att_norm))
-        ff1 = self.dropout1(ff, training = self.training)
-        encoder_output = self.layer_norm_ff(input_set + ff1)
-        return encoder_output
+        """
+        X1 = self.attention(batch, mask=mask)
+        X1 = self.dropout1(X1, training=training)
+        X1 = self.layer_norm1(batch + X1)
+        X2 = self.dense2(self.dense1(X1))
+        X2 = self.dropout2(X2, training=training)
+        output = self.layer_norm2(X1 + X2)
+        return output
 
 
 class ParallelDecidingLayer(tf.keras.layers.Layer):
@@ -335,10 +367,9 @@ class ParallelDecidingLayer(tf.keras.layers.Layer):
         X = batch
         for layer in self.hidden_layers:
             X = layer(X)
+        X = tf.squeeze(self.final_layer(X), axis=-1)
         if mask is not None:
-            X = tf.squeeze(self.final_layer(X), axis=-1) - 1e9 * tf.cast(~mask, tf.float32)
-        else:
-            X = tf.squeeze(self.final_layer(X), axis=-1)
+            X += tf.cast(~mask, tf.float32) * -1e9
         output = self.final_activation(X)
         return output
 
@@ -464,6 +495,72 @@ class ParallelMultilayerPerceptron(tf.keras.Model):
 
     def call(self, batch):
         X = self.embedding(batch)
+        X = self.deciding(X)
+        return X
+
+
+class AttentionPMLP(tf.keras.Model):
+    """A parallel multilayer perceptron network with attention.
+
+    This model expects an input with shape (batch_dim, padded_dim, feature_dim), where
+    entries are non-negative integers and padding is by -1. It returns a tensor
+    of shape (batch_dim, padded_dim) where each batch is a softmaxed distribution over the rows
+    with zero probability on any padded row.
+
+    Parameters
+    ----------
+    dim : int
+        Positive integer dimension of the attention layer.
+    activation : {'relu', 'selu', 'elu', 'tanh', 'sigmoid'}, optional
+        Activation for the embedding.
+    final_activation : {'log_softmax', 'softmax'}, optional
+        Activation for the final output layer.
+
+    """
+
+    def __init__(self, dim, activation='relu', final_activation='log_softmax'):
+        super(AttentionPMLP, self).__init__()
+        self.embedding = ParallelEmbeddingLayer(dim, [], final_activation=activation)
+        self.trans = SelfAttentionLayer(dim, n_heads=4)
+        self.deciding = ParallelDecidingLayer([], final_activation=final_activation)
+
+    def call(self, batch):
+        X = self.embedding(batch)
+        X = self.trans(X)
+        X = self.deciding(X)
+        return X
+
+
+class TransformerPMLP(tf.keras.Model):
+    """A parallel multilayer perceptron network with a transformer layer.
+
+    This model expects an input with shape (batch_dim, padded_dim, feature_dim), where
+    entries are non-negative integers and padding is by -1. It returns a tensor
+    of shape (batch_dim, padded_dim) where each batch is a softmaxed distribution over the rows
+    with zero probability on any padded row.
+
+    Parameters
+    ----------
+    dim : int
+        Positive integer dimension of the transformer attention layer.
+    hidden_dim : int
+        Positive integer dimension of the transformer hidden feedforward layer.
+    activation : {'relu', 'selu', 'elu', 'tanh', 'sigmoid'}, optional
+        Activation for the embedding.
+    final_activation : {'log_softmax', 'softmax'}, optional
+        Activation for the final output layer.
+
+    """
+
+    def __init__(self, dim, hidden_dim, activation='relu', final_activation='log_softmax'):
+        super(TransformerPMLP, self).__init__()
+        self.embedding = ParallelEmbeddingLayer(dim, [], final_activation=activation)
+        self.attn = TransformerLayer(dim, hidden_dim, n_heads=4)
+        self.deciding = ParallelDecidingLayer([], final_activation=final_activation)
+
+    def call(self, batch):
+        X = self.embedding(batch)
+        X = self.attn(X)
         X = self.deciding(X)
         return X
 
