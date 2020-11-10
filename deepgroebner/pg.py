@@ -200,7 +200,7 @@ class TrajectoryBuffer:
             logprobs = logprobs[indices]
             advantages = advantages[indices]
             values = values[indices]
-            
+
             if sort:
                 indices = np.argsort([s.shape[0] for s in states])
                 states = [states[i] for i in indices]
@@ -273,7 +273,7 @@ def print_status_bar(i, epochs, history, verbose=1):
 
 class Agent:
     """Abstract base class for policy gradient agents.
-    
+
     All functionality for policy gradient is implemented in this
     class. Derived classes must define the property `policy_loss`
     which is used to train the policy.
@@ -296,10 +296,8 @@ class Agent:
         The discount rate.
     lam : float, optional
         The parameter for generalized advantage estimation.
-    normalize : bool, optional
+    normalize_advantages : bool, optional
         Whether to normalize advantages.
-    action_dim_fn : function, optional
-        The function that maps state shape to action dimension.
     kld_limit : float, optional
         The limit on KL divergence for early stopping policy updates.
     """
@@ -433,7 +431,7 @@ class Agent:
                 tb_writer.flush()
             if verbose > 0:
                 print_status_bar(i, epochs, history, verbose=verbose)
-   
+
         return history
 
 
@@ -640,12 +638,12 @@ def pg_surrogate_loss(new_logps, old_logps, advantages):
 
 class PGAgent(Agent):
     """A policy gradient agent.
-    
+
     Parameters
     ----------
     policy_network : network
         The network for the policy model.
-    
+
     """
 
     def __init__(self, policy_network, **kwargs):
@@ -694,7 +692,7 @@ class PPOAgent(Agent):
         The network for the policy model.
     eps : float, optional
         The clip ratio for PPO.
-        
+
     """
 
     def __init__(self, policy_network, eps=0.2, **kwargs):

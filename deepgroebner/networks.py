@@ -61,12 +61,12 @@ class ParallelEmbeddingLayer(tf.keras.layers.Layer):
         List of positive integer hidden layer dimensions.
     activation : {'relu', 'selu', 'elu', 'tanh', 'sigmoid'}, optional
         Activation used for the hidden layers.
-    final_activation : {'linear', 'exponential'}, optional
+    final_activation : {'relu', 'linear', 'exponential'}, optional
         Activation used for the final output embedding layer.
 
     """
 
-    def __init__(self, embed_dim, hidden_layers, activation='relu', final_activation='linear'):
+    def __init__(self, embed_dim, hidden_layers, activation='relu', final_activation='relu'):
         super(ParallelEmbeddingLayer, self).__init__()
         self.hidden_layers = [tf.keras.layers.Dense(u, activation=activation) for u in hidden_layers]
         self.final_layer = tf.keras.layers.Dense(embed_dim, activation=final_activation)
@@ -335,7 +335,10 @@ class ParallelDecidingLayer(tf.keras.layers.Layer):
         X = batch
         for layer in self.hidden_layers:
             X = layer(X)
-        X = tf.squeeze(self.final_layer(X), axis=-1) - 1e9 * tf.cast(~mask, tf.float32)
+        if mask is not None:
+            X = tf.squeeze(self.final_layer(X), axis=-1) - 1e9 * tf.cast(~mask, tf.float32)
+        else:
+            X = tf.squeeze(self.final_layer(X), axis=-1)
         output = self.final_activation(X)
         return output
 
@@ -455,7 +458,8 @@ class ParallelMultilayerPerceptron(tf.keras.Model):
 
     def __init__(self, hidden_layers, activation='relu', final_activation='log_softmax'):
         super(ParallelMultilayerPerceptron, self).__init__()
-        self.embedding = ParallelEmbeddingLayer(hidden_layers[-1], hidden_layers[:-1], activation=activation)
+        self.embedding = ParallelEmbeddingLayer(hidden_layers[-1], hidden_layers[:-1],
+                                                activation=activation, final_activation=activation)
         self.deciding = ParallelDecidingLayer([], final_activation=final_activation)
 
     def call(self, batch):

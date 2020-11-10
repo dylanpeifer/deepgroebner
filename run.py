@@ -12,7 +12,7 @@ import sympy as sp
 from deepgroebner.buchberger import BuchbergerEnv, LeadMonomialsWrapper, BuchbergerAgent
 from deepgroebner.ideals import RandomBinomialIdealGenerator, FromDirectoryIdealGenerator, RandomIdealGenerator
 from deepgroebner.pg import PGAgent, PPOAgent
-from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, TransformerPMLP, PairsLeftBaseline, AgentBaseline
+from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, PairsLeftBaseline, AgentBaseline
 
 def make_parser():
     """Return the command line argument parser for this script."""
@@ -92,7 +92,7 @@ def make_parser():
 
     # policy model
     parser.add_argument('--policy_model',
-                        choices=['mlp', 'pmlp', 'transformer'],
+                        choices=['mlp', 'pmlp'],
                         default='pmlp',
                         help='the policy network type')
     parser.add_argument('--policy_hl',
@@ -223,10 +223,7 @@ def make_policy_network(args):
             'RandomPolynomialIdeal': (2 * args.variables * args.k, 1)}[args.environment]
 
     if args.environment in ['RandomBinomialIdeal', 'MixedRandomBinomialIdeal', 'RandomPolynomialIdeal']:
-        if args.policy_model == 'pmlp':
-            policy_network = ParallelMultilayerPerceptron(args.policy_hl)
-        else:
-            policy_network = TransformerPMLP(128, [64], 8)
+        policy_network = ParallelMultilayerPerceptron(args.policy_hl)
     else:
         policy_network = MultilayerPerceptron(dims[1], args.policy_hl)
 
