@@ -2,6 +2,7 @@
 
 import numpy as np
 import sympy as sp
+import IPython
 
 
 def spoly(f, g, lmf=None, lmg=None):
@@ -29,7 +30,7 @@ def reduce(g, F, lmF=None):
     while g:
         lmg, lcg = g.LT
         found_divisor = False
-        
+
         for f, lmf in zip(F, lmF):
             m = monomial_div(lmg, lmf)
             if m is not None:
@@ -112,7 +113,7 @@ def update(G, P, f, lmG=None, strategy='gebauermoeller'):
 def minimalize(G):
     """Return a minimal Groebner basis from arbitrary Groebner basis G."""
     R = G[0].ring if len(G) > 0 else None
-    assert all(g.ring == R for g in G), "polynomials must be in same ring"    
+    assert all(g.ring == R for g in G), "polynomials must be in same ring"
     Gmin = []
     for f in sorted(G, key=lambda h: R.order(h.LM)):
         if all(not R.monomial_div(f.LM, g.LM) for g in Gmin):
@@ -157,7 +158,7 @@ def buchberger(F, selection='normal', elimination='gebauermoeller'):
 
 class BuchbergerEnv:
     """An environment for computing a Groebner basis using Buchberger's algorithm.
-    
+
     Parameters
     ----------
     ideal_gen
@@ -169,7 +170,7 @@ class BuchbergerEnv:
         on the s-polynomials.
     rewards : {'reductions', 'additions'}, optional
         The reward value for each step.
-    
+
     Examples
     --------
     >>> import sympy as sp
@@ -186,7 +187,7 @@ class BuchbergerEnv:
      -1,
      False,
      {})
-    
+
     """
 
     def __init__(self,
@@ -243,7 +244,7 @@ class BuchbergerEnv:
         print(self.G)
         print(self.P)
         print()
-        
+
     def copy(self):
         """Return a copy of this environment with the same state."""
         copy = BuchbergerEnv(self.ideal_gen)
@@ -264,16 +265,16 @@ class BuchbergerEnv:
 
 class BuchbergerAgent:
     """An agent that follows standard selection strategies.
-    
+
     Parameters
     ----------
     selection : {'normal', 'first', 'degree', 'random'}
         The selection strategy used to pick pairs.
     """
-    
+
     def __init__(self, selection='normal'):
         self.strategy = selection
-        
+
     def act(self, state):
         G, P = state
         return select(G, P, strategy=self.strategy)
@@ -288,7 +289,7 @@ def lead_monomials_vector(g, k=1, dtype=np.int):
 
 class LeadMonomialsWrapper():
     """A wrapper for BuchbergerEnv with state a matrix of the pairs' lead monomials.
-    
+
     Parameters
     ----------
     env : BuchbergerEnv
@@ -297,7 +298,7 @@ class LeadMonomialsWrapper():
         The number of lead monomials used for each polynomial.
     dtype : data-type, optional
         The data-type used for the state matrix.
-    
+
     Examples
     --------
     >>> import sympy as sp
@@ -309,7 +310,7 @@ class LeadMonomialsWrapper():
     array([[2, 0, 0, 0, 1, 0, 3, 0, 0, 0, 0, 1]])
     >>> wrapped_env.step(0)
     (array([[2, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1]]), -1, False, {})
-    
+
     """
 
     def __init__(self, env, k=1, dtype=np.int):
