@@ -113,14 +113,14 @@ class RecurrentEmbeddingLayer(tf.keras.layers.Layer):
 
     """
 
-    def __init__(self, embed_dim, hidden_layers, cell='gru'):
+    def __init__(self, embed_dim, hidden_layers, cell='gru', need_mask = True):
         super(RecurrentEmbeddingLayer, self).__init__()
-        self.cell = cell
         cell_fn = tf.keras.layers.GRU if cell == 'gru' else tf.keras.layers.LSTM
         self.hidden_layers = [cell_fn(u, return_sequences=True) for u in hidden_layers]
         self.final_layer = cell_fn(embed_dim, return_sequences=True, return_state=True)
+        self.supports_masking = need_mask
 
-    def call(self, batch):
+    def call(self, batch, initial_state = None):
         """Return embedding and final hidden states for this batch.
 
         Parameters
@@ -135,11 +135,12 @@ class RecurrentEmbeddingLayer(tf.keras.layers.Layer):
         state : `Tensor` or pair of `Tensor`s of type `tf.float32` and shape (batch_dim, embed_dim)
 
         """
-        mask = self.compute_mask(batch)
-        X = tf.cast(batch, tf.float32)
+        mask = self.compute_mask(batch) if self.supports_masking else None
+        X = tf.cast(batch, tf.float32) if not batch.dtype == tf.float32 else batch
+
         for layer in self.hidden_layers:
             X, *state = layer(X, mask=mask)
-        output, *state = self.final_layer(X, mask=mask)
+        output, *state = self.final_layer(X, mask=mask, initial_state=initial_state)
         return (output, *state)
 
     def compute_mask(self, batch, mask=None):
@@ -390,26 +391,20 @@ class PointerDecidingLayer(tf.keras.layers.Layer):
             hidden_size: number of hidden nodes
     """
 
-    def __init__(self, input_dim, hidden_layer, layer_type = 'lstm', dot_product_attention = False, prob = 'norm'):
-        super(pointer, self).__init__()
-        if layer_type == 'lstm':
-            self.decoder_layer = tf.keras.layers.LSTM(hidden_layer, return_sequences=True)
-        elif layer_type == 'gru':
-            self.decoder_layer = tf.keras.layers.GRU(hidden_layer, return_sequences=True) 
-        if not dot_product_attention:
-            self.encoder_weight = tf.keras.layers.Dense(hidden_layer)
-            self.decode_weight = tf.keras.layers.Dense(hidden_layer)
-            self.v = tf.keras.layers.Dense(1)
-            self.tanh = tf.keras.activations.tanh
-        if prob == 'log':
-            self.softmax = tf.nn.log_softmax
-        else:
-            self.softmax = tf.nn.softmax
+    def __init__(self, input_dim, embed_dim, hidden_layers, 
+                        layer_type = 'gru', dot_product_attention = True, prob = 'log'):
+        super(PointerDecidingLayer, self).__init__()
+        self.decoder_layer = RecurrentEmbeddingLayer(embed_dim, hidden_layers, cell = layer_type, need_mask = False)
+        self.softmax = tf.nn.log_softmax if prob == 'log' else tf.nn.softmax
         self.dot_prod_attention = dot_product_attention
         self.input_size = input_dim
-        self.hidden_size = hidden_layer
+        if not dot_product_attention:
+            self.encoder_weight = tf.keras.layers.Dense(embed_dim)
+            self.decode_weight = tf.keras.layers.Dense(embed_dim)
+            self.v = tf.keras.layers.Dense(1)
+            self.tanh = tf.keras.activations.tanh
 
-    def call(self, encoder_output, initial_states=None):
+    def call(self, encoder_output, initial_states=None, mask = None):
         '''
         Calculate attention.
         
@@ -420,19 +415,16 @@ class PointerDecidingLayer(tf.keras.layers.Layer):
        '''
         batch_size = encoder_output.shape[0]
         start_token = self.initialize_start_token(batch_size)
-        lstm_decoder_output = self.decoder_layer(start_token, initial_state=initial_states) #(batch, 1, input_dim)
+        lstm_decoder_output,_ = self.decoder_layer(start_token, initial_state=initial_states) #(batch, 1, input_dim)
         if self.dot_prod_attention:
-            attention_scores = tf.squeeze(tf.linalg.matmul(lstm_decoder_output, encoder_output, transpose_b = True), axis = 1)
+            attention_scores = tf.squeeze(tf.linalg.matmul(lstm_decoder_output, encoder_output, transpose_b = True), axis = 1) + tf.cast(~mask, tf.float32) * -1e9
             return self.softmax(attention_scores)
         else:
-            similarity_score = np.zeros([batch_size, encoder_output.shape[1]])
-            lstm_decoder_projection = self.decode_weight(lstm_decoder_output)
-            encoder_project = self.encoder_weight(encoder_output)
-            for batch in range(batch_size):
-                for index in range(similarity_score.shape[1]):
-                    #e_i = tf.expand_dims(encoder_output[batch][index], axis = 0)
-                    similarity_score[batch][index] = self.v(self.tanh(encoder_project[batch][index] + lstm_decoder_projection[batch]))[0][0] # change this
-            return self.softmax(tf.convert_to_tensor(similarity_score))
+            lstm_decoder_projection = self.decode_weight(lstm_decoder_output) # (batch_size, 1, embed_dim)
+            encoder_project = self.encoder_weight(encoder_output) # (batch_size, padd_dim, embed_dim)
+            pad_dim = encoder_output.shape[1]
+            similarity_score = self.v(self.tanh(encoder_project + tf.tile(lstm_decoder_projection, [1, pad_dim, 1])))
+            return self.softmax(tf.squeeze(tf.reshape(similarity_score, [batch_size, 1, pad_dim]), axis = 1) + tf.cast(~mask, tf.float32) * -1e9)
 
     def initialize_start_token(self, batch_size):
         '''
@@ -442,7 +434,7 @@ class PointerDecidingLayer(tf.keras.layers.Layer):
             batch_size: size of batch
         '''
         np.random.seed(42)
-        start_token = tf.convert_to_tensor(np.random.random([batch_size,1,self.input_size]).astype(np.float32)) # Change this
+        start_token = tf.convert_to_tensor(np.random.random([batch_size,1,self.input_size]).astype(np.float32))
         np.random.seed()
         return start_token
 
@@ -568,7 +560,8 @@ class TransformerPMLP(tf.keras.Model):
 class PointerNetwork(tf.keras.Model):
     """Recurrent embedding followed by pointer."""
 
-    def __init__(self, input_dim, hidden_layer, input_layer = 'lstm', dot_prod_attention=False, prob = 'norm'):
+    def __init__(self, input_dim, hidden_layers:list, embed_dim, 
+                            cell_type = 'gru', dot_prod_attention=True, prob = 'log'):
         '''
         Params:
             input_dim: dimension of input
@@ -577,24 +570,15 @@ class PointerNetwork(tf.keras.Model):
             dot_prod_attention: dot product attention or traditional pointer network attention
         '''
         super(PointerNetwork, self).__init__()
-        self.encoder = pnetEncoder(hidden_layer, layer_type = input_layer)
-        self.point = pointer(input_dim, hidden_layer, layer_type=input_layer, dot_product_attention=dot_prod_attention, prob = prob)
-        self.hidden_size = hidden_layer
-        self.layer = input_layer
-        self.attention_type = dot_prod_attention
+        self.encoder = RecurrentEmbeddingLayer(embed_dim, hidden_layers)
+        self.pointer = PointerDecidingLayer(input_dim, embed_dim, hidden_layers, cell_type, dot_prod_attention, prob)
 
-    def __call__(self, input):
+    def call(self, input):
         '''
         '''
-        if self.layer == 'lstm':
-            seq_output, mem_state, carry_state = self.encoder(input)
-            initial_states = [mem_state, carry_state]
-        else:
-            seq_output, mem_state = self.encoder(input)
-            initial_states = mem_state
-        prob_dist = self.point(seq_output, initial_states)
-
-        return prob_dist
+        X, *state = self.encoder(input)
+        log_prob = self.pointer(X, state)
+        return log_prob
 
 
 class CustomLSTM(tf.keras.layers.Layer):
