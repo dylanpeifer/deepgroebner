@@ -1,5 +1,6 @@
 # distutils: language = c++
 # distutils: sources = deepgroebner/polynomials.cpp
+# distutils: extra_compile_args = -std=c++17
 
 from buchberger cimport BuchbergerEnv
 
