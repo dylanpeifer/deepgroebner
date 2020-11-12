@@ -198,18 +198,18 @@ class RandomBinomialIdealGenerator:
         The maximum degree of a chosen monomial.
     s : int
         The number of generators of each ideal.
-    coefficient_ring : ring, optional
-        The coefficient ring for the polynomials.
-    order : {'grevlex', 'lex', 'grlex'}, optional
-        The monomial order.
-    constants : bool, optional
-        Whether to include constants as monomials.
     degrees : {'uniform', 'weighted', 'maximum'}, optional
         The distribution of degrees of monomials.
+    constants : bool, optional
+        Whether to include constants as monomials.
     homogeneous : bool, optional
         Whether the binomials are homogeneous.
     pure : bool, optional
         Whether the binomials are pure.
+    coefficient_ring : ring, optional
+        The coefficient ring for the polynomials.
+    order : {'grevlex', 'lex', 'grlex'}, optional
+        The monomial order.
 
     Examples
     --------
@@ -223,9 +223,9 @@ class RandomBinomialIdealGenerator:
 
     """
 
-    def __init__(self, n, d, s, coefficient_ring=sp.FF(32003), order='grevlex',
-                 constants=False, degrees='uniform', homogeneous=False,
-                 pure=False):
+    def __init__(self, n, d, s, degrees='uniform',
+                 constants=False, homogeneous=False, pure=False,
+                 coefficient_ring=sp.FF(32003), order='grevlex'):
         self.ring = sp.xring('x:' + str(n), coefficient_ring, order)[0]
         self.dist = self._make_dist(n, d, constants, degrees)
         self.generators = s
@@ -257,52 +257,31 @@ class RandomBinomialIdealGenerator:
         return dist / np.sum(dist)
 
 
-class MixedRandomBinomialIdealGenerator:
-    """Generator that picks uniformly from different binomial distributions."""
-
-    def __init__(self, n, ds, ss, coefficient_ring=sp.FF(32003), order='grevlex',
-                 constants=False, degrees='uniform', homogeneous=False,
-                 pure=False):
-        self.gens = [RandomBinomialIdealGenerator(n, d, s, coefficient_ring=coefficient_ring,
-                                                  order=order, constants=constants, degrees=degrees,
-                                                  homogeneous=homogeneous, pure=pure)
-                    for d in ds
-                    for s in ss]
-        self.current_gen = np.random.choice(self.gens)
-
-    def __next__(self):
-        self.current_gen = np.random.choice(self.gens)
-        return next(self.current_gen)
-
-    def __iter__(self):
-        return self
-
-
 class RandomIdealGenerator:
     """Generator of random examples of polynomial ideals.
 
     Parameters
     ----------
     n : int
-        The number of variables.
+        Number of variables.
     d : int
-        The maximum degree of a chosen monomial.
+        Maximum degree of a chosen monomial.
     s : int
-        The number of generators of each ideal.
+        Number of generators of each ideal.
     lam : float
-        The lambda parameter for the poisson distribution on lengths.
-    coefficient_ring : ring, optional
-        The coefficient ring for the polynomials.
-    order : {'grevlex', 'lex', 'grlex'}, optional
-        The monomial order.
+        Lambda parameter for the poisson distribution on lengths.
+    degrees : {'uniform', 'weighted', 'maximum'}, optional
+        Distribution of degrees of monomials.
     constants : bool, optional
         Whether to include constants as monomials.
-    degrees : {'uniform', 'weighted', 'maximum'}, optional
-        The distribution of degrees of monomials.
+    coefficient_ring : ring, optional
+        Coefficient ring for the polynomials.
+    order : {'grevlex', 'lex', 'grlex'}, optional
+        Monomial order.
     """
 
-    def __init__(self, n, d, s, lam, coefficient_ring=sp.FF(32003), order='grevlex',
-                 constants=False, degrees='uniform'):
+    def __init__(self, n, d, s, lam, degrees='uniform',
+                 constants=False, coefficient_ring=sp.FF(32003), order='grevlex'):
         self.ring = sp.xring('x:' + str(n), coefficient_ring, order)[0]
         self.dist = self._make_dist(n, d, constants, degrees)
         self.lam = lam
