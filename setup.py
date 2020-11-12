@@ -1,4 +1,6 @@
 from setuptools import setup, find_packages
+from Cython.Build import cythonize
+
 
 with open("README.md", "r") as f:
     long_description = f.read()
@@ -18,5 +20,6 @@ setup(
         "Operating System :: OS Independent",
     ],
     python_requires='>=3.6',
+    ext_modules=cythonize("deepgroebner/wrapped.pyx"),
 )
 
