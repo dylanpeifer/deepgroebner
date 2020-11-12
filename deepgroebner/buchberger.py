@@ -314,7 +314,7 @@ class LeadMonomialsWrapper:
     
     """
 
-    def __init__(self, env, k=1, dtype=np.int):
+    def __init__(self, env, k=1, dtype=np.int32):
         self.env = env
         self.k = k
         self.dtype = dtype

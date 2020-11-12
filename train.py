@@ -3,6 +3,7 @@
 
 import argparse
 import datetime
+import numpy as np
 import os
 import json
 
@@ -83,6 +84,10 @@ def make_parser():
                         type=float,
                         default=0.01,
                         help='KL divergence limit used for early stopping')
+    policy.add_argument('--policy_weights',
+                        type=str,
+                        default="",
+                        help='filename for initial policy weights')
 
     value = parser.add_argument_group('value model')
     value.add_argument('--value_model',
@@ -101,6 +106,10 @@ def make_parser():
                        type=int,
                        default=1,
                        help='value model updates per epoch')
+    value.add_argument('--value_weights',
+                       type=str,
+                       default="",
+                       help='filename for initial value weights')
 
     train = parser.add_argument_group('training')
     train.add_argument('--episodes',
@@ -182,9 +191,11 @@ def make_policy_network(args):
     if args.environment == 'LunarLander-v2':
         assert "output_dim" not in kwargs
         policy_network = MultilayerPerceptron(4, **kwargs)
+        batch = np.zeros((1, 8), dtype=np.float32)
     elif args.environment in ['CartPole-v0', 'CartPole-v1']:
         assert "output_dim" not in kwargs
         policy_network = MultilayerPerceptron(2, **kwargs)
+        batch = np.zeros((1, 4), dtype=np.float32)
     else:
         if args.policy_model == 'pmlp':
             policy_network = ParallelMultilayerPerceptron(**args.policy_kwargs)
@@ -192,6 +203,10 @@ def make_policy_network(args):
             policy_network = AttentionPMLP(**args.policy_kwargs)
         else:
             policy_network = TransformerPMLP(**args.policy_kwargs)
+        batch = np.zeros((1, 10, 2 * args.k * int(args.distribution.split('-')[0])), dtype=np.int32)
+    policy_network(batch)  # build network
+    if args.policy_weights != "":
+        policy_network.load_weights(args.policy_weights)
     return policy_network
 
 
@@ -200,14 +215,23 @@ def make_value_network(args):
     kwargs = args.value_kwargs
     if args.value_model == 'none':
         value_network = None
-    elif args.environment in ['CartPole-v0', 'CartPole-v1', 'LunarLander-v2']:
+    elif args.environment == 'LunarLander-v2':
         assert "output_dim" not in kwargs and "final_activation" not in kwargs
         value_network = MultilayerPerceptron(1, final_activation='linear', **args.value_kwargs)
+        batch = np.zeros((1, 8), dtype=np.float32)
+        value_network(batch)  # build network
+    elif args.environment in ['CartPole-v0', 'CartPole-v1']:
+        assert "output_dim" not in kwargs and "final_activation" not in kwargs
+        value_network = MultilayerPerceptron(1, final_activation='linear', **args.value_kwargs)
+        batch = np.zeros((1, 4), dtype=np.float32)
+        value_network(batch)  # build network
     else:
         if args.value_model == 'pairsleft':
             value_network = PairsLeftBaseline(gam=args.gam)
         else:
             value_network = AgentBaseline(BuchbergerAgent('degree'), gam=args.gam)
+    if args.value_weights != "":
+        value_network.load_weights(args.value_weights)
     return value_network
 
 
