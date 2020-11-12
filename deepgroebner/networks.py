@@ -415,14 +415,14 @@ class PointerDecidingLayer(tf.keras.layers.Layer):
        '''
         batch_size = encoder_output.shape[0]
         start_token = self.initialize_start_token(batch_size)
-        lstm_decoder_output,_ = self.decoder_layer(start_token, initial_state=initial_states) #(batch, 1, input_dim)
+        lstm_decoder_output,*state = self.decoder_layer(start_token, initial_state=initial_states) #(batch, 1, input_dim)
         if self.dot_prod_attention:
             attention_scores = tf.squeeze(tf.linalg.matmul(lstm_decoder_output, encoder_output, transpose_b = True), axis = 1) + tf.cast(~mask, tf.float32) * -1e9
             return self.softmax(attention_scores)
         else:
+            pad_dim = encoder_output.shape[1]
             lstm_decoder_projection = self.decode_weight(lstm_decoder_output) # (batch_size, 1, embed_dim)
             encoder_project = self.encoder_weight(encoder_output) # (batch_size, padd_dim, embed_dim)
-            pad_dim = encoder_output.shape[1]
             similarity_score = self.v(self.tanh(encoder_project + tf.tile(lstm_decoder_projection, [1, pad_dim, 1])))
             return self.softmax(tf.squeeze(tf.reshape(similarity_score, [batch_size, 1, pad_dim]), axis = 1) + tf.cast(~mask, tf.float32) * -1e9)
 
@@ -609,12 +609,12 @@ class ProcessBlock(tf.keras.layers.Layer):
         '''
         super(ProcessBlock, self).__init__()
         self.embed = tf.keras.layers.Dense(hidden_layer)
-        #self.convul = tf.keras.layers.Dense(hidden_layer)
-        #self.process_block = tf.keras.layers.GRU(hidden_layer, return_state=True)
         self.process_block = CustomLSTM(hidden_layer)
         self.hidden_size = hidden_layer
         self.num_step = num_step
-    def read_out(self, M, q, c,batch_size):
+        self.supports_masking = True
+
+    def read_out(self, M, q, c,batch_size, mask = None):
         '''
         Perform the attention with the memory vectors and pass by the LSTM
 
@@ -624,11 +624,13 @@ class ProcessBlock(tf.keras.layers.Layer):
             c - Last cell state
             batch_size - size of batch
         '''
-        attention = tf.nn.softmax(tf.linalg.matmul(M, q, transpose_b = True))
+        logits = tf.squeeze(tf.linalg.matmul(M, q, transpose_b = True), axis = 2)
+        attention = tf.expand_dims(tf.nn.softmax(logits + tf.cast(~mask, tf.float32) * -1e9), axis = 2)
         r_t = tf.linalg.matmul(attention, M, transpose_a = True) # sum of weight memory vector (by attention)
         q_star_t = tf.concat([q, r_t], axis = 2)
         mem_state, cell_state = self.process_block(q_star_t, c)
         return mem_state, cell_state
+
     def initHiddenState(self, batch_size):
         '''
         Initialize initial hidden states and cell state. 
@@ -641,33 +643,41 @@ class ProcessBlock(tf.keras.layers.Layer):
         cell_state = tf.convert_to_tensor(np.random.random([batch_size,1,self.hidden_size]).astype(np.float32)) # Change this
         np.random.seed()
         return hidden_state, cell_state
-    def __call__(self, input_seq):
+
+    def call(self, input_seq):
         '''
         Calculate embedding.
 
         @Params:
             input_seq - input sequence
         '''
-        embeddings = self.embed(input_seq)
+        mask = self.compute_mask(input_seq)
         initial_state, cell_state = self.initHiddenState(input_seq.shape[0])
 
         # Start processing
         for _ in range(self.num_step):
-            initial_state, cell_state = self.read_out(embeddings, initial_state, cell_state, input_seq.shape[0])
-        return initial_state, embeddings
+            initial_state, cell_state = self.read_out(input_seq, initial_state, cell_state, input_seq.shape[0], mask)
+        return initial_state, cell_state
+
+    def compute_mask(self, batch, mask=None):
+        return tf.math.not_equal(batch[:, :, -1], -1)
 
 
 class PBPointerNet(tf.keras.Model):
-    def __init__(self, input_dim, hidden_layer, layer_type = 'lstm', dot_product_attention = False, prob = 'norm'):
+    def __init__(self, input_dim, embed_dim, num_write_outs, hidden_layers = [], 
+                        embedding_hidden_layers = [], layer_type = 'gru', dot_product_attention = True, prob = 'log'):
         super(PBPointerNet, self).__init__()
-        self.pointer = pointer(input_dim, hidden_layer, layer_type, dot_product_attention, prob)
-        self.processBlock = ProcessBlock(hidden_layer, 6)
+        self.embed = ParallelEmbeddingLayer(embed_dim, embedding_hidden_layers)
+        self.pointer = PointerDecidingLayer(input_dim, embed_dim, hidden_layers, layer_type = 'lstm')
+        self.processBlock = ProcessBlock(embed_dim, num_write_outs)
 
     def __call__(self, input):
-        output, embeddings = self.processBlock(input)
-        output = tf.squeeze(output, axis = 1)
-        prob = self.pointer(embeddings, output)
-        return prob
+        X = self.embed(input)
+        hidden_state, cell_state = self.processBlock(X)
+        hidden_state = tf.squeeze(hidden_state, axis = 1)
+        cell_state = tf.squeeze(cell_state, axis = 1)
+        log_prob = self.pointer(X, initial_states = [hidden_state, cell_state])
+        return log_prob
 
 
 class PairsLeftBaseline:
