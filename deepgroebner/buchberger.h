@@ -35,4 +35,14 @@ private:
   std::map<std::tuple<int, int, int>, std::vector<SPair>> bins;
 };
 
+class BuchbergerEnv {
+public:
+  BuchbergerEnv() : state{0} {}
+  BuchbergerEnv(int s) : state{s} {}
+  int reset() { return state; }
+  int step(int i, int j) { return i + j; }
+private:
+  int state;
+};
+
 #endif

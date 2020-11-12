@@ -1,4 +1,6 @@
 *.pyc
+*.so
 build/
 data/
+deepgroebner/wrapped.cpp
 
