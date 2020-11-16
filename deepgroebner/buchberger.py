@@ -1,9 +1,8 @@
 """An environment for computing Groebner bases with Buchberger's algorithm."""
 
+import bisect
 import numpy as np
 import sympy as sp
-
-from .wrapped import CBuchbergerEnv
 
 
 def spoly(f, g, lmf=None, lmg=None):
@@ -188,7 +187,7 @@ class BuchbergerEnv:
      -1,
      False,
      {})
-    
+
     """
 
     def __init__(self,
@@ -233,8 +232,10 @@ class BuchbergerEnv:
             self.G, self.P = update(self.G, self.P, r.monic(), lmG=self.lmG, strategy=self.elimination)
             self.lmG.append(r.LM)
             if self.sort_reducers:
-                self.reducers = sorted(self.reducers + [r.monic()], key=lambda f: self.ring.order(f.LM))
-                self.lmReducers = [f.LM for f in self.reducers]
+                keys = [self.ring.order(lm) for lm in self.lmReducers]
+                index = bisect.bisect(keys, self.ring.order(r.LM))
+                self.reducers = self.reducers[:index] + [r.monic()] + self.reducers[index:]
+                self.lmReducers = self.lmReducers[:index] + [r.LM] + self.lmReducers[index:]
             else:
                 self.reducers.append(r.monic())
                 self.lmReducers.append(r.LM)
