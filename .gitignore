@@ -1,4 +1,6 @@
 *.pyc
+*.so
+build/
 data/
-notebooks/.ipynb_checkpoints/
+deepgroebner/wrapped.cpp
 

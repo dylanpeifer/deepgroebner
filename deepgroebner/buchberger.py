@@ -1,5 +1,6 @@
 """An environment for computing Groebner bases with Buchberger's algorithm."""
 
+import bisect
 import numpy as np
 import sympy as sp
 import IPython
@@ -122,7 +123,7 @@ def minimalize(G):
 
 
 def interreduce(G):
-    """Return the reduced Groebner basis from a minimal Groebner basis G."""
+    """Return the reduced Groebner basis from minimal Groebner basis G."""
     R = G[0].ring if len(G) > 0 else None
     assert all(g.ring == R for g in G), "polynomials must be in same ring"
     Gred = []
@@ -204,6 +205,7 @@ class BuchbergerEnv:
         self.P = set()
         self.reducers = []
         self.lmReducers = []
+        self.keysReducers = []
 
     def reset(self):
         """Initialize the polynomial list and pair list for a new ideal from ideal_fn."""
@@ -220,6 +222,7 @@ class BuchbergerEnv:
         else:
             self.reducers = [f.monic() for f in F]
         self.lmReducers = [f.LM for f in self.reducers]
+        self.keysReducers = [self.ring.order(lm) for lm in self.lmReducers]
         return (self.G, self.P) if self.P else self.reset()
 
     def step(self, action):
@@ -232,8 +235,11 @@ class BuchbergerEnv:
             self.G, self.P = update(self.G, self.P, r.monic(), lmG=self.lmG, strategy=self.elimination)
             self.lmG.append(r.LM)
             if self.sort_reducers:
-                self.reducers = sorted(self.reducers + [r.monic()], key=lambda f: self.ring.order(f.LM))
-                self.lmReducers = [f.LM for f in self.reducers]
+                key = self.ring.order(r.LM)
+                index = bisect.bisect(self.keysReducers, key)
+                self.reducers = self.reducers[:index] + [r.monic()] + self.reducers[index:]
+                self.lmReducers = self.lmReducers[:index] + [r.LM] + self.lmReducers[index:]
+                self.keysReducers = self.keysReducers[:index] + [key] + self.keysReducers[index:]
             else:
                 self.reducers.append(r.monic())
                 self.lmReducers.append(r.LM)
@@ -257,10 +263,6 @@ class BuchbergerEnv:
         copy.P = self.P.copy()
         copy.reducers = [r.copy() for r in self.reducers]
         return copy
-
-    @property
-    def actions(self):
-        return list(self.P)
 
 
 class BuchbergerAgent:
@@ -313,20 +315,19 @@ class LeadMonomialsWrapper:
 
     """
 
-    def __init__(self, env, k=1, dtype=np.int):
+    def __init__(self, env, k=1, dtype=np.int32):
         self.env = env
         self.k = k
         self.dtype = dtype
         self.pairs = []       # list of current pairs
         self.m = 0            # size of current basis
-        self.leads = {}       # leads[i] = lead_monomials_vector(env.G[i])
+        self.leads = []       # leads[i] = lead_monomials_vector(env.G[i])
 
     def reset(self):
         G, P = self.env.reset()
         self.pairs = list(P)
         self.m = len(G)
-        self.leads = {i: lead_monomials_vector(G[i], k=self.k, dtype=self.dtype)
-                      for i in range(self.m)}
+        self.leads = [lead_monomials_vector(g, k=self.k, dtype=self.dtype) for g in G]
         return self._matrix()
 
     def step(self, action):
@@ -334,7 +335,7 @@ class LeadMonomialsWrapper:
         self.pairs = list(P)
         if len(G) > self.m:
             self.m += 1
-            self.leads[self.m-1] = lead_monomials_vector(G[self.m-1], k=self.k, dtype=self.dtype)
+            self.leads.append(lead_monomials_vector(G[-1], k=self.k, dtype=self.dtype))
         return self._matrix(), reward, done, info
 
     def render(self):
@@ -349,12 +350,13 @@ class LeadMonomialsWrapper:
         return copy
 
     def _matrix(self):
-        if self.pairs:
-            return np.array([np.concatenate([self.leads[p[0]], self.leads[p[1]]])
-                                             for p in self.pairs])
-        else:
-            n = self.env.G[0].ring.ngens
-            return np.zeros((0, 2*n*self.k), dtype=self.dtype)
+        n = self.env.G[0].ring.ngens
+        mat = np.empty((len(self.pairs), 2*n*self.k), dtype=self.dtype)
+        for i, p in enumerate(self.pairs):
+            mat[i, :n*self.k] = self.leads[p[0]]
+            mat[i, n*self.k:] = self.leads[p[1]]
+        return mat
+
 
 
 class LeadMonomialsAgent:
@@ -364,6 +366,7 @@ class LeadMonomialsAgent:
     ----------
     selection : {'first', 'degree', 'random'}
         The selection strategy used to pick pairs.
+
     """
 
     def __init__(self, selection='degree', k=1):
@@ -379,6 +382,3 @@ class LeadMonomialsAgent:
             return np.argmin(np.sum(np.maximum(state[:, :n], state[:, m:m+n]), axis=1))
         elif self.strategy == 'random':
             return np.random.choice(len(state))
-
-            
-

@@ -1,6 +1,7 @@
 name: deepgroebner
 dependencies:
   - python=3.7
+  - cython
   - jupyter
   - matplotlib
   - numpy

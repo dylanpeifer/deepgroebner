@@ -64,6 +64,51 @@ def test_DenseProcessingLayer(hidden_layers):
     assert np.allclose(mask, np.array([[True, True, False], [True, True, True], [True, True, False]]))
 
 
+def test_SelfAttentionLayer_0():
+    tf.random.set_seed(123)
+    embed = ParallelEmbeddingLayer(8, [])
+    attn = SelfAttentionLayer(8, n_heads=4)
+    batch = tf.constant([
+        [[ 0,  1],
+         [ 3,  0],
+         [-1, -1]],
+        [[ 8,  5],
+         [ 3,  3],
+         [ 3,  5]],
+        [[ 6,  7],
+         [-1, -1],
+         [-1, -1]],
+    ])
+    X = embed(batch)
+    X, weights = attn.scaled_dot_product_attention(X, X, X, mask=X._keras_mask)
+    assert weights.shape == [3, 3, 3]
+    assert np.allclose([weights[0,2,0], weights[1,2,0], weights[2,2,0]], 1)
+    assert np.allclose([weights[0,0,2], weights[1,0,2], weights[2,0,2]], 0)
+
+
+def test_SelfAttentionLayer_1():
+    tf.random.set_seed(123)
+    embed = ParallelEmbeddingLayer(8, [])
+    attn = SelfAttentionLayer(8, n_heads=4)
+    batch = tf.constant([
+        [[ 0,  1],
+         [ 3,  0],
+         [-1, -1]],
+        [[ 8,  5],
+         [ 3,  3],
+         [ 3,  5]],
+        [[ 6,  7],
+         [-1, -1],
+         [-1, -1]],
+    ])
+    X = embed(batch)
+    X = attn(X)
+    mask = X._keras_mask
+    assert X.shape == [3, 3, 8]
+    assert mask is not None and mask.shape == [3, 3]
+    assert np.allclose(mask, np.array([[True, True, False], [True, True, True], [True, False, False]]))
+
+
 @pytest.mark.parametrize("hidden_layers", [[], [32], [10, 10]])
 def test_ParallelDecidingLayer(hidden_layers):
     tf.random.set_seed(123)
