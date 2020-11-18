@@ -342,6 +342,18 @@ class Agent:
         else:
             return action
 
+    @tf.function(experimental_relax_shapes=True)
+    def value(self, state):
+        """Return the predicted value for the given state using the value model.
+
+        Parameters
+        ----------
+        state : np.array
+            The state of the environment.
+
+        """
+        return self.value_model(state[tf.newaxis])[0][0]
+
     def train(self, env, episodes=10, epochs=1, max_episode_length=None, verbose=0, save_freq=1,
               logdir=None, parallel=True, batch_size=64):
         """Train the agent on env.
@@ -470,7 +482,7 @@ class Agent:
                 else:  # with a PGAgent/PPOAgent
                     value = self.value_model.predict(env)
             else:
-                value = self.value_model(state[np.newaxis])[0][0]
+                value = self.value(state)
             next_state, reward, done, _ = env.step(action.numpy())
             if buffer is not None:
                 buffer.store(state, action, reward, logprob, value)
