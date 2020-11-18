@@ -323,6 +323,7 @@ class Agent:
         self.normalize_advantages = normalize_advantages
         self.kld_limit = kld_limit
 
+    @tf.function(experimental_relax_shapes=True)
     def act(self, state, return_logprob=False):
         """Return an action for the given state using the policy model.
 
@@ -334,12 +335,12 @@ class Agent:
             Whether to return the log probability of choosing the chosen action.
 
         """
-        logpi = self.policy_model(state[np.newaxis])
+        logpi = self.policy_model(state[tf.newaxis])
         action = tf.random.categorical(logpi, 1)[0, 0]
         if return_logprob:
-            return action.numpy(), logpi[:, action][0].numpy()
+            return action, logpi[:, action][0]
         else:
-            return action.numpy()
+            return action
 
     def train(self, env, episodes=10, epochs=1, max_episode_length=None, verbose=0, save_freq=1,
               logdir=None, parallel=True, batch_size=64):
@@ -434,7 +435,6 @@ class Agent:
 
         return history
 
-
     def run_episode(self, env, max_episode_length=None, buffer=None):
         """Run an episode and return total reward and episode length.
 
@@ -471,7 +471,7 @@ class Agent:
                     value = self.value_model.predict(env)
             else:
                 value = self.value_model(state[np.newaxis])[0][0]
-            next_state, reward, done, _ = env.step(action)
+            next_state, reward, done, _ = env.step(action.numpy())
             if buffer is not None:
                 buffer.store(state, action, reward, logprob, value)
             episode_length += 1
@@ -556,12 +556,12 @@ class Agent:
                 break
         return {k: np.array(v) for k, v in history.items()}
 
-    @tf.function
+    @tf.function(experimental_relax_shapes=True)
     def _fit_policy_model_step(self, states, actions, logprobs, advantages):
         """Fit policy model on one batch of data."""
         with tf.GradientTape() as tape:
             logpis = self.policy_model(states)
-            new_logprobs = tf.reduce_sum(tf.one_hot(actions, logpis.shape[1]) * logpis, axis=1)
+            new_logprobs = tf.reduce_sum(tf.one_hot(actions, tf.shape(logpis)[1]) * logpis, axis=1)
             loss = tf.reduce_mean(self.policy_loss(new_logprobs, logprobs, advantages))
             kld = tf.reduce_mean(logprobs - new_logprobs)
             ent = -tf.reduce_mean(new_logprobs)
@@ -592,7 +592,7 @@ class Agent:
             history['loss'].append(loss / batches)
         return {k: np.array(v) for k, v in history.items()}
 
-    @tf.function
+    @tf.function(experimental_relax_shapes=True)
     def _fit_value_model_step(self, states, values):
         """Fit value model on one batch of data."""
         with tf.GradientTape() as tape:
