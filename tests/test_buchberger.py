@@ -319,11 +319,11 @@ def test_lead_monomials_vector(g, k, v):
     assert np.array_equal(lead_monomials_vector(g, k=k), np.array(v))
 
 
-def test_LeadMonomialsWrapper_0():
+def test_LeadMonomialsEnv_0():
     R, x, y, z = sp.ring('x,y,z', sp.FF(101), 'grevlex')
     F = [y - x**2, z - x**3]
     ideal_gen = FixedIdealGenerator(F)
-    env = LeadMonomialsWrapper(BuchbergerEnv(ideal_gen, elimination='none'))
+    env = LeadMonomialsEnv(ideal_gen, elimination='none')
     state = env.reset()
     assert np.array_equal(state, np.array([[2, 0, 0, 3, 0, 0]]))
     state, _, done, _ = env.step(0)
@@ -339,11 +339,11 @@ def test_LeadMonomialsWrapper_0():
     assert done
 
 
-def test_LeadMonomialsWrapper_1():
+def test_LeadMonomialsEnv_1():
     R, x, y, z = sp.ring('x,y,z', sp.FF(101), 'grevlex')
     F = [y - x**2, z - x**3]
     ideal_gen = FixedIdealGenerator(F)
-    env = LeadMonomialsWrapper(BuchbergerEnv(ideal_gen))
+    env = LeadMonomialsEnv(ideal_gen)
     state = env.reset()
     assert np.array_equal(state, np.array([[2, 0, 0, 3, 0, 0]]))
     state, _, done, _ = env.step(0)

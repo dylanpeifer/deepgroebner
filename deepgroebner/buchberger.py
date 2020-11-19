@@ -4,6 +4,8 @@ import bisect
 import numpy as np
 import sympy as sp
 
+from .ideals import RandomBinomialIdealGenerator, FixedIdealGenerator
+
 
 def spoly(f, g, lmf=None, lmg=None):
     """Return the s-polynomial of monic polynomials f and g."""
@@ -161,55 +163,38 @@ class BuchbergerEnv:
 
     Parameters
     ----------
-    ideal_gen
-        A generator which yields ideals as lists of polynomials.
+    ideal_dist : str or IdealGenerator, optional
+        Ideal generator or string naming the ideal distribution.
     elimination : {'gebauermoeller', 'lcm', 'none'}, optional
         The elimination strategy used when updating the pair set.
-    sort_reducers : bool, optional
-        Whether to choose reducers in sorted order when performing long division
-        on the s-polynomials.
     rewards : {'reductions', 'additions'}, optional
         The reward value for each step.
+    sort_input : bool, optional
+        Whether to sort the initial generating set by lead monomial.
+    sort_reducers : bool, optional
+        Whether to choose reducers in sorted lead monomial order when performing long division
+        on the s-polynomials.
 
     Examples
     --------
-    >>> import sympy as sp
-    >>> R, x, y, z = sp.ring("x,y,z", sp.FF(32003), 'grevlex')
-    >>> ideal_gen = FixedIdealGenerator([y - x**2, z - x**3])
-    >>> env = BuchbergerEnv(ideal_gen)
-    >>> env.reset()
-    ([x**2 + 32002 mod 32003*y, x**3 + 32002 mod 32003*z], {(0, 1)})
-    >>> env.step((0, 1))
-    (([x**2 + 32002 mod 32003*y,
-       x**3 + 32002 mod 32003*z,
-       x*y + 32002 mod 32003*z],
-      {(0, 2)}),
-     -1,
-     False,
-     {})
 
     """
 
-    def __init__(self,
-                 ideal_gen,
-                 elimination='gebauermoeller',
-                 sort_reducers=True,
-                 rewards='additions'):
-        self.ideal_gen = ideal_gen
+    def __init__(self, ideal_dist='3-20-10-weighted', elimination='gebauermoeller',
+                 rewards='additions', sort_input=False, sort_reducers=True):
+        self.ideal_dist = ideal_dist
         self.elimination = elimination
-        self.sort_reducers = sort_reducers
         self.rewards = rewards
-        self.ring = None
-        self.G = []
-        self.P = set()
-        self.reducers = []
-        self.lmReducers = []
-        self.keysReducers = []
+        self.sort_input = sort_input
+        self.sort_reducers = sort_reducers
+        self.ideal_gen = self._make_ideal_gen(ideal_dist)
 
     def reset(self):
-        """Initialize the polynomial list and pair list for a new ideal from ideal_fn."""
+        """Initialize the polynomial list and pair list for a new Groebner basis computation."""
         F = next(self.ideal_gen)
-        self.ring = F[0].ring
+        self.order = F[0].ring.order
+        if self.sort_input:
+            F = sorted(F, key=lambda f: self.order(f.LM))
         self.G = []
         self.lmG = []
         self.P = set()
@@ -217,11 +202,11 @@ class BuchbergerEnv:
             self.G, self.P = update(self.G, self.P, f.monic(), lmG=self.lmG, strategy=self.elimination)
             self.lmG.append(f.LM)
         if self.sort_reducers:
-            self.reducers = sorted([f.monic() for f in F], key=lambda f: self.ring.order(f.LM))
+            self.reducers = sorted([f.monic() for f in F], key=lambda f: self.order(f.LM))
         else:
             self.reducers = [f.monic() for f in F]
         self.lmReducers = [f.LM for f in self.reducers]
-        self.keysReducers = [self.ring.order(lm) for lm in self.lmReducers]
+        self.keysReducers = [self.order(lm) for lm in self.lmReducers]
         return (self.G, self.P) if self.P else self.reset()
 
     def step(self, action):
@@ -234,7 +219,7 @@ class BuchbergerEnv:
             self.G, self.P = update(self.G, self.P, r.monic(), lmG=self.lmG, strategy=self.elimination)
             self.lmG.append(r.LM)
             if self.sort_reducers:
-                key = self.ring.order(r.LM)
+                key = self.order(r.LM)
                 index = bisect.bisect(self.keysReducers, key)
                 self.reducers = self.reducers[:index] + [r.monic()] + self.reducers[index:]
                 self.lmReducers = self.lmReducers[:index] + [r.LM] + self.lmReducers[index:]
@@ -245,23 +230,30 @@ class BuchbergerEnv:
         reward = -(1 + stats['steps']) if self.rewards == 'additions' else -1
         return (self.G, self.P), reward, len(self.P) == 0, {}
 
-    def render(self):
-        print(self.G)
-        print(self.P)
-        print()
-
     def copy(self):
         """Return a copy of this environment with the same state."""
-        copy = BuchbergerEnv(self.ideal_gen)
+        copy = BuchbergerEnv(ideal_dist=self.ideal_dist)
         copy.elimination = self.elimination
-        copy.sort_reducers = self.sort_reducers
         copy.rewards = self.rewards
-        copy.ring = self.ring
-        copy.G = [g.copy() for g in self.G]
-        copy.lmG = self.lmG[:]
-        copy.P = self.P.copy()
-        copy.reducers = [r.copy() for r in self.reducers]
+        copy.sort_input = self.sort_input
+        copy.sort_reducers = self.sort_reducers
         return copy
+    
+    def _make_ideal_gen(self, ideal_dist):
+        """Return the ideal generator for this environment."""
+        if isinstance(ideal_dist, RandomBinomialIdealGenerator) or isinstance(ideal_dist, FixedIdealGenerator):
+            return ideal_dist
+        dist_args = ideal_dist.split('-')
+        kwargs = {
+            'n': int(dist_args[0]),
+            'd': int(dist_args[1]),
+            's': int(dist_args[2]),
+            'degrees': dist_args[3],
+            'constants': 'consts' in dist_args,
+            'homogeneous': 'homog' in dist_args,
+            'pure': 'pure' in dist_args,
+        }
+        return RandomBinomialIdealGenerator(**kwargs)
 
 
 class BuchbergerAgent:
@@ -281,41 +273,43 @@ class BuchbergerAgent:
         return select(G, P, strategy=self.strategy)
 
 
-def lead_monomials_vector(g, k=1, dtype=np.int):
+def lead_monomials_vector(g, k=2, dtype=np.int32):
     """Return the concatenated exponent vectors of the k lead monomials of g."""
     n = g.ring.ngens
     it = iter(g.monoms())
     return np.array([next(it, (0,) * n) for _ in range(k)]).flatten().astype(dtype)
 
 
-class LeadMonomialsWrapper:
-    """A wrapper for BuchbergerEnv with state a matrix of the pairs' lead monomials.
+class LeadMonomialsEnv:
+    """A BuchbergerEnv with state the matrix of the pairs' lead monomials.
 
     Parameters
     ----------
-    env : BuchbergerEnv
-        The environment that will be wrapped.
+    ideal_dist : str, optional
+        String naming the ideal distribution.
+    elimination : {'gebauermoeller', 'lcm', 'none'}, optional
+        The elimination strategy used when updating the pair set.
+    rewards : {'reductions', 'additions'}, optional
+        The reward value for each step.
+    sort_input : bool, optional
+        Whether to sort the initial generating set by lead monomial.
+    sort_reducers : bool, optional
+        Whether to choose reducers in sorted lead monomial order when performing long division
+        on the s-polynomials.
     k : int, optional
-        The number of lead monomials used for each polynomial.
+        The number of lead monomials shown for each polynomial.
     dtype : data-type, optional
         The data-type used for the state matrix.
 
     Examples
     --------
-    >>> import sympy as sp
-    >>> R, x, y, z = sp.ring("x,y,z", sp.FF(32003), 'grevlex')
-    >>> ideal_gen = FixedIdealGenerator([y - x**2, z - x**3])
-    >>> env = BuchbergerEnv(ideal_gen)
-    >>> wrapped_env = LeadMonomialsWrapper(env, k=2)
-    >>> wrapped_env.reset()
-    array([[2, 0, 0, 0, 1, 0, 3, 0, 0, 0, 0, 1]])
-    >>> wrapped_env.step(0)
-    (array([[2, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1]]), -1, False, {})
 
     """
 
-    def __init__(self, env, k=1, dtype=np.int32):
-        self.env = env
+    def __init__(self, ideal_dist='3-20-10-weighted', elimination='gebauermoeller',
+                 rewards='addtions', sort_input=False, sort_reducers=True,
+                 k=1, dtype=np.int32):
+        self.env = BuchbergerEnv(ideal_dist, elimination, rewards, sort_input, sort_reducers)
         self.k = k
         self.dtype = dtype
         self.pairs = []       # list of current pairs
@@ -337,12 +331,9 @@ class LeadMonomialsWrapper:
             self.leads.append(lead_monomials_vector(G[-1], k=self.k, dtype=self.dtype))
         return self._matrix(), reward, done, info
 
-    def render(self):
-        self.env.render()
-
     def copy(self):
         env = self.env.copy()
-        copy = LeadMonomialsWrapper(env, k=self.k, dtype=self.dtype)
+        copy = LeadMonomialsEnv(env, k=self.k, dtype=self.dtype)
         copy.pairs = self.pairs.copy()
         copy.m = self.m
         copy.leads = self.leads.copy()
@@ -355,7 +346,6 @@ class LeadMonomialsWrapper:
             mat[i, :n*self.k] = self.leads[p[0]]
             mat[i, n*self.k:] = self.leads[p[1]]
         return mat
-
 
 
 class LeadMonomialsAgent:

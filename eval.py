@@ -10,8 +10,7 @@ import json
 
 import gym
 
-from deepgroebner.buchberger import BuchbergerEnv, LeadMonomialsWrapper
-from deepgroebner.ideals import RandomBinomialIdealGenerator, RandomIdealGenerator
+from deepgroebner.buchberger import BuchbergerEnv, LeadMonomialsEnv
 from deepgroebner.pg import PGAgent
 from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, AttentionPMLP, TransformerPMLP
 
@@ -60,7 +59,6 @@ def make_parser():
                         default="",
                         help='filename for initial policy weights')
 
-
     run = parser.add_argument_group('running')
     run.add_argument('--episodes',
                      type=int,
@@ -97,21 +95,7 @@ def make_env(args):
     if args.environment in ['CartPole-v0', 'CartPole-v1', 'LunarLander-v2']:
         env = gym.make(args.environment)
     else:
-        dist_args = args.distribution.split('-')
-        n = int(dist_args[0])
-        d = int(dist_args[1])
-        s = int(dist_args[2])
-        constants = 'consts' in dist_args
-        homogeneous = 'homog' in dist_args
-        pure = 'pure' in dist_args
-        if args.environment == 'RandomBinomialIdeal':
-            ideal_gen = RandomBinomialIdealGenerator(n, d, s, degrees=dist_args[3],
-                                                     constants=constants, homogeneous=homogeneous, pure=pure)
-        else:
-            ideal_gen = RandomIdealGenerator(n, d, s, float(dist_args[3]), degrees=dist_args[4],
-                                             constants=constants)
-        env = BuchbergerEnv(ideal_gen, elimination=args.elimination, rewards=args.rewards)
-        env = LeadMonomialsWrapper(env, k=args.k)
+        env = LeadMonomialsEnv(args.distribution, elimination=args.elimination, rewards=args.rewards, k=args.k)
     return env
 
 

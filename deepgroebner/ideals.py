@@ -223,7 +223,7 @@ class RandomBinomialIdealGenerator:
 
     """
 
-    def __init__(self, n, d, s, degrees='uniform',
+    def __init__(self, n=3, d=20, s=10, degrees='uniform',
                  constants=False, homogeneous=False, pure=False,
                  coefficient_ring=sp.FF(32003), order='grevlex'):
         self.ring = sp.xring('x:' + str(n), coefficient_ring, order)[0]

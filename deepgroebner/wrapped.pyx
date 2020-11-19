@@ -19,4 +19,3 @@ cdef class CBuchbergerEnv:
         i, j = action
         x = self.c_env.step(i, j)
         return x
-
