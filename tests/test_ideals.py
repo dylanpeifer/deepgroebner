@@ -88,6 +88,7 @@ def test_random_binomial_2(D, ring, b):
     np.random.seed(12345)
     assert random_binomial(D, ring, homogeneous=True) == b
 
+
 @pytest.mark.parametrize("D, ring, b", [
     (np.array([0.2, 0.8]), R1, x + 32002),
     (np.ones(11)/11, R1, x**8*y*z + 32002*x*y),
@@ -100,6 +101,7 @@ def test_random_binomial_3(D, ring, b):
     np.random.seed(543)
     assert random_binomial(D, ring, pure=True) == b
 
+
 @pytest.mark.parametrize("D, ring, b", [
     (np.ones(12)/12, R1, x**2 + 32002*y**2),
     (np.ones(9)/9, R2, a - d),
@@ -108,6 +110,7 @@ def test_random_binomial_3(D, ring, b):
 def test_random_binomial_4(D, ring, b):
     np.random.seed(11)
     assert random_binomial(D, ring, homogeneous=True, pure=True) == b
+
 
 @pytest.mark.parametrize("D, ring, b", [
     ([0, 0.8, 0.2], R1, y + 19967*z),
@@ -121,14 +124,13 @@ def test_random_binomial_5(D, ring, b):
 
 
 def test_RandomBinomialIdealGenerator_0():
-    np.random.seed(123)
-    ideal_gen = RandomBinomialIdealGenerator(3, 5, 5, degrees='weighted')
+    ideal_gen = RandomBinomialIdealGenerator(3, 5, 5, degrees='weighted', seed=123)
     x0, x1, x2 = ideal_gen.ring.gens
-    I = [x0**3*x2 + 19967*x1**3,
-         x0*x1**3 + 15378*x0**2*x1,
-         x0**3 + 97*x2,
-         x1*x2**3 + 22753*x0*x1*x2,
-         x0**3*x2 + 14945*x0*x1**2]
+    I = [x0*x1 + 495*x2,
+         x1*x2**4 + 5901*x1,
+         x0**5 + 14384*x0**3*x2**2,
+         x0**3*x1*x2 + 16417*x1*x2,
+         x1**5 + 13109*x1**3*x2]
     assert next(ideal_gen) == I
 
 
@@ -144,24 +146,23 @@ def test_RandomBinomialIdealGenerator_0():
 ])
 def test_RandomBinomialIdealGenerator_1(d, consts, degs, D):
     ideal_gen = RandomBinomialIdealGenerator(3, d, 3, constants=consts, degrees=degs)
-    assert np.array_equal(ideal_gen.dist, D)
+    assert np.array_equal(ideal_gen.D, D)
 
 
 def test_RandomBinomialIdealGenerator_2():
-    np.random.seed(681)
-    ideal_gen = RandomBinomialIdealGenerator(3, 3, 2, degrees='uniform', order='lex')
+    ideal_gen = RandomBinomialIdealGenerator(3, 3, 2, degrees='uniform', order='lex', seed=681)
     x0, x1, x2 = ideal_gen.ring.gens
-    assert next(ideal_gen) == [x1 + 11414*x2**3, x0 + 11229*x1*x2**2]
+    assert next(ideal_gen) == [x0*x2 + 21538*x2**3, x0*x2**2 + 29713*x1*x2]
 
 
 def test_RandomBinomialIdealGenerator_3():
-    np.random.seed(10)
     ideal_gen = RandomBinomialIdealGenerator(5, 10, 5, degrees='uniform',
-                                             homogeneous=True, coefficient_ring=sp.FF(101))
+                                             homogeneous=True, coefficient_ring=sp.FF(101),
+                                             seed=10)
     x0, x1, x2, x3, x4 = ideal_gen.ring.gens
-    I = [x0**5*x1**3 + 10*x0*x2*x3*x4**5,
-         x1**8*x2 + 29*x0**7*x1*x4,
-         x0**4*x1**2*x2 + 74*x0**3*x1**2*x2*x3,
-         x0**4*x3**3*x4**2 + 12*x0*x1**4*x3*x4**3,
-         x1*x3**3 + 63*x1*x2*x3*x4]
+    I = [x2*x3**6 + 78*x1**2*x3**4*x4,
+         x0*x2**4*x4 + 83*x1*x2*x3*x4**3,
+         x0**4*x1**3*x2**3 + 16*x0**2*x1**2*x2*x3**2*x4**3,
+         x2**2*x3**4*x4**2 + 85*x0*x1**2*x2*x4**4,
+         x1**2*x3**5*x4 + 24*x1**3*x2**3*x4**2]
     assert next(ideal_gen) == I

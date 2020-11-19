@@ -4,7 +4,7 @@ import bisect
 import numpy as np
 import sympy as sp
 
-from .ideals import IdealGenerator
+from .ideals import IdealGenerator, RandomBinomialIdealGenerator
 
 
 def spoly(f, g, lmf=None, lmg=None):
@@ -174,6 +174,8 @@ class BuchbergerEnv:
     sort_reducers : bool, optional
         Whether to choose reducers in sorted lead monomial order when performing long division
         on the s-polynomials.
+    seed : int or None, optional
+        Seed for random number generator.
 
     Examples
     --------
@@ -181,13 +183,13 @@ class BuchbergerEnv:
     """
 
     def __init__(self, ideal_dist='3-20-10-weighted', elimination='gebauermoeller',
-                 rewards='additions', sort_input=False, sort_reducers=True):
+                 rewards='additions', sort_input=False, sort_reducers=True, seed=None):
         self.ideal_dist = ideal_dist
         self.elimination = elimination
         self.rewards = rewards
         self.sort_input = sort_input
         self.sort_reducers = sort_reducers
-        self.ideal_gen = self._make_ideal_gen(ideal_dist)
+        self.ideal_gen = self._make_ideal_gen(ideal_dist, seed)
 
     def reset(self):
         """Initialize the polynomial list and pair list for a new Groebner basis computation."""
@@ -238,8 +240,11 @@ class BuchbergerEnv:
         copy.sort_input = self.sort_input
         copy.sort_reducers = self.sort_reducers
         return copy
-    
-    def _make_ideal_gen(self, ideal_dist):
+
+    def seed(self, seed=None):
+        self.ideal_gen.seed(seed)
+
+    def _make_ideal_gen(self, ideal_dist, seed):
         """Return the ideal generator for this environment."""
         if isinstance(ideal_dist, IdealGenerator):
             return ideal_dist
@@ -252,6 +257,7 @@ class BuchbergerEnv:
             'constants': 'consts' in dist_args,
             'homogeneous': 'homog' in dist_args,
             'pure': 'pure' in dist_args,
+            'seed': seed,
         }
         return RandomBinomialIdealGenerator(**kwargs)
 
@@ -300,6 +306,8 @@ class LeadMonomialsEnv:
         The number of lead monomials shown for each polynomial.
     dtype : data-type, optional
         The data-type used for the state matrix.
+    seed : int or None, optional
+        Seed for random number generator.
 
     Examples
     --------
@@ -308,8 +316,8 @@ class LeadMonomialsEnv:
 
     def __init__(self, ideal_dist='3-20-10-weighted', elimination='gebauermoeller',
                  rewards='addtions', sort_input=False, sort_reducers=True,
-                 k=1, dtype=np.int32):
-        self.env = BuchbergerEnv(ideal_dist, elimination, rewards, sort_input, sort_reducers)
+                 k=1, dtype=np.int32, seed=None):
+        self.env = BuchbergerEnv(ideal_dist, elimination, rewards, sort_input, sort_reducers, seed=seed)
         self.k = k
         self.dtype = dtype
         self.pairs = []       # list of current pairs
@@ -338,6 +346,9 @@ class LeadMonomialsEnv:
         copy.m = self.m
         copy.leads = self.leads.copy()
         return copy
+
+    def seed(self, seed=None):
+        self.env.seed(seed)
 
     def _matrix(self):
         n = self.env.G[0].ring.ngens

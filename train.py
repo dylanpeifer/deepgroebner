@@ -25,6 +25,10 @@ def make_parser():
                               'CartPole-v0', 'CartPole-v1', 'LunarLander-v2'],
                      default='RandomBinomialIdeal',
                      help='training environment')
+    env.add_argument('--env_seed',
+                     type=lambda x: int(x) if x.lower() != 'none' else None,
+                     default=None,
+                     help='seed for the environment')
 
     ideal = parser.add_argument_group('ideals', 'ideal distribution and environment options')
     ideal.add_argument('--distribution',
@@ -167,6 +171,7 @@ def make_env(args):
         env = gym.make(args.environment)
     else:
         env = LeadMonomialsEnv(args.distribution, elimination=args.elimination, rewards=args.rewards, k=args.k)
+    env.seed(args.env_seed)
     return env
 
 
