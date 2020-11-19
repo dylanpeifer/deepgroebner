@@ -35,14 +35,13 @@ private:
   std::map<std::tuple<int, int, int>, std::vector<SPair>> bins;
 };
 
-class BuchbergerEnv {
+class LeadMonomialsEnv {
 public:
-  BuchbergerEnv() : state{0} {}
-  BuchbergerEnv(int s) : state{s} {}
-  int reset() { return state; }
-  int step(int i, int j) { return i + j; }
-private:
-  int state;
+  LeadMonomialsEnv() {}
+  void reset() {}
+  float step(int action) { return 2.0; }
+  void seed(int seed) {}
+  int state[12];
 };
 
 #endif

@@ -4,8 +4,11 @@ cdef extern from "buchberger.cpp":
     pass
 
 cdef extern from "buchberger.h":
-    cdef cppclass BuchbergerEnv:
-        BuchbergerEnv() except +
-        BuchbergerEnv(int) except +
-        int reset()
-        int step(int, int)
+    cdef cppclass LeadMonomialsEnv:
+        LeadMonomialsEnv() except +
+        LeadMonomialsEnv(const LeadMonomialsEnv&)
+        void reset()
+        float step(int)
+        void seed(int)
+
+        int[12] state
