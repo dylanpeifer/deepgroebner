@@ -5,6 +5,21 @@ import numpy as np
 import sympy as sp
 
 
+class IdealGenerator:
+    """Abstract base class for all ideal generators.
+
+    Derived classes must implement a __next__ method which returns
+    a list of SymPy polynomials.
+
+    """
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        raise NotImplementedError()
+
+
 def cyclic(n, coefficient_ring=sp.FF(32003), order='grevlex'):
     """Return the cyclic-n ideal."""
     R, gens = sp.xring('x:' + str(n), coefficient_ring, order)
@@ -13,7 +28,7 @@ def cyclic(n, coefficient_ring=sp.FF(32003), order='grevlex'):
     return F + [np.product(gens) - 1]
 
 
-class FixedIdealGenerator:
+class FixedIdealGenerator(IdealGenerator):
     """Generator of repeated copies of a fixed ideal.
 
     Parameters
@@ -37,9 +52,6 @@ class FixedIdealGenerator:
 
     def __next__(self):
         return [f.copy() for f in self.F]
-
-    def __iter__(self):
-        return self
 
 
 def random_nonzero_coeff(ring):
@@ -103,6 +115,7 @@ def random_monomial(D, ring, bases=None):
         The polynomial ring.
     bases : list, optional
         The list of precomputed monomial bases for efficiency.
+
     """
     if bases is None:
         bases = [basis(ring, i) for i in range(len(D))]
@@ -175,6 +188,7 @@ def random_polynomial(D, lam, ring, bases=None):
         The polynomial ring.
     bases : list, optional
         The list of precomputed monomial bases for efficiency.
+
     """
     if bases is None:
         bases = [basis(ring, i) for i in range(len(D))]
@@ -186,7 +200,7 @@ def random_polynomial(D, lam, ring, bases=None):
     return f
 
 
-class RandomBinomialIdealGenerator:
+class RandomBinomialIdealGenerator(IdealGenerator):
     """Generator of random examples of binomial ideals.
 
     Parameters
@@ -238,9 +252,6 @@ class RandomBinomialIdealGenerator:
                                 bases=self.bases)
                 for _ in range(self.generators)]
 
-    def __iter__(self):
-        return self
-
     def _make_dist(self, n, d, constants, degrees):
         """Return the probability distribution of degrees."""
         head = [1] if constants else [0]
@@ -256,7 +267,7 @@ class RandomBinomialIdealGenerator:
         return dist / np.sum(dist)
 
 
-class RandomIdealGenerator:
+class RandomIdealGenerator(IdealGenerator):
     """Generator of random examples of polynomial ideals.
 
     Parameters
@@ -277,6 +288,7 @@ class RandomIdealGenerator:
         Coefficient ring for the polynomials.
     order : {'grevlex', 'lex', 'grlex'}, optional
         Monomial order.
+
     """
 
     def __init__(self, n, d, s, lam, degrees='uniform',
@@ -291,9 +303,6 @@ class RandomIdealGenerator:
         return [random_polynomial(self.dist, self.lam, self.ring,
                                   bases=self.bases)
                 for _ in range(self.generators)]
-
-    def __iter__(self):
-        return self
 
     def _make_dist(self, n, d, constants, degrees):
         """Return the probability distribution of degrees."""

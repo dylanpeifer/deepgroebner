@@ -4,7 +4,7 @@ import bisect
 import numpy as np
 import sympy as sp
 
-from .ideals import RandomBinomialIdealGenerator, FixedIdealGenerator
+from .ideals import IdealGenerator
 
 
 def spoly(f, g, lmf=None, lmg=None):
@@ -241,7 +241,7 @@ class BuchbergerEnv:
     
     def _make_ideal_gen(self, ideal_dist):
         """Return the ideal generator for this environment."""
-        if isinstance(ideal_dist, RandomBinomialIdealGenerator) or isinstance(ideal_dist, FixedIdealGenerator):
+        if isinstance(ideal_dist, IdealGenerator):
             return ideal_dist
         dist_args = ideal_dist.split('-')
         kwargs = {
