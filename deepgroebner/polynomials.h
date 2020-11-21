@@ -30,6 +30,7 @@ class Monomial {
 public:
   Monomial() : exponent{}, degree{0} {}
   Monomial(std::initializer_list<int> exp);
+  Monomial(std::array<int, N> exp);
 
   int operator[](int i) const { return exponent[i]; }
   int& operator[](int i) { return exponent[i]; }
@@ -70,6 +71,7 @@ class Polynomial {
 public:
   Polynomial() : terms{} {}
   Polynomial(std::initializer_list<Term> tms);
+  Polynomial(std::vector<Term> tms);
   Coefficient LC() const { return terms[0].coeff; }
   Monomial LM() const { return terms[0].monom; }
   Term LT() const { return terms[0]; }

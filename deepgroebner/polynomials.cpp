@@ -21,10 +21,17 @@ Coefficient operator/(Coefficient c1, Coefficient c2) {
 }
 
 Monomial::Monomial(std::initializer_list<int> exp) {
-  if (exp.size() != N) throw std::invalid_argument("exponent vector is wrong size");
+  if (exp.size() > N) throw std::invalid_argument("exponent vector is too large");
+  std::fill(exponent.begin(), exponent.end(), 0);
   std::copy(exp.begin(), exp.end(), exponent.begin());
   degree = std::accumulate(exponent.begin(), exponent.end(), 0);
 }
+
+Monomial::Monomial(std::array<int, N> exp) {
+  std::fill(exponent.begin(), exponent.end(), 0);
+  std::copy(exp.begin(), exp.end(), exponent.begin());
+  degree = std::accumulate(exponent.begin(), exponent.end(), 0);
+}  
 
 Monomial operator*(const Monomial& m1, const Monomial& m2) {
   Monomial m;
@@ -113,6 +120,12 @@ Polynomial::Polynomial(std::initializer_list<Term> tms) {
   std::sort(terms.begin(), terms.end(),
 	    [](const Term& t1, const Term& t2) { return t1.monom > t2.monom; });
 }
+
+Polynomial::Polynomial(std::vector<Term> tms) {
+  terms = tms;
+  std::sort(terms.begin(), terms.end(),
+	    [](const Term& t1, const Term& t2) { return t1.monom > t2.monom; });
+}  
 
 Polynomial operator+(const Polynomial& f1, const Polynomial& f2) {
   Polynomial g;

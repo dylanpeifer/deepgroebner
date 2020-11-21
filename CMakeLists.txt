@@ -5,11 +5,11 @@ set(CMAKE_CXX_STANDARD 17)
 set(INSTALL_GTEST OFF)
 add_subdirectory(googletest)
 
-add_executable(cyclic5 benchmarks/cyclic5.cpp
+add_executable(cyclic5 benchmarks/cyclic5.cpp deepgroebner/ideals.cpp
   deepgroebner/polynomials.cpp deepgroebner/buchberger.cpp)
 target_include_directories(cyclic5 PUBLIC deepgroebner)
 
-add_executable(cyclic6 benchmarks/cyclic6.cpp
+add_executable(cyclic6 benchmarks/cyclic6.cpp deepgroebner/ideals.cpp
   deepgroebner/polynomials.cpp deepgroebner/buchberger.cpp)
 target_include_directories(cyclic6 PUBLIC deepgroebner)
 
