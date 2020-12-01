@@ -1,5 +1,6 @@
-#include "polynomials.h"
 #include "buchberger.h"
+#include "ideals.h"
+#include "polynomials.h"
 
 #include <algorithm>
 #include <map>
@@ -37,6 +38,48 @@ Polynomial reduce(const Polynomial& g, const std::vector<Polynomial>& F) {
   return r;
 }
 
+void update(std::vector<Polynomial>& G, std::vector<SPair>& P, const Polynomial& f, EliminationStrategy elimination) {
+
+  std::vector<SPair> P_;
+  
+  switch (elimination) {
+  case EliminationStrategy::None:
+    for (int i = 0; i < G.size(); i++) {
+      P_.push_back(SPair{i, G.size()});
+    }
+    break;
+  case EliminationStrategy::LCM:
+    for (int i = 0; i < G.size(); i++) {
+      if (lcm(G[i].LM(), f.LM()) != G[i].LM() * f.LM())
+	P_.push_back(SPair{i, G.size()});
+    }
+    break;
+  case EliminationStrategy::GebauerMoeller:
+    auto fn = [&G, &f](const SPair& p) {
+		Monomial gam = lcm(G[p.i].LM(), G[p.j].LM());
+		return is_divisible(gam, f.LM()) && (gam != lcm(G[p.i].LM(), f.LM())) && (gam != lcm(G[p.j].LM(), f.LM()));
+	      };
+    P.erase(std::remove_if(P.begin(), P.end(), fn), P.end());
+
+    std::map<Monomial, std::vector<int>> lcms;
+    for (int i = 0; i < G.size(); i++) {
+      lcms[lcm(G[i].LM(), f.LM())].push_back(i);
+    }
+    std::vector<Monomial> min_lcms;
+    for (auto& p : lcms) {
+      if (std::all_of(min_lcms.begin(), min_lcms.end(), [&p](const Monomial& m) { return !is_divisible(p.first, m); })) {
+	min_lcms.push_back(p.first);
+	if (std::all_of(p.second.begin(), p.second.end(), [&G, &f](int i) { return lcm(G[i].LM(), f.LM()) != G[i].LM() * f.LM(); }))
+	  P_.push_back(SPair{p.second[0], G.size()});
+      }
+    }
+    break;
+  }
+
+  G.push_back(f);
+  P.insert(P.end(), P_.begin(), P_.end());
+}
+
 std::vector<Polynomial> minimalize(std::vector<Polynomial>& G) {
   std::sort(G.begin(), G.end(), [](const Polynomial& f, const Polynomial& g) { return f.LM() < g.LM(); });
   std::vector<Polynomial> Gmin;
@@ -56,22 +99,23 @@ std::vector<Polynomial> interreduce(std::vector<Polynomial>& G) {
   return G;
 }
 
-std::vector<Polynomial> buchberger(const std::vector<Polynomial>& F) {
+std::vector<Polynomial> buchberger(const std::vector<Polynomial>& F, EliminationStrategy elimination) {
 
   std::vector<Polynomial> G;
-  SPairSet P {G};
+  std::vector<SPair> P;
 
-  for (Polynomial f : F) {
-    P.update(f);
-    G.push_back(f);
+  for (const Polynomial& f : F) {
+    update(G, P, f, elimination);
   }
-  
+
   while (!P.empty()) {
-    SPair p = P.pop();
+    auto iter = std::min_element(P.begin(), P.end(), [&G](const SPair& a, const SPair& b) {
+						       return lcm(G[a.i].LM(), G[a.j].LM()) < lcm(G[b.i].LM(), G[b.j].LM()); });
+    SPair p = *iter;
+    P.erase(iter);
     Polynomial r = reduce(spoly(G[p.i], G[p.j]), G);
     if (r.size() != 0) {
-      P.update(r);
-      G.push_back(r);
+      update(G, P, r, elimination);
     }
   }
 
@@ -100,4 +144,22 @@ void SPairSet::update(const Polynomial& r) {
     bins[key].push_back(SPair{i, n});
     sz++;
   }
+}
+
+BuchbergerEnv::BuchbergerEnv(int n, int d, int s, DegreeDistribution D, bool constants, bool homogeneous, bool pure,
+			     EliminationStrategy elimination, RewardOption rewards, bool sort_input, bool sort_reducers)
+  : ideal_gen(n, d, s, D, constants, homogeneous, pure),
+    elimination(elimination), rewards(rewards), sort_input(sort_input), sort_reducers(sort_reducers)
+{
+}
+
+void BuchbergerEnv::reset() {
+  std::vector<Polynomial> I = ideal_gen.next();
+  for (auto& f : I) {
+    update(F, P, f, elimination);
+  }
+}
+
+float BuchbergerEnv::step(std::pair<int, int> action) {
+  return 2.0;
 }
