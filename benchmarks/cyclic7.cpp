@@ -10,7 +10,5 @@ int main() {
   G = minimalize(G);
   G = interreduce(G);
 
-  std::cout << "\n" << G.size() << "\n\n";
-  for (auto& g : G) std::cout << g << "\n";
-  std::cout << std::endl;
+  std::cout << "\n" << G.size() << "\n";
 }

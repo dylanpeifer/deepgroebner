@@ -17,6 +17,10 @@ add_executable(cyclic7 benchmarks/cyclic7.cpp deepgroebner/ideals.cpp
   deepgroebner/polynomials.cpp deepgroebner/buchberger.cpp)
 target_include_directories(cyclic7 PUBLIC deepgroebner)
 
+add_executable(3-20-10-uniform benchmarks/3-20-10-uniform.cpp deepgroebner/ideals.cpp
+  deepgroebner/polynomials.cpp deepgroebner/buchberger.cpp)
+target_include_directories(3-20-10-uniform PUBLIC deepgroebner)
+
 add_executable(test_polynomials tests/test_polynomials.cpp
   deepgroebner/polynomials.cpp)
 target_include_directories(test_polynomials PUBLIC deepgroebner)

@@ -13,9 +13,10 @@ Polynomial spoly(const Polynomial& f, const Polynomial& g) {
   return (gamma / f.LT()) * f - (gamma / g.LT()) * g;
 }
 
-Polynomial reduce(const Polynomial& g, const std::vector<Polynomial>& F) {
+std::pair<Polynomial, int> reduce(const Polynomial& g, const std::vector<Polynomial>& F) {
   Polynomial r;
   Polynomial h = g;
+  int additions = 0;
 
   while (h.size() != 0) {
     bool found_divisor = false;
@@ -24,6 +25,7 @@ Polynomial reduce(const Polynomial& g, const std::vector<Polynomial>& F) {
       if (is_divisible(h.LM(), f.LM())) {
 	h = h - (h.LT() / f.LT()) * f;
 	found_divisor = true;
+	additions++;
 	break;
       }
     }
@@ -35,23 +37,24 @@ Polynomial reduce(const Polynomial& g, const std::vector<Polynomial>& F) {
 
   }
 
-  return r;
+  return std::make_pair(r, additions);
 }
 
 void update(std::vector<Polynomial>& G, std::vector<SPair>& P, const Polynomial& f, EliminationStrategy elimination) {
 
+  int n = G.size();
   std::vector<SPair> P_;
   
   switch (elimination) {
   case EliminationStrategy::None:
-    for (int i = 0; i < G.size(); i++) {
-      P_.push_back(SPair{i, G.size()});
+    for (int i = 0; i < n; i++) {
+      P_.push_back(SPair{i, n});
     }
     break;
   case EliminationStrategy::LCM:
-    for (int i = 0; i < G.size(); i++) {
+    for (int i = 0; i < n; i++) {
       if (lcm(G[i].LM(), f.LM()) != G[i].LM() * f.LM())
-	P_.push_back(SPair{i, G.size()});
+	P_.push_back(SPair{i, n});
     }
     break;
   case EliminationStrategy::GebauerMoeller:
@@ -62,7 +65,7 @@ void update(std::vector<Polynomial>& G, std::vector<SPair>& P, const Polynomial&
     P.erase(std::remove_if(P.begin(), P.end(), fn), P.end());
 
     std::map<Monomial, std::vector<int>> lcms;
-    for (int i = 0; i < G.size(); i++) {
+    for (int i = 0; i < n; i++) {
       lcms[lcm(G[i].LM(), f.LM())].push_back(i);
     }
     std::vector<Monomial> min_lcms;
@@ -70,7 +73,7 @@ void update(std::vector<Polynomial>& G, std::vector<SPair>& P, const Polynomial&
       if (std::all_of(min_lcms.begin(), min_lcms.end(), [&p](const Monomial& m) { return !is_divisible(p.first, m); })) {
 	min_lcms.push_back(p.first);
 	if (std::all_of(p.second.begin(), p.second.end(), [&G, &f](int i) { return lcm(G[i].LM(), f.LM()) != G[i].LM() * f.LM(); }))
-	  P_.push_back(SPair{p.second[0], G.size()});
+	  P_.push_back(SPair{p.second[0], n});
       }
     }
     break;
@@ -94,7 +97,7 @@ std::vector<Polynomial> minimalize(std::vector<Polynomial>& G) {
 std::vector<Polynomial> interreduce(std::vector<Polynomial>& G) {
   for (int i = 0; i < G.size(); i++) {
     Term t = {1 / G[i].LC(), {0,0,0,0,0,0,0,0}};
-    G[i] = t * (reduce(G[i] - Polynomial{G[i].LT()}, G) + Polynomial{G[i].LT()});
+    G[i] = t * (reduce(G[i] - Polynomial{G[i].LT()}, G).first + Polynomial{G[i].LT()});
   }
   return G;
 }
@@ -113,9 +116,9 @@ std::vector<Polynomial> buchberger(const std::vector<Polynomial>& F, Elimination
 						       return lcm(G[a.i].LM(), G[a.j].LM()) < lcm(G[b.i].LM(), G[b.j].LM()); });
     SPair p = *iter;
     P.erase(iter);
-    Polynomial r = reduce(spoly(G[p.i], G[p.j]), G);
-    if (r.size() != 0) {
-      update(G, P, r, elimination);
+    std::pair<Polynomial, int> r = reduce(spoly(G[p.i], G[p.j]), G);
+    if (r.first.size() != 0) {
+      update(G, P, r.first, elimination);
     }
   }
 
@@ -155,11 +158,28 @@ BuchbergerEnv::BuchbergerEnv(int n, int d, int s, DegreeDistribution D, bool con
 
 void BuchbergerEnv::reset() {
   std::vector<Polynomial> I = ideal_gen.next();
+  F.clear();
+  P.clear();
+  reducers.clear();
   for (auto& f : I) {
     update(F, P, f, elimination);
+    reducers.push_back(f);
   }
+  std::sort(reducers.begin(), reducers.end(), [](const Polynomial& f, const Polynomial& g) { return f.LM() < g.LM(); });
+  if (P.empty())
+    reset();
 }
 
-float BuchbergerEnv::step(std::pair<int, int> action) {
-  return 2.0;
+float BuchbergerEnv::step(SPair action) {
+  P.erase(std::remove_if(P.begin(), P.end(), [&action](const SPair& p) { return (p.i == action.i) && (p.j == action.j); }), P.end());
+  std::pair<Polynomial, int> r = reduce(spoly(F[action.i], F[action.j]), reducers);
+  if (r.first.size() != 0) {
+    update(F, P, r.first, elimination);
+    reducers.push_back(r.first);
+    std::sort(reducers.begin(), reducers.end(), [](const Polynomial& f, const Polynomial& g) { return f.LM() < g.LM(); });
+  }
+  if (rewards == RewardOption::Additions)
+    return -1.0 * (r.second + 1);
+  else
+    return -1.0;
 }

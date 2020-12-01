@@ -10,7 +10,7 @@
 
 
 Polynomial spoly(const Polynomial& f, const Polynomial& g);
-Polynomial reduce(const Polynomial& g, const std::vector<Polynomial>& F);
+std::pair<Polynomial, int> reduce(const Polynomial& g, const std::vector<Polynomial>& F);
 
 struct SPair {
   int i;
@@ -54,16 +54,18 @@ public:
 		bool sort_input = false,
 		bool sort_reducers = true);
   void reset();
-  float step(std::pair<int, int> action);
+  float step(SPair action);
   void seed(int seed) { ideal_gen.seed(seed); }
+
+  std::vector<Polynomial> F;
+  std::vector<SPair> P;
 private:
   RandomBinomialIdealGenerator ideal_gen;
   EliminationStrategy elimination;
   RewardOption rewards;
   bool sort_input;
   bool sort_reducers;
-  std::vector<Polynomial> F;
-  std::vector<SPair> P;
+  std::vector<Polynomial> reducers;
 };
 
 class LeadMonomialsEnv {

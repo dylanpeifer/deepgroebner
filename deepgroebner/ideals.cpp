@@ -69,10 +69,10 @@ RandomBinomialIdealGenerator::RandomBinomialIdealGenerator(int n, int d, int s,
   for (auto& basis : bases) {
     switch (D) {
     case DegreeDistribution::Uniform:
-      count.push_back(1);
+      count.push_back(basis.size());
       break;
     case DegreeDistribution::Weighted:
-      count.push_back(basis.size());
+      count.push_back(1);
       break;
     case DegreeDistribution::Maximum:
       count.push_back(0);
