@@ -68,13 +68,31 @@ private:
   std::vector<Polynomial> reducers;
 };
 
+std::vector<int> lead_monomials_vector(const Polynomial& f, int k, int n);
+
 class LeadMonomialsEnv {
 public:
-  LeadMonomialsEnv() {}
-  void reset() {}
-  float step(int action) { return 2.0; }
-  void seed(int seed) {}
-  int state[12];
+  LeadMonomialsEnv(int n = 3, int d = 20, int s = 10,
+		   DegreeDistribution D = DegreeDistribution::Uniform,
+		   bool constants = false,
+		   bool homogeneous = false,
+		   bool pure = false,
+		   EliminationStrategy elimination = EliminationStrategy::GebauerMoeller,
+		   RewardOption rewards = RewardOption::Additions,
+		   bool sort_input = false,
+		   bool sort_reducers = true,
+		   int k = 2);
+  void reset();
+  float step(int action);
+  void seed(int seed) { env.seed(seed); };
+
+  std::vector<int> state;
+private:
+  BuchbergerEnv env;
+  int k;
+  int n;
+  int m;
+  std::vector<std::vector<int>> leads;
 };
 
 #endif

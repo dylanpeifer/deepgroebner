@@ -84,7 +84,6 @@ public:
   friend bool operator!=(const Polynomial& f1, const Polynomial& f2) { return !(f1 == f2); }
   friend std::ostream& operator<<(std::ostream& os, const Polynomial& f);
 
-private:
   std::vector<Term> terms;
 };
 

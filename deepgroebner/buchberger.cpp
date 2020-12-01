@@ -183,3 +183,61 @@ float BuchbergerEnv::step(SPair action) {
   else
     return -1.0;
 }
+
+std::vector<int> lead_monomials_vector(const Polynomial& f, int k, int n) {
+  std::vector<int> lead;
+  int i = 0;
+  for (const Term& t : f.terms) {
+    for (int j = 0; j < n; j++) {
+      lead.push_back(t.monom[j]);
+    }
+    if (++i == k) break;
+  }
+  while (i < k) {
+    for (int j = 0; j < n; j++) {
+      lead.push_back(0);
+    }
+    i++;
+  }
+  return lead;
+}
+
+LeadMonomialsEnv::LeadMonomialsEnv(int n, int d, int s,
+				   DegreeDistribution D,
+				   bool constants,
+				   bool homogeneous,
+				   bool pure,
+				   EliminationStrategy elimination,
+				   RewardOption rewards,
+				   bool sort_input,
+				   bool sort_reducers,
+				   int k)
+  : env{n, d, s, D, constants, homogeneous, pure, elimination, rewards, sort_input, sort_reducers}, k(k), n(n)
+{
+}
+
+void LeadMonomialsEnv::reset() {
+  env.reset();
+  m = env.F.size();
+  state.clear();
+  leads.clear();
+  for (int i = 0; i < m; i++) {
+    leads.push_back(lead_monomials_vector(env.F[i], k, n));
+  }
+  for (const auto& p : env.P) {
+    state.insert(state.end(), leads[p.i].begin(), leads[p.i].end());
+    state.insert(state.end(), leads[p.j].begin(), leads[p.j].end());
+  }
+}
+
+float LeadMonomialsEnv::step(int action) {
+  float reward = env.step(env.P[action]);
+  if (m < env.F.size())
+    leads.push_back(lead_monomials_vector(env.F[env.F.size()-1], k, n));
+  state.clear();
+  for (const auto& p : env.P) {
+    state.insert(state.end(), leads[p.i].begin(), leads[p.i].end());
+    state.insert(state.end(), leads[p.j].begin(), leads[p.j].end());
+  }  
+  return reward;
+}

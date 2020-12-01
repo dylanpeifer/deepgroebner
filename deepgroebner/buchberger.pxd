@@ -1,4 +1,4 @@
-from libcpp.utility cimport pair
+from libcpp.vector cimport vector
 
 cdef extern from "buchberger.cpp":
     pass
@@ -11,4 +11,4 @@ cdef extern from "buchberger.h":
         float step(int)
         void seed(int)
 
-        int[12] state
+        vector[int] state
