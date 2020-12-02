@@ -178,6 +178,13 @@ Polynomial operator*(const Term& t, const Polynomial& f) {
   return g;
 }
 
+Polynomial operator*(const Polynomial& f1, const Polynomial& f2) {
+  Polynomial g;
+  for (const Term& t : f1.terms)
+    g = g + t * f2;
+  return g;
+}
+
 std::ostream& operator<<(std::ostream& os, const Polynomial& f) {
   int n = f.terms.size();
   if (n == 0) {

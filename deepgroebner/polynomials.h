@@ -80,6 +80,7 @@ public:
   friend Polynomial operator+(const Polynomial& f1, const Polynomial& f2);
   friend Polynomial operator-(const Polynomial& f1, const Polynomial& f2);
   friend Polynomial operator*(const Term& t, const Polynomial& f);
+  friend Polynomial operator*(const Polynomial& f1, const Polynomial& f2);
   friend bool operator==(const Polynomial& f1, const Polynomial& f2);
   friend bool operator!=(const Polynomial& f1, const Polynomial& f2) { return !(f1 == f2); }
   friend std::ostream& operator<<(std::ostream& os, const Polynomial& f);
