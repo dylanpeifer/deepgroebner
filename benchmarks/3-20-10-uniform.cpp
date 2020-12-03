@@ -3,7 +3,7 @@
 #include <iostream>
 
 int main() {
-  BuchbergerEnv env {3, 20, 10, DegreeDistribution::Uniform};
+  BuchbergerEnv env {3, 20, 10, DistributionType::Uniform};
   float total_reward = 0.0;
   int episodes = 10000;
 

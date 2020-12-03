@@ -149,7 +149,7 @@ void SPairSet::update(const Polynomial& r) {
   }
 }
 
-BuchbergerEnv::BuchbergerEnv(int n, int d, int s, DegreeDistribution D, bool constants, bool homogeneous, bool pure,
+BuchbergerEnv::BuchbergerEnv(int n, int d, int s, DistributionType D, bool constants, bool homogeneous, bool pure,
 			     EliminationStrategy elimination, RewardOption rewards, bool sort_input, bool sort_reducers)
   : ideal_gen(n, d, s, D, constants, homogeneous, pure),
     elimination(elimination), rewards(rewards), sort_input(sort_input), sort_reducers(sort_reducers)
@@ -203,7 +203,7 @@ std::vector<int> lead_monomials_vector(const Polynomial& f, int k, int n) {
 }
 
 LeadMonomialsEnv::LeadMonomialsEnv(int n, int d, int s,
-				   DegreeDistribution D,
+				   DistributionType D,
 				   bool constants,
 				   bool homogeneous,
 				   bool pure,

@@ -5,12 +5,94 @@ import numpy as np
 import sympy as sp
 
 
+def cyclic(n, coefficient_ring=sp.FF(32003), order='grevlex'):
+    """Return the cyclic-n ideal."""
+    R, gens = sp.xring('x:' + str(n), coefficient_ring, order)
+    F = [sum(np.prod([gens[(i+k) % n] for k in range(d)]) for i in range(n))
+         for d in range(1, n)]
+    return F + [np.product(gens) - 1]
+
+
+def basis(ring, d):
+    """Return the monomial basis of a polynomial ring in degree d.
+
+    A monomial basis in degree d is just all monomials of degree d in the
+    polynomial ring.
+
+    Parameters
+    ----------
+    ring : polynomial ring
+        Ring containing monomials.
+    d : int
+        Degree of the basis.
+
+    Examples
+    --------
+    >>> import sympy as sp
+    >>> ring, _ = sp.xring("x,y,z", sp.FF(32003), 'grevlex')
+    >>> basis(ring, 2)
+    [x**2, x*y, x*z, y**2, y*z, z**2]
+
+    """
+    if d == 0:
+        return [ring.one]
+    else:
+        return [np.prod(c) for c in it.combinations_with_replacement(ring.gens, d)]
+
+
+def degree_distribution(ring, d, dist='uniform', constants=False):
+    """Return the probability distribution on degrees.
+
+    Parameters
+    ----------
+    ring : polynomial ring
+        Base ring for monomials.
+    d : int
+        Maximum degree included in the distribution.
+    dist : {'uniform', 'weighted', 'maximum'}, optional
+        Type of distribution on monomials.
+
+        In a 'uniform' distribution, monomials are sampled uniformly at random
+        from all monomials less than or equal to the maximum degree (which
+        means higher degrees are more likely). In 'weighted', monomials are
+        sampled with weights such that each degree has the same probability of
+        appearing (i.e., degrees are sampled uniformly and then a monomial is
+        picked uniformly at random from that degree). In 'maximum', monomials
+        are sampled uniformly at random from all monomials of the maximum
+        degree.
+    constants : bool
+        Whether to have nonzero probability of constants.
+
+    Examples
+    --------
+    >>> import sympy as sp
+    >>> ring, _ = sp.xring("x,y,z", sp.FF(32003), 'grevlex')
+    >>> degree_distribution(ring, 3, dist='uniform')
+    array([0.        , 0.15789474, 0.31578947, 0.52631579])
+    >>> degree_distribution(ring, 3, dist='weighted')
+    array([0.        , 0.33333333, 0.33333333, 0.33333333])
+
+    """
+    head = [1] if constants else [0]
+    if dist == 'uniform':
+        n = len(ring.gens)
+        tail = [int(sp.binomial(n + i - 1, n - 1)) for i in range(1, d + 1)]
+    elif dist == 'weighted':
+        tail = d * [1]
+    elif dist == 'maximum':
+        tail = (d - 1) * [0] + [1]
+    else:
+        raise ValueError('unrecognized dist option')
+    count = np.array(head + tail)
+    return count / np.sum(count)
+
+
 class IdealGenerator:
     """Abstract base class for all ideal generators.
 
     Derived classes must implement a __next__ method which returns
-    a list of SymPy polynomials. If randomness is used to generate
-    polynomials then override the seed method.
+    a new list of SymPy polynomials representing an ideal. If randomness
+    is used to generate polynomials then override the seed method.
 
     """
 
@@ -24,12 +106,34 @@ class IdealGenerator:
         pass
 
 
-def cyclic(n, coefficient_ring=sp.FF(32003), order='grevlex'):
-    """Return the cyclic-n ideal."""
-    R, gens = sp.xring('x:' + str(n), coefficient_ring, order)
-    F = [sum(np.prod([gens[(i+k) % n] for k in range(d)]) for i in range(n))
-         for d in range(1, n)]
-    return F + [np.product(gens) - 1]
+def parse_ideal_dist(ideal_dist):
+    """Return concrete IdealGenerator instance given by string ideal_dist."""
+    dist_args = ideal_dist.split('-')
+    if dist_args[0] == 'cyclic':
+        n = int(dist_args[1])
+        return FixedIdealGenerator(cyclic(n))
+    elif dist_args[3] in ['uniform', 'weighted', 'maximum']:
+        kwargs = {
+            'n': int(dist_args[0]),
+            'd': int(dist_args[1]),
+            's': int(dist_args[2]),
+            'dist': dist_args[3],
+            'constants': 'consts' in dist_args,
+            'homogeneous': 'homog' in dist_args,
+            'pure': 'pure' in dist_args,
+        }
+        return RandomBinomialIdealGenerator(**kwargs)
+    else:
+        kwargs = {
+            'n': int(dist_args[0]),
+            'd': int(dist_args[1]),
+            's': int(dist_args[2]),
+            'lam': float(dist_args[3]),
+            'dist': dist_args[4],
+            'constants': 'consts' in dist_args,
+            'homogeneous': 'homog' in dist_args,
+        }
+        return RandomIdealGenerator(**kwargs)
 
 
 class FixedIdealGenerator(IdealGenerator):
@@ -58,133 +162,6 @@ class FixedIdealGenerator(IdealGenerator):
         return [f.copy() for f in self.F]
 
 
-def random_nonzero_coeff(ring, rng=None):
-    """Return a random nonzero coefficient from the ring.
-
-    Parameters
-    ----------
-    ring : polynomial ring over a finite field
-        Polynomial ring.
-    rng : np.random.Generator or None, optional
-        Random number generator.
-
-    Examples
-    --------
-    >>> import sympy as sp
-    >>> ring, _ = sp.xring("a,b", sp.FF(101), 'lex')
-    >>> random_nonzero_coeff()
-    11 mod 101
-
-    """
-    c = ring.domain.characteristic()
-    if c <= 1:
-        raise ValueError('ring of coefficients must be a finite field')
-    else:
-        rand = np.random.randint if rng is None else rng.integers
-        return ring.one * rand(1, c)
-
-
-def basis(ring, d):
-    """Return a monomial basis of polynomial ring in degree d.
-
-    A monomial basis in degree d is just all monomials of degree d in the
-    polynomial ring.
-
-    Parameters
-    ----------
-    ring : polynomial ring
-        The polynomial ring.
-    d : int
-        The degree of the basis.
-
-    Examples
-    --------
-    >>> import sympy as sp
-    >>> ring, _ = sp.xring("x,y,z", sp.FF(32003), 'grevlex')
-    >>> basis(ring, 2)
-    [x**2, x*y, x*z, y**2, y*z, z**2]
-
-    """
-    if d == 0:
-        return [ring.one]
-    else:
-        return [np.prod(c) for c in it.combinations_with_replacement(ring.gens, d)]
-
-
-def random_monomial(D, ring, bases=None, rng=None):
-    """Return a random monomial from the ring.
-
-    Parameters
-    ----------
-    D : array_like
-        The list of probabilities indexed by degree (i.e., D[i] = P(degree i))
-    ring : polynomial ring
-        The polynomial ring.
-    bases : list, optional
-        The list of precomputed monomial bases for efficiency.
-    rng : np.random.Generator or None, optional
-        Random number generator.
-
-    """
-    if bases is None:
-        bases = [basis(ring, i) for i in range(len(D))]
-    rng = np.random if rng is None else rng
-    d = rng.choice(len(D), p=D)
-    return rng.choice(bases[d])
-
-    
-def random_binomial(D, ring, homogeneous=False, pure=False, bases=None, rng=None):
-    """Return a random binomial from the ring.
-
-    This function will only return binomials. If after 1000 tries it has only
-    generated two identical monomials it will raise a RuntimeError.
-
-    Parameters
-    ----------
-    D : array_like
-        List of probabilities indexed by degree (i.e., D[i] = P(degree i))
-    ring : polynomial ring
-        Polynomial ring containing the binomial.
-    homogeneous : bool, optional
-        Whether the binomial will be homogeneous.
-    pure : bool, optional
-        Whether the binomial will be pure.
-    bases : list, optional
-        List of precomputed monomial bases for efficiency.
-    rng : np.random.Generator or None, optional
-        Random number generator.
-
-    Examples
-    --------
-    >>> import sympy as sp
-    >>> ring, _ = sp.xring("x,y,z", sp.FF(32003), 'grevlex')
-    >>> random_binomial([0, 0.5, 0.5], ring)
-    x*y + 5982 mod 32003*z**2
-
-    """
-    if bases is None:
-        bases = [basis(ring, i) for i in range(len(D))]
-    c = -1 if pure else random_nonzero_coeff(ring, rng=rng)
-    rng = np.random if rng is None else rng
-    if homogeneous:
-        d = rng.choice(len(D), p=D)
-        d1, d2 = d, d
-    else:
-        d1, d2 = rng.choice(len(D), size=2, p=D)
-    for i in range(1000):
-        m1 = rng.choice(bases[d1])
-        m2 = rng.choice(bases[d2])
-        # sympy always uses lex for m1 > m2, so get sort keys
-        key1 = ring.order(m1.LM)
-        key2 = ring.order(m2.LM)
-        if key1 > key2:
-            return m1 + c * m2
-        elif key1 < key2:
-            return m2 + c * m1
-    else:
-        raise RuntimeError('failed to generate two distinct random monomials after 1000 trials')
-
-
 class RandomBinomialIdealGenerator(IdealGenerator):
     """Generator of random examples of binomial ideals.
 
@@ -196,8 +173,8 @@ class RandomBinomialIdealGenerator(IdealGenerator):
         Maximum degree of a chosen monomial.
     s : int, optional
         Number of generators of each ideal.
-    degrees : {'uniform', 'weighted', 'maximum'}, optional
-        Distribution of degrees of monomials.
+    dist : {'uniform', 'weighted', 'maximum'}, optional
+        Type of distribution on monomials.
     constants : bool, optional
         Whether to include constants as monomials.
     homogeneous : bool, optional
@@ -208,12 +185,11 @@ class RandomBinomialIdealGenerator(IdealGenerator):
         Coefficient ring for the polynomials.
     order : {'grevlex', 'lex', 'grlex'}, optional
         Monomial order.
-    seed : int or None, optional
-        Seed for random number generator.
 
     Examples
     --------
     >>> ideal_gen = RandomBinomialIdealGenerator(3, 5, 5)
+    >>> ideal_gen.seed(123)
     >>> next(ideal_gen)
     [x0*x1**2*x2 + 3723 mod 32003*x2,
      x1*x2**2 + 26613 mod 32003*x1,
@@ -223,78 +199,60 @@ class RandomBinomialIdealGenerator(IdealGenerator):
 
     """
 
-    def __init__(self, n=3, d=20, s=10, degrees='uniform',
+    def __init__(self, n=3, d=20, s=10, dist='uniform',
                  constants=False, homogeneous=False, pure=False,
-                 coefficient_ring=sp.FF(32003), order='grevlex',
-                 seed=None):
-        self.D = self._make_dist(n, d, constants, degrees)
-        self.ring = sp.xring('x:' + str(n), coefficient_ring, order)[0]
+                 coefficient_ring=sp.FF(32003), order='grevlex'):
+        ring = sp.xring('x:' + str(n), coefficient_ring, order)[0]
         self.s = s
         self.homogeneous = homogeneous
         self.pure = pure
-        self.bases = [basis(self.ring, i) for i in range(d + 1)]
-        self.seed(seed)
+        self.bases = [basis(ring, i) for i in range(d + 1)]
+        self.rng = np.random.default_rng()
+        self.degree_dist = degree_distribution(ring, d, dist=dist, constants=constants)
+        self.ring = ring
+        self.P = ring.domain.characteristic()
 
     def __next__(self):
-        kwargs = {
-            'homogeneous': self.homogeneous,
-            'pure': self.pure,
-            'bases': self.bases,
-            'rng': self.rng,
-        }
-        return [random_binomial(self.D, self.ring, **kwargs) for _ in range(self.s)]
+        """Return a new random binomial ideal from the ring."""
+        F = []
+        for _ in range(self.s):
+
+            c = -1 if self.pure else self.rng.integers(1, self.P)
+
+            if self.homogeneous:
+                d = self.rng.choice(len(self.degree_dist), p=self.degree_dist)
+                d1, d2 = d, d
+            else:
+                d1, d2 = self.rng.choice(len(self.degree_dist), size=2, p=self.degree_dist)
+
+            for _ in range(1000):
+                m1 = self.rng.choice(self.bases[d1])
+                m2 = self.rng.choice(self.bases[d2])
+                # sympy always uses lex for m1 > m2, so get sort keys
+                key1 = self.ring.order(m1.LM)
+                key2 = self.ring.order(m2.LM)
+                if key1 > key2:
+                    F.append(m1 + c * m2)
+                    break
+                elif key1 < key2:
+                    F.append(m2 + c * m1)
+                    break
+            else:
+                raise RuntimeError('failed to generate two distinct random monomials after 1000 trials')
+
+        return F
 
     def seed(self, seed=None):
         self.rng = np.random.default_rng(seed)
 
-    def _make_dist(self, n, d, constants, degrees):
-        """Return the probability distribution of degrees."""
-        head = [1] if constants else [0]
-        if degrees == 'uniform':
-             tail = [int(sp.binomial(n+i-1, n-1)) for i in range(1, d + 1)]
-        elif degrees == 'weighted':
-            tail = d * [1]
-        elif degrees == 'maximum':
-            tail = (d - 1) * [0] + [1]
-        else:
-            raise ValueError('unrecognized degree option')
-        dist = np.array(head + tail)
-        return dist / np.sum(dist)
-
-
-def random_polynomial(D, lam, ring, bases=None, rng=None):
-    """Return a random polynomial from the ring.
-
-    The number of terms in the polynomial is one larger than
-    a Poisson random variable with parameter lam.
-
-    Parameters
-    ----------
-    D : array_like
-        The list of probabilities indexed by degree (i.e., D[i] = P(degree i))
-    lam : float
-        The lambda parameter for the poisson distribution on length.
-    ring : polynomial ring
-        The polynomial ring.
-    bases : list, optional
-        The list of precomputed monomial bases for efficiency.
-    rng : np.random.Generator or None, optional
-        Random number generator.
-
-    """
-    if bases is None:
-        bases = [basis(ring, i) for i in range(len(D))]
-    rng = np.random if rng is None else rng
-    t = 2 + rng.poisson(lam)
-    f = 0
-    for _ in range(t):
-        c = random_nonzero_coeff(ring, rng=rng)
-        f += c * random_monomial(D, ring, bases=bases, rng=rng)
-    return f
-
 
 class RandomIdealGenerator(IdealGenerator):
     """Generator of random examples of polynomial ideals.
+
+    The number of terms generated for polynomial is two larger than
+    a Poisson random variable sampled for each polynomial. Terms are
+    not checked to be distinct, so could sum or cancel with other terms
+    in producing the final polynomial.
 
     Parameters
     ----------
@@ -305,48 +263,57 @@ class RandomIdealGenerator(IdealGenerator):
     s : int, optional
         Number of generators of each ideal.
     lam : float, optional
-        Lambda parameter for the poisson distribution on lengths.
-    degrees : {'uniform', 'weighted', 'maximum'}, optional
+        Parameter for the Poisson distribution on lengths.
+    dist : {'uniform', 'weighted', 'maximum'}, optional
         Distribution of degrees of monomials.
     constants : bool, optional
         Whether to include constants as monomials.
+    homogeneous : bool, optional
+        Whether the binomials are homogeneous.
     coefficient_ring : ring, optional
         Coefficient ring for the polynomials.
     order : {'grevlex', 'lex', 'grlex'}, optional
         Monomial order.
-    seed : int or None, optional
-        Seed for random number generator.
+
+    Examples
+    --------
+    >>> ideal_gen = RandomIdealGenerator(3, 5, 5, 0.5)
+    >>> ideal_gen.seed(123)
+    >>> next(ideal_gen)
+    [x0**3*x2**2 + 10689 mod 32003*x0**2*x1 + 12547 mod 32003*x1*x2**2,
+     x1*x2**4 + 15388 mod 32003*x1**2*x2 + 22355 mod 32003*x1*x2**2,
+     x0*x1*x2**2 + 4665 mod 32003*x0**3 + 15800 mod 32003*x0**2*x1,
+     x0**3*x2**2 + 8782 mod 32003*x1**2*x2**3 + 15890 mod 32003*x1*x2**2,
+     x1**2*x2 + 30687 mod 32003*x1**2]
 
     """
 
-    def __init__(self, n=3, d=20, s=10, lam=0.5, degrees='uniform',
-                 constants=False, coefficient_ring=sp.FF(32003), order='grevlex',
-                 seed=None):
-        self.ring = sp.xring('x:' + str(n), coefficient_ring, order)[0]
-        self.dist = self._make_dist(n, d, constants, degrees)
+    def __init__(self, n=3, d=20, s=10, lam=0.5, dist='uniform', constants=False, homogeneous=False,
+                 coefficient_ring=sp.FF(32003), order='grevlex'):
+        ring = sp.xring('x:' + str(n), coefficient_ring, order)[0]
+        self.s = s
         self.lam = lam
-        self.generators = s
-        self.bases = [basis(self.ring, i) for i in range(d + 1)]
-        self.seed(seed)
+        self.homogeneous = homogeneous
+        self.bases = [basis(ring, i) for i in range(d + 1)]
+        self.rng = np.random.default_rng()
+        self.degree_dist = degree_distribution(ring, d, dist=dist, constants=constants)
+        self.ring = ring
+        self.P = ring.domain.characteristic()
 
     def __next__(self):
-        return [random_polynomial(self.dist, self.lam, self.ring,
-                                  bases=self.bases)
-                for _ in range(self.generators)]
+        """Return a new random ideal from the ring."""
+        F = []
+        for _ in range(self.s):
+            f = 0
+            terms = 2 + self.rng.poisson(self.lam)
+            d = self.rng.choice(len(self.degree_dist), p=self.degree_dist)
+            for _ in range(terms):
+                c = self.rng.integers(1, self.P)
+                f += c * self.rng.choice(self.bases[d])
+                if not self.homogeneous:
+                    d = self.rng.choice(len(self.degree_dist), p=self.degree_dist)
+            F.append(f.monic())
+        return F
 
     def seed(self, seed=None):
         self.rng = np.random.default_rng(seed)
-
-    def _make_dist(self, n, d, constants, degrees):
-        """Return the probability distribution of degrees."""
-        head = [1] if constants else [0]
-        if degrees == 'uniform':
-            tail = [int(sp.binomial(n+i-1, n-1)) for i in range(1, d + 1)]
-        elif degrees == 'weighted':
-            tail = d * [1]
-        elif degrees == 'maximum':
-            tail = (d - 1) * [0] + [1]
-        else:
-            raise ValueError('unrecognized degree option')
-        dist = np.array(head + tail)
-        return dist / np.sum(dist)

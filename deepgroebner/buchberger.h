@@ -45,7 +45,7 @@ enum class RewardOption {Additions, Reductions};
 class BuchbergerEnv {
 public:
   BuchbergerEnv(int n, int d, int s,
-		DegreeDistribution D = DegreeDistribution::Uniform,
+		DistributionType D = DistributionType::Uniform,
 		bool constants = false,
 		bool homogeneous = false,
 		bool pure = false,
@@ -73,7 +73,7 @@ std::vector<int> lead_monomials_vector(const Polynomial& f, int k, int n);
 class LeadMonomialsEnv {
 public:
   LeadMonomialsEnv(int n = 3, int d = 20, int s = 10,
-		   DegreeDistribution D = DegreeDistribution::Uniform,
+		   DistributionType D = DistributionType::Uniform,
 		   bool constants = false,
 		   bool homogeneous = false,
 		   bool pure = false,
