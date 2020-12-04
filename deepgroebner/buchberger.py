@@ -196,7 +196,7 @@ class BuchbergerEnv:
         IdealGenerator or string naming the ideal distribution.
     elimination : {'gebauermoeller', 'lcm', 'none'}, optional
         Strategy for pair elimination.
-    rewards : {'reductions', 'additions'}, optional
+    rewards : {'additions', 'reductions'}, optional
         Reward value for each step.
     sort_input : bool, optional
         Whether to sort the initial generating set by lead monomial.
@@ -312,7 +312,7 @@ class LeadMonomialsEnv:
         IdealGenerator or string naming the ideal distribution.
     elimination : {'gebauermoeller', 'lcm', 'none'}, optional
         Strategy for pair elimination.
-    rewards : {'reductions', 'additions'}, optional
+    rewards : {'additions', 'reductions'}, optional
         Reward value for each step.
     sort_input : bool, optional
         Whether to sort the initial generating set by lead monomial.
@@ -329,7 +329,7 @@ class LeadMonomialsEnv:
     """
 
     def __init__(self, ideal_dist='3-20-10-weighted', elimination='gebauermoeller',
-                 rewards='addtions', sort_input=False, sort_reducers=True,
+                 rewards='additions', sort_input=False, sort_reducers=True,
                  k=1, dtype=np.int32):
         self.env = BuchbergerEnv(ideal_dist, elimination, rewards, sort_input, sort_reducers)
         self.ring = self.env.ideal_gen.ring
