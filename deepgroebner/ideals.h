@@ -74,7 +74,10 @@ Iter choice(Iter begin, Iter end, std::default_random_engine& rng);
  *
  * Derived classes must implement a next method which returns
  * a new std::vector<Polynomial> representing an ideal. If randomness
- * is used to generate polynomials then override the seed method.
+ * is used to generate polynomials then override the seed method. To
+ * ensure a BuchbergerEnv can be copied we also need to define a copy_deriv
+ * method that returns a pointer to a new object of the derived class. This
+ * is actually very easy - see examples below.
  */
 class IdealGenerator {
 
@@ -83,6 +86,14 @@ public:
   virtual std::vector<Polynomial> next() = 0;
 
   virtual void seed(int seed) {}
+
+  virtual int nvars() const = 0;
+
+  auto copy() const { return std::unique_ptr<IdealGenerator>(copy_deriv()); }
+
+protected:
+
+  virtual IdealGenerator* copy_deriv() const = 0;
 
 };
 
@@ -103,12 +114,19 @@ public:
   /*
    * @param F Polynomial generators for the ideal.
    */
-  FixedIdealGenerator(std::vector<Polynomial> F) : F{F} {}
+  FixedIdealGenerator(std::vector<Polynomial> F);
 
   std::vector<Polynomial> next() override { return F; }
 
+  int nvars() const override { return n; }
+
+protected:
+
+  FixedIdealGenerator* copy_deriv() const override { return new FixedIdealGenerator(*this); }
+
 private:
 
+  int n;
   std::vector<Polynomial> F;
 
 };
@@ -137,8 +155,15 @@ public:
 
   void seed(int seed) override { rng.seed(seed); }
 
+  int nvars() const override { return n; }
+
+protected:
+
+  RandomBinomialIdealGenerator* copy_deriv() const override { return new RandomBinomialIdealGenerator(*this); }
+
 private:
 
+  int n;
   int s;
   bool homogeneous;
   bool pure;
@@ -179,8 +204,15 @@ public:
 
   void seed(int seed) override { rng.seed(seed); }
 
+  int nvars() const override { return n; }
+
+protected:
+
+  RandomIdealGenerator* copy_deriv() const override { return new RandomIdealGenerator(*this); }
+
 private:
 
+  int n;
   int s;
   bool homogeneous;
   std::vector<std::vector<Monomial>> bases;

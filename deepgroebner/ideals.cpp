@@ -151,9 +151,20 @@ std::unique_ptr<IdealGenerator> parse_ideal_dist(const std::string& ideal_dist) 
 }
 
 
+FixedIdealGenerator::FixedIdealGenerator(std::vector<Polynomial> F) : F(F) {
+  n = 0;
+  for (const Polynomial& f : F) {
+    for (const Term& t : f.terms) {
+      for (int i = 0; i < N; i++)
+	if (t.monom[i] != 0) n = std::max(n, i);
+    }
+  }
+}
+
+
 RandomBinomialIdealGenerator::RandomBinomialIdealGenerator(int n, int d, int s, DistributionType dist,
 							   bool constants, bool homogeneous, bool pure)
-    : s(s), homogeneous(homogeneous), pure(pure) {
+    : n(n), s(s), homogeneous(homogeneous), pure(pure) {
   for (int i = 0; i < d + 1; i++)
     bases.push_back(basis(n, i));
   degree_dist = degree_distribution(n, d, dist, constants);
@@ -199,7 +210,7 @@ std::vector<Polynomial> RandomBinomialIdealGenerator::next() {
 
 
 RandomIdealGenerator::RandomIdealGenerator(int n, int d, int s, double lam, DistributionType dist, bool constants, bool homogeneous)
-    : s(s), length_dist(lam), homogeneous(homogeneous) {
+    : n(n), s(s), length_dist(lam), homogeneous(homogeneous) {
   for (int i = 0; i < d + 1; i++)
     bases.push_back(basis(n, i));
   degree_dist = degree_distribution(n, d, dist, constants);

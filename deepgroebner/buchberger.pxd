@@ -1,3 +1,4 @@
+from libcpp.string cimport string
 from libcpp.vector cimport vector
 
 cdef extern from "buchberger.cpp":
@@ -6,9 +7,10 @@ cdef extern from "buchberger.cpp":
 cdef extern from "buchberger.h":
     cdef cppclass LeadMonomialsEnv:
         LeadMonomialsEnv() except +
-        LeadMonomialsEnv(const LeadMonomialsEnv&)
+        LeadMonomialsEnv(string, bint, bint, int) except +
         void reset()
-        float step(int)
+        double step(int)
         void seed(int)
 
         vector[int] state
+        int cols

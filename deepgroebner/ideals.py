@@ -96,6 +96,9 @@ class IdealGenerator:
 
     """
 
+    def __init__(self):
+        self.ring = None
+
     def __iter__(self):
         return self
 
@@ -157,6 +160,7 @@ class FixedIdealGenerator(IdealGenerator):
 
     def __init__(self, F):
         self.F = [f.copy() for f in F]
+        self.ring = F[0].ring if F else None
 
     def __next__(self):
         return [f.copy() for f in self.F]

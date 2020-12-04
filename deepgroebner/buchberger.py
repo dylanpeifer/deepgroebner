@@ -4,12 +4,11 @@ import bisect
 import numpy as np
 import sympy as sp
 
-from .ideals import IdealGenerator, RandomBinomialIdealGenerator
+from .ideals import IdealGenerator, parse_ideal_dist
 
 
 def spoly(f, g, lmf=None, lmg=None):
     """Return the s-polynomial of monic polynomials f and g."""
-    assert f.ring == g.ring, "polynomials must be in same ring"
     lmf = f.LM if lmf is None else lmf
     lmg = g.LM if lmg is None else lmg
     R = f.ring
@@ -20,35 +19,255 @@ def spoly(f, g, lmf=None, lmg=None):
 
 
 def reduce(g, F, lmF=None):
-    """Return remainder when g is divided by monic polynomials F."""
+    """Return a remainder and stats when g is divided by monic polynomials F.
+
+    Parameters
+    ----------
+    g : polynomial
+        Dividend polynomial.
+    F : list
+        List of monic divisor polynomials.
+    lmF : list, optional
+        Precomputed list of lead monomials of F for efficiency.
+
+    Examples
+    --------
+    >>> import sympy as sp
+    >>> R, a, b, c, d = sp.ring('a,b,c,d', sp.QQ, 'lex')
+    >>> reduce(a**3*b*c**2 + a**2*c, [a**2 + b, a*b*c + c, a*c**2 + b**2])
+    (b*c**2 - b*c, {'steps': 3})
+
+    """
     ring = g.ring
     monomial_div = ring.monomial_div
     lmF = [f.LM for f in F] if lmF is None else lmF
 
     stats = {'steps': 0}
     r = ring.zero
-    g = g.copy()
+    h = g.copy()
 
-    while g:
-        lmg, lcg = g.LT
+    while h:
+        lmh, lch = h.LT
         found_divisor = False
 
         for f, lmf in zip(F, lmF):
-            m = monomial_div(lmg, lmf)
+            m = monomial_div(lmh, lmf)
             if m is not None:
-                g = g - f.mul_term((m, lcg))
+                h = h - f.mul_term((m, lch))
                 found_divisor = True
                 stats['steps'] += 1
                 break
 
         if not found_divisor:
-            if lmg in r:
-                r[lmg] += lcg
+            if lmh in r:
+                r[lmh] += lch
             else:
-                r[lmg] = lcg
-            del g[lmg]
+                r[lmh] = lch
+            del h[lmh]
 
     return r, stats
+
+
+def update(G, P, f, strategy='gebauermoeller', lmG=None):
+    """Return the updated lists of polynomials and pairs when f is added to the basis G.
+
+    The inputs G and P are modified by this function.
+
+    Parameters
+    ----------
+    G : list
+        Current list of polynomial generators.
+    P : list
+        Current list of s-pairs.
+    f : polynomial
+        New polynomial to add to the basis.
+    strategy : {'gebauermoeller', 'lcm', 'none'}, optional
+        Strategy for pair elimination.
+
+        Strategy can be 'none' (eliminate no pairs), 'lcm' (only eliminate pairs that
+        fail the LCM criterion), or 'gebauermoeller' (use full Gebauer-Moeller elimination).
+    lmG : list, optional
+        Precomputed list of the lead monomials of G for efficiency.
+
+    Examples
+    --------
+    >>> import sympy as sp
+    >>> R, x, y, z = sp.ring('x,y,z', sp.FF(32003), 'grevlex')
+    >>> G = [x*y**2 + 2*z, x*z**2 - y**2 - z, x + 3]
+    >>> P = [(0, 2)]
+    >>> f = y**2*z**3 + 4*z**4 - y**2 + z**2
+    >>> update(G, P, f)
+    ([x*y**2 + 2 mod 32003*z,
+      x*z**2 + 32002 mod 32003*y**2 + 32002 mod 32003*z,
+      x + 3 mod 32003,
+      y**2*z**3 + 4 mod 32003*z**4 + 32002 mod 32003*y**2 + z**2],
+     [(0, 2)])
+
+    """
+    lmf = f.LM
+    lmG = [g.LM for g in G] if lmG is None else lmG
+    R = f.ring
+    lcm = R.monomial_lcm
+    mul = R.monomial_mul
+    div = R.monomial_div
+    m = len(G)
+
+    if strategy == 'none':
+        P_ = [(i, m) for i in range(m)]
+
+    elif strategy == 'lcm':
+        P_ = [(i, m) for i in range(m) if lcm(lmG[i], lmf) != mul(lmG[i], lmf)]
+
+    elif strategy == 'gebauermoeller':
+        def can_drop(p):
+            i, j = p
+            gam = lcm(lmG[i], lmG[j])
+            return div(gam, lmf) and gam != lcm(lmG[i], lmf) and gam != lcm(lmG[j], lmf)
+        P[:] = [p for p in P if not can_drop(p)]
+
+        lcms = {}
+        for i in range(m):
+            lcms.setdefault(lcm(lmG[i], lmf), []).append(i)
+        min_lcms = []
+        P_ = []
+        for gam in sorted(lcms.keys(), key=R.order):
+            if all(not div(gam, m) for m in min_lcms):
+                min_lcms.append(gam)
+                if not any(lcm(lmG[i], lmf) == mul(lmG[i], lmf) for i in lcms[gam]):
+                    P_.append((lcms[gam][0], m))
+        P_.sort(key=lambda p: p[0])
+
+    else:
+        raise ValueError('unknown elimination strategy')
+
+    G.append(f)
+    P.extend(P_)
+
+    return G, P
+
+
+def minimalize(G):
+    """Return a minimal Groebner basis from arbitrary Groebner basis G."""
+    R = G[0].ring if len(G) > 0 else None
+    Gmin = []
+    for f in sorted(G, key=lambda h: R.order(h.LM)):
+        if all(not R.monomial_div(f.LM, g.LM) for g in Gmin):
+            Gmin.append(f)
+    return Gmin
+
+
+def interreduce(G):
+    """Return the reduced Groebner basis from minimal Groebner basis G."""
+    Gred = []
+    for i in range(len(G)):
+        g = G[i].rem(G[:i] + G[i+1:])
+        Gred.append(g.monic())
+    return Gred
+
+
+def buchberger(F, selection='normal', elimination='gebauermoeller'):
+    """Return the Groebner basis for the ideal generated by F using Buchberger's algorithm."""
+
+    G = []
+    lmG = []
+    P = []
+    for f in F:
+        G, P = update(G, P, f.monic(), strategy=elimination)
+        lmG.append(f.LM)
+
+    while P:
+        i, j = select(G, P, strategy=selection)
+        P.remove((i, j))
+        s = spoly(G[i], G[j], lmf=lmG[i], lmg=lmG[j])
+        r, _ = reduce(s, G)
+        if r != 0:
+            G, P = update(G, P, r.monic(), lmG=lmG, strategy=elimination)
+            lmG.append(r.LM)
+
+    return interreduce(minimalize(G))
+
+
+class BuchbergerEnv:
+    """An environment for computing a Groebner basis using Buchberger's algorithm.
+
+    Parameters
+    ----------
+    ideal_dist : str or IdealGenerator, optional
+        IdealGenerator or string naming the ideal distribution.
+    elimination : {'gebauermoeller', 'lcm', 'none'}, optional
+        Strategy for pair elimination.
+    rewards : {'reductions', 'additions'}, optional
+        Reward value for each step.
+    sort_input : bool, optional
+        Whether to sort the initial generating set by lead monomial.
+    sort_reducers : bool, optional
+        Whether to choose reducers in sorted order by lead monomial.
+
+    Examples
+    --------
+
+    """
+
+    def __init__(self, ideal_dist='3-20-10-uniform', elimination='gebauermoeller',
+                 rewards='additions', sort_input=False, sort_reducers=True):
+        self.ideal_gen = self._make_ideal_gen(ideal_dist)
+        self.elimination = elimination
+        self.rewards = rewards
+        self.sort_input = sort_input
+        self.sort_reducers = sort_reducers
+
+    def reset(self):
+        """Initialize the polynomial list and pair list for a new Groebner basis computation."""
+        F = next(self.ideal_gen)
+        self.order = F[0].ring.order
+        if self.sort_input:
+            F = sorted(F, key=lambda f: self.order(f.LM))
+        self.G, self.lmG = [], []
+        self.P = []
+        for f in F:
+            self.G, self.P = update(self.G, self.P, f.monic(), lmG=self.lmG, strategy=self.elimination)
+            self.lmG.append(f.LM)
+        return (self.G, self.P) if self.P else self.reset()
+
+    def step(self, action):
+        """Perform one reduction and return the new polynomial list and pair list."""
+        i, j = action
+        self.P.remove(action)
+        s = spoly(self.G[i], self.G[j], lmf=self.lmG[i], lmg=self.lmG[j])
+        r, stats = reduce(s, self.G, lmF=self.lmG)
+        if r != 0:
+            self.G, self.P = update(self.G, self.P, r.monic(), lmG=self.lmG, strategy=self.elimination)
+            self.lmG.append(r.LM)
+        reward = -(1.0 + stats['steps']) if self.rewards == 'additions' else -1.0
+        return (self.G, self.P), reward, len(self.P) == 0, {}
+
+    def seed(self, seed=None):
+        self.ideal_gen.seed(seed)
+
+    def _make_ideal_gen(self, ideal_dist):
+        """Return the ideal generator for this environment."""
+        if isinstance(ideal_dist, IdealGenerator):
+            return ideal_dist
+        else:
+            return parse_ideal_dist(ideal_dist)
+
+
+class BuchbergerAgent:
+    """An agent that follows standard selection strategies.
+
+    Parameters
+    ----------
+    selection : {'normal', 'first', 'degree', 'random'}
+        The selection strategy used to pick pairs.
+
+    """
+
+    def __init__(self, selection='normal'):
+        self.strategy = selection
+
+    def act(self, state):
+        G, P = state
+        return select(G, P, strategy=self.strategy)
 
 
 def select(G, P, strategy='normal'):
@@ -78,212 +297,10 @@ def select(G, P, strategy='normal'):
     return min(P, key=lambda p: tuple(strategy_key(p, s) for s in strategy))
 
 
-def update(G, P, f, lmG=None, strategy='gebauermoeller'):
-    """Return the new list of polynomials and set of pairs when f is added to the basis G."""
-    lmf = f.LM
-    lmG = [g.LM for g in G] if lmG is None else lmG
-    R = f.ring
-    lcm = R.monomial_lcm
-    mul = R.monomial_mul
-    div = R.monomial_div
-
-    if strategy == 'none':
-        P_ = {(i, len(G)) for i in range(len(G))}
-    elif strategy == 'lcm':
-        P_ = {(i, len(G)) for i in range(len(G)) if lcm(lmG[i], lmf) != mul(lmG[i], lmf)}
-    elif strategy == 'gebauermoeller':
-        P = {p for p in P if (not div(lcm(lmG[p[0]], lmG[p[1]]), lmf) or
-                              lcm(lmG[p[0]], lmG[p[1]]) == lcm(lmG[p[0]], lmf) or
-                              lcm(lmG[p[0]], lmG[p[1]]) == lcm(lmG[p[1]], lmf))}
-        lcm_dict = {}
-        for i in range(len(G)):
-            lcm_dict.setdefault(lcm(lmG[i], lmf), []).append(i)
-        minimalized_lcms = []
-        for L in sorted(lcm_dict.keys(), key=R.order):
-            if all(not div(L, L_) for L_ in minimalized_lcms):
-                minimalized_lcms.append(L)
-        P_ = set()
-        for L in minimalized_lcms:
-            if not any(lcm(lmG[i], lmf) == mul(lmG[i], lmf) for i in lcm_dict[L]):
-                P_.add((min(lcm_dict[L]), len(G)))
-    else:
-        raise ValueError('unknown elimination strategy')
-
-    return G + [f], P | P_
-
-
-def minimalize(G):
-    """Return a minimal Groebner basis from arbitrary Groebner basis G."""
-    R = G[0].ring if len(G) > 0 else None
-    assert all(g.ring == R for g in G), "polynomials must be in same ring"    
-    Gmin = []
-    for f in sorted(G, key=lambda h: R.order(h.LM)):
-        if all(not R.monomial_div(f.LM, g.LM) for g in Gmin):
-            Gmin.append(f)
-    return Gmin
-
-
-def interreduce(G):
-    """Return the reduced Groebner basis from minimal Groebner basis G."""
-    R = G[0].ring if len(G) > 0 else None
-    assert all(g.ring == R for g in G), "polynomials must be in same ring"
-    Gred = []
-    for i in range(len(G)):
-        g = G[i].rem(G[:i] + G[i+1:])
-        Gred.append(g.monic())
-    return Gred
-
-
-def buchberger(F, selection='normal', elimination='gebauermoeller'):
-    """Return a Groebner basis from polynomials F using Buchberger's algorithm."""
-    R = F[0].ring if len(F) > 0 else None
-    assert all(f.ring == R for f in F), "polynomials must be in same ring"
-
-    G = []
-    lmG = []
-    P = set()
-    for f in F:
-        G, P = update(G, P, f.monic(), strategy=elimination)
-        lmG.append(f.LM)
-
-    while P:
-        i, j = select(G, P, strategy=selection)
-        P.remove((i, j))
-        s = spoly(G[i], G[j], lmf=lmG[i], lmg=lmG[j])
-        r, _ = reduce(s, G)
-        if r != 0:
-            G, P = update(G, P, r.monic(), lmG=lmG, strategy=elimination)
-            lmG.append(r.LM)
-
-    return interreduce(minimalize(G))
-
-
-class BuchbergerEnv:
-    """An environment for computing a Groebner basis using Buchberger's algorithm.
-
-    Parameters
-    ----------
-    ideal_dist : str or IdealGenerator, optional
-        Ideal generator or string naming the ideal distribution.
-    elimination : {'gebauermoeller', 'lcm', 'none'}, optional
-        The elimination strategy used when updating the pair set.
-    rewards : {'reductions', 'additions'}, optional
-        The reward value for each step.
-    sort_input : bool, optional
-        Whether to sort the initial generating set by lead monomial.
-    sort_reducers : bool, optional
-        Whether to choose reducers in sorted lead monomial order when performing long division
-        on the s-polynomials.
-    seed : int or None, optional
-        Seed for random number generator.
-
-    Examples
-    --------
-
-    """
-
-    def __init__(self, ideal_dist='3-20-10-weighted', elimination='gebauermoeller',
-                 rewards='additions', sort_input=False, sort_reducers=True, seed=None):
-        self.ideal_dist = ideal_dist
-        self.elimination = elimination
-        self.rewards = rewards
-        self.sort_input = sort_input
-        self.sort_reducers = sort_reducers
-        self.ideal_gen = self._make_ideal_gen(ideal_dist, seed)
-
-    def reset(self):
-        """Initialize the polynomial list and pair list for a new Groebner basis computation."""
-        F = next(self.ideal_gen)
-        self.order = F[0].ring.order
-        if self.sort_input:
-            F = sorted(F, key=lambda f: self.order(f.LM))
-        self.G = []
-        self.lmG = []
-        self.P = set()
-        for f in F:
-            self.G, self.P = update(self.G, self.P, f.monic(), lmG=self.lmG, strategy=self.elimination)
-            self.lmG.append(f.LM)
-        if self.sort_reducers:
-            self.reducers = sorted([f.monic() for f in F], key=lambda f: self.order(f.LM))
-        else:
-            self.reducers = [f.monic() for f in F]
-        self.lmReducers = [f.LM for f in self.reducers]
-        self.keysReducers = [self.order(lm) for lm in self.lmReducers]
-        return (self.G, self.P) if self.P else self.reset()
-
-    def step(self, action):
-        """Perform one reduction and return the new polynomial list and pair list."""
-        i, j = action
-        self.P.remove((i, j))
-        s = spoly(self.G[i], self.G[j], lmf=self.lmG[i], lmg=self.lmG[j])
-        r, stats = reduce(s, self.reducers, lmF=self.lmReducers)
-        if r != 0:
-            self.G, self.P = update(self.G, self.P, r.monic(), lmG=self.lmG, strategy=self.elimination)
-            self.lmG.append(r.LM)
-            if self.sort_reducers:
-                key = self.order(r.LM)
-                index = bisect.bisect(self.keysReducers, key)
-                self.reducers = self.reducers[:index] + [r.monic()] + self.reducers[index:]
-                self.lmReducers = self.lmReducers[:index] + [r.LM] + self.lmReducers[index:]
-                self.keysReducers = self.keysReducers[:index] + [key] + self.keysReducers[index:]
-            else:
-                self.reducers.append(r.monic())
-                self.lmReducers.append(r.LM)
-        reward = -(1 + stats['steps']) if self.rewards == 'additions' else -1
-        return (self.G, self.P), reward, len(self.P) == 0, {}
-
-    def copy(self):
-        """Return a copy of this environment with the same state."""
-        copy = BuchbergerEnv(ideal_dist=self.ideal_dist)
-        copy.elimination = self.elimination
-        copy.rewards = self.rewards
-        copy.sort_input = self.sort_input
-        copy.sort_reducers = self.sort_reducers
-        return copy
-
-    def seed(self, seed=None):
-        self.ideal_gen.seed(seed)
-
-    def _make_ideal_gen(self, ideal_dist, seed):
-        """Return the ideal generator for this environment."""
-        if isinstance(ideal_dist, IdealGenerator):
-            return ideal_dist
-        dist_args = ideal_dist.split('-')
-        kwargs = {
-            'n': int(dist_args[0]),
-            'd': int(dist_args[1]),
-            's': int(dist_args[2]),
-            'degrees': dist_args[3],
-            'constants': 'consts' in dist_args,
-            'homogeneous': 'homog' in dist_args,
-            'pure': 'pure' in dist_args,
-            'seed': seed,
-        }
-        return RandomBinomialIdealGenerator(**kwargs)
-
-
-class BuchbergerAgent:
-    """An agent that follows standard selection strategies.
-
-    Parameters
-    ----------
-    selection : {'normal', 'first', 'degree', 'random'}
-        The selection strategy used to pick pairs.
-    """
-
-    def __init__(self, selection='normal'):
-        self.strategy = selection
-
-    def act(self, state):
-        G, P = state
-        return select(G, P, strategy=self.strategy)
-
-
-def lead_monomials_vector(g, k=2, dtype=np.int32):
-    """Return the concatenated exponent vectors of the k lead monomials of g."""
-    n = g.ring.ngens
-    it = iter(g.monoms())
-    return np.array([next(it, (0,) * n) for _ in range(k)]).flatten().astype(dtype)
+def lead_monomials_vector(f, ring, k=2, dtype=np.int32):
+    """Return the concatenated exponent vectors of the k lead monomials of f."""
+    it = iter(f.monoms())
+    return np.array([next(it, (0,) * ring.ngens) for _ in range(k)]).flatten().astype(dtype)
 
 
 class LeadMonomialsEnv:
@@ -292,22 +309,19 @@ class LeadMonomialsEnv:
     Parameters
     ----------
     ideal_dist : str, optional
-        String naming the ideal distribution.
+        IdealGenerator or string naming the ideal distribution.
     elimination : {'gebauermoeller', 'lcm', 'none'}, optional
-        The elimination strategy used when updating the pair set.
+        Strategy for pair elimination.
     rewards : {'reductions', 'additions'}, optional
-        The reward value for each step.
+        Reward value for each step.
     sort_input : bool, optional
         Whether to sort the initial generating set by lead monomial.
     sort_reducers : bool, optional
-        Whether to choose reducers in sorted lead monomial order when performing long division
-        on the s-polynomials.
+        Whether to choose reducers in sorted order by lead monomial.
     k : int, optional
-        The number of lead monomials shown for each polynomial.
+        Number of lead monomials shown for each polynomial.
     dtype : data-type, optional
-        The data-type used for the state matrix.
-    seed : int or None, optional
-        Seed for random number generator.
+        Data-type for the state matrix.
 
     Examples
     --------
@@ -316,44 +330,31 @@ class LeadMonomialsEnv:
 
     def __init__(self, ideal_dist='3-20-10-weighted', elimination='gebauermoeller',
                  rewards='addtions', sort_input=False, sort_reducers=True,
-                 k=1, dtype=np.int32, seed=None):
-        self.env = BuchbergerEnv(ideal_dist, elimination, rewards, sort_input, sort_reducers, seed=seed)
+                 k=1, dtype=np.int32):
+        self.env = BuchbergerEnv(ideal_dist, elimination, rewards, sort_input, sort_reducers)
+        self.ring = self.env.ideal_gen.ring
         self.k = k
         self.dtype = dtype
-        self.pairs = []       # list of current pairs
-        self.m = 0            # size of current basis
-        self.leads = []       # leads[i] = lead_monomials_vector(env.G[i])
+        self.leads = []  # leads[i] = lead_monomials_vector(self.env.G[i])
 
     def reset(self):
-        G, P = self.env.reset()
-        self.pairs = list(P)
-        self.m = len(G)
-        self.leads = [lead_monomials_vector(g, k=self.k, dtype=self.dtype) for g in G]
+        G, _ = self.env.reset()
+        self.leads = [lead_monomials_vector(g, self.ring, k=self.k, dtype=self.dtype) for g in G]
         return self._matrix()
 
     def step(self, action):
-        (G, P), reward, done, info = self.env.step(self.pairs[action])
-        self.pairs = list(P)
-        if len(G) > self.m:
-            self.m += 1
-            self.leads.append(lead_monomials_vector(G[-1], k=self.k, dtype=self.dtype))
+        (G, P), reward, done, info = self.env.step(self.env.P[action])
+        if len(G) > len(self.leads):
+            self.leads.append(lead_monomials_vector(G[-1], self.ring, k=self.k, dtype=self.dtype))
         return self._matrix(), reward, done, info
-
-    def copy(self):
-        env = self.env.copy()
-        copy = LeadMonomialsEnv(env, k=self.k, dtype=self.dtype)
-        copy.pairs = self.pairs.copy()
-        copy.m = self.m
-        copy.leads = self.leads.copy()
-        return copy
 
     def seed(self, seed=None):
         self.env.seed(seed)
 
     def _matrix(self):
         n = self.env.G[0].ring.ngens
-        mat = np.empty((len(self.pairs), 2*n*self.k), dtype=self.dtype)
-        for i, p in enumerate(self.pairs):
+        mat = np.empty((len(self.env.P), 2 * n * self.k), dtype=self.dtype)
+        for i, p in enumerate(self.env.P):
             mat[i, :n*self.k] = self.leads[p[0]]
             mat[i, n*self.k:] = self.leads[p[1]]
         return mat
