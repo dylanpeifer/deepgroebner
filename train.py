@@ -9,9 +9,10 @@ import json
 
 import gym
 
-from deepgroebner.buchberger import BuchbergerEnv, LeadMonomialsEnv, BuchbergerAgent
+from deepgroebner.buchberger import LeadMonomialsEnv, BuchbergerAgent
 from deepgroebner.pg import PGAgent, PPOAgent
 from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, AttentionPMLP, TransformerPMLP, PairsLeftBaseline, AgentBaseline
+from deepgroebner.wrapped import CLeadMonomialsEnv
 
 
 def make_parser():
@@ -47,6 +48,10 @@ def make_parser():
                        type=int,
                        default=2,
                        help='number of lead monomials visible')
+    ideal.add_argument('--use_cython',
+                       type=lambda x: str(x).lower() == 'true',
+                       default=True,
+                       help='whether to use the Cython environment')
 
     alg = parser.add_argument_group('algorithm', 'algorithm parameters')
     alg.add_argument('--algorithm',
@@ -169,6 +174,8 @@ def make_env(args):
     """Return the training environment for this run."""
     if args.environment in ['CartPole-v0', 'CartPole-v1', 'LunarLander-v2']:
         env = gym.make(args.environment)
+    elif args.use_cython:
+        env = CLeadMonomialsEnv(args.distribution, elimination=args.elimination, rewards=args.rewards, k=args.k)
     else:
         env = LeadMonomialsEnv(args.distribution, elimination=args.elimination, rewards=args.rewards, k=args.k)
     env.seed(args.env_seed)
