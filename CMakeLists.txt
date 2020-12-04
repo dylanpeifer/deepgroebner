@@ -5,17 +5,15 @@ set(CMAKE_CXX_STANDARD 17)
 set(INSTALL_GTEST OFF)
 add_subdirectory(googletest)
 
-add_executable(cyclic6 benchmarks/cyclic6.cpp deepgroebner/ideals.cpp
-  deepgroebner/polynomials.cpp deepgroebner/buchberger.cpp)
-target_include_directories(cyclic6 PUBLIC deepgroebner)
 
-add_executable(cyclic7 benchmarks/cyclic7.cpp deepgroebner/ideals.cpp
+add_executable(cyclic benchmarks/cyclic.cpp deepgroebner/ideals.cpp
   deepgroebner/polynomials.cpp deepgroebner/buchberger.cpp)
-target_include_directories(cyclic7 PUBLIC deepgroebner)
+target_include_directories(cyclic PUBLIC deepgroebner)
 
-add_executable(3-20-10-uniform benchmarks/3-20-10-uniform.cpp deepgroebner/ideals.cpp
+add_executable(random_episodes benchmarks/random_episodes.cpp deepgroebner/ideals.cpp
   deepgroebner/polynomials.cpp deepgroebner/buchberger.cpp)
-target_include_directories(3-20-10-uniform PUBLIC deepgroebner)
+target_include_directories(random_episodes PUBLIC deepgroebner)
+
 
 add_executable(test_polynomials tests/test_polynomials.cpp
   deepgroebner/polynomials.cpp)
