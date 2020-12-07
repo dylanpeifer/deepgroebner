@@ -157,9 +157,14 @@ void BuchbergerEnv::reset() {
   if (sort_input)
     std::sort(F.begin(), F.end(), [](const Polynomial& f, const Polynomial& g) { return f.LM() < g.LM(); });
   G.clear();
+  G_.clear();
   P.clear();
   for (const Polynomial& f : F) {
     update(G, P, f, elimination);
+    if (sort_reducers)
+      G_.insert(std::upper_bound(G_.begin(), G_.end(), f, [](const Polynomial& f, const Polynomial& g) { return f.LM() < g.LM(); }), f);
+    else
+      G_.push_back(f);
   }
   if (P.empty())
     reset();
@@ -168,9 +173,13 @@ void BuchbergerEnv::reset() {
 
 double BuchbergerEnv::step(SPair action) {
   P.erase(std::remove(P.begin(), P.end(), action), P.end());
-  auto [r, stats] = reduce(spoly(G[action.i], G[action.j]), G);
+  auto [r, stats] = reduce(spoly(G[action.i], G[action.j]), G_);
   if (r.size() != 0) {
     update(G, P, r, elimination);
+    if (sort_reducers)
+      G_.insert(std::upper_bound(G_.begin(), G_.end(), r, [](const Polynomial& f, const Polynomial& g) { return f.LM() < g.LM(); }), r);
+    else
+      G_.push_back(r);
   }
   if (rewards == RewardType::Additions)
     return -1.0 * (stats.steps + 1);

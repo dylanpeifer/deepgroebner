@@ -205,6 +205,64 @@ class BuchbergerEnv:
 
     Examples
     --------
+    >>> env = BuchbergerEnv()
+    >>> env.seed(123)
+    >>> env.reset()
+    ([x0**6*x1**4*x2**2 + 495 mod 32003*x0*x1**3*x2**3,
+      x1**16*x2**3 + 5901 mod 32003*x0**4*x2**7,
+      x0**18*x2**2 + 14384 mod 32003*x0**9*x1**7*x2**3,
+      x0**11*x2**8 + 16417 mod 32003*x0*x1**5*x2**6,
+      x0**3*x2**17 + 13109 mod 32003*x0**2*x1**9*x2**6,
+      x0**2*x1**4*x2**13 + 7422 mod 32003*x0**9*x2**7,
+      x0**6*x1**6*x2**5 + 7835 mod 32003*x0**10*x1**2*x2**4,
+      x0**2*x1**8*x2**6 + 5900 mod 32003*x0**3*x1,
+      x0**4*x1**10*x2**6 + 8221 mod 32003*x1**13*x2**4,
+      x0**2*x1**17 + 27672 mod 32003*x0**7*x1**2*x2**3],
+     [(0, 1),
+      (0, 2),
+      (0, 3),
+      (2, 3),
+      (3, 4),
+      (0, 5),
+      (4, 5),
+      (0, 6),
+      (0, 7),
+      (1, 7),
+      (5, 7),
+      (7, 8),
+      (0, 9),
+      (1, 9)])
+    >>> env.step((2, 3))
+    (([x0**6*x1**4*x2**2 + 495 mod 32003*x0*x1**3*x2**3,
+       x1**16*x2**3 + 5901 mod 32003*x0**4*x2**7,
+       x0**18*x2**2 + 14384 mod 32003*x0**9*x1**7*x2**3,
+       x0**11*x2**8 + 16417 mod 32003*x0*x1**5*x2**6,
+       x0**3*x2**17 + 13109 mod 32003*x0**2*x1**9*x2**6,
+       x0**2*x1**4*x2**13 + 7422 mod 32003*x0**9*x2**7,
+       x0**6*x1**6*x2**5 + 7835 mod 32003*x0**10*x1**2*x2**4,
+       x0**2*x1**8*x2**6 + 5900 mod 32003*x0**3*x1,
+       x0**4*x1**10*x2**6 + 8221 mod 32003*x1**13*x2**4,
+       x0**2*x1**17 + 27672 mod 32003*x0**7*x1**2*x2**3,
+       x0**4*x1**6*x2**10 + 12198 mod 32003*x0**3*x1**4*x2**7],
+      [(0, 1),
+       (0, 2),
+       (0, 3),
+       (3, 4),
+       (0, 5),
+       (4, 5),
+       (0, 6),
+       (0, 7),
+       (1, 7),
+       (5, 7),
+       (7, 8),
+       (0, 9),
+       (1, 9),
+       (0, 10),
+       (5, 10),
+       (7, 10)]),
+     -3.0,
+     False,
+     {})
 
     """
 
@@ -221,12 +279,25 @@ class BuchbergerEnv:
         F = next(self.ideal_gen)
         self.order = F[0].ring.order
         if self.sort_input:
-            F = sorted(F, key=lambda f: self.order(f.LM))
-        self.G, self.lmG = [], []
-        self.P = []
+            F.sort(key=lambda f: self.order(f.LM))
+
+        self.G, self.lmG = [], []                     # the generators in inserted order
+        self.G_, self.lmG_, self.keysG_ = [], [], []  # the reducers if sort_reducers
+        self.P = []                                   # the pair set
+
         for f in F:
             self.G, self.P = update(self.G, self.P, f.monic(), lmG=self.lmG, strategy=self.elimination)
             self.lmG.append(f.LM)
+            if self.sort_reducers:
+                key = self.order(f.LM)
+                index = bisect.bisect(self.keysG_, key)
+                self.G_.insert(index, f.monic())
+                self.lmG_.insert(index, f.LM)
+                self.keysG_.insert(index, key)
+            else:
+                self.G_ = self.G
+                self.lmG_ = self.lmG
+
         return (self.G, self.P) if self.P else self.reset()
 
     def step(self, action):
@@ -234,10 +305,19 @@ class BuchbergerEnv:
         i, j = action
         self.P.remove(action)
         s = spoly(self.G[i], self.G[j], lmf=self.lmG[i], lmg=self.lmG[j])
-        r, stats = reduce(s, self.G, lmF=self.lmG)
+        r, stats = reduce(s, self.G_, lmF=self.lmG_)
         if r != 0:
             self.G, self.P = update(self.G, self.P, r.monic(), lmG=self.lmG, strategy=self.elimination)
             self.lmG.append(r.LM)
+            if self.sort_reducers:
+                key = self.order(r.LM)
+                index = bisect.bisect(self.keysG_, key)
+                self.G_.insert(index, r.monic())
+                self.lmG_.insert(index, r.LM)
+                self.keysG_.insert(index, key)
+            else:
+                self.G_ = self.G
+                self.lmG_ = self.G_
         reward = -(1.0 + stats['steps']) if self.rewards == 'additions' else -1.0
         return (self.G, self.P), reward, len(self.P) == 0, {}
 
@@ -325,10 +405,47 @@ class LeadMonomialsEnv:
 
     Examples
     --------
+    >>> env = LeadMonomialsEnv()
+    >>> env.seed(123)
+    >>> env.reset()
+    array([[ 6,  4,  2,  0, 16,  3],
+           [ 6,  4,  2, 18,  0,  2],
+           [ 6,  4,  2, 11,  0,  8],
+           [18,  0,  2, 11,  0,  8],
+           [11,  0,  8,  3,  0, 17],
+           [ 6,  4,  2,  2,  4, 13],
+           [ 3,  0, 17,  2,  4, 13],
+           [ 6,  4,  2,  6,  6,  5],
+           [ 6,  4,  2,  2,  8,  6],
+           [ 0, 16,  3,  2,  8,  6],
+           [ 2,  4, 13,  2,  8,  6],
+           [ 2,  8,  6,  4, 10,  6],
+           [ 6,  4,  2,  2, 17,  0],
+           [ 0, 16,  3,  2, 17,  0]], dtype=int32)
+    >>> env.step(3)
+    (array([[ 6,  4,  2,  0, 16,  3],
+            [ 6,  4,  2, 18,  0,  2],
+            [ 6,  4,  2, 11,  0,  8],
+            [11,  0,  8,  3,  0, 17],
+            [ 6,  4,  2,  2,  4, 13],
+            [ 3,  0, 17,  2,  4, 13],
+            [ 6,  4,  2,  6,  6,  5],
+            [ 6,  4,  2,  2,  8,  6],
+            [ 0, 16,  3,  2,  8,  6],
+            [ 2,  4, 13,  2,  8,  6],
+            [ 2,  8,  6,  4, 10,  6],
+            [ 6,  4,  2,  2, 17,  0],
+            [ 0, 16,  3,  2, 17,  0],
+            [ 6,  4,  2,  4,  6, 10],
+            [ 2,  4, 13,  4,  6, 10],
+            [ 2,  8,  6,  4,  6, 10]], dtype=int32),
+     -3.0,
+     False,
+     {})
 
     """
 
-    def __init__(self, ideal_dist='3-20-10-weighted', elimination='gebauermoeller',
+    def __init__(self, ideal_dist='3-20-10-uniform', elimination='gebauermoeller',
                  rewards='additions', sort_input=False, sort_reducers=True,
                  k=1, dtype=np.int32):
         self.env = BuchbergerEnv(ideal_dist, elimination, rewards, sort_input, sort_reducers)

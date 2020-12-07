@@ -141,6 +141,8 @@ private:
   bool sort_input;
   bool sort_reducers;
 
+  std::vector<Polynomial> G_;  // the reducers
+
 };
 
 
