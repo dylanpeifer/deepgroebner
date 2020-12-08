@@ -237,11 +237,10 @@ def test_interreduce(G, Gred):
     ([b - a**2, c - a**3], [b**3 - c**2, a*c - b**2, a*b - c, a**2 - b]),
     ([u - t**2, v - t**3], [t*v - u**2, t*u - v, t**2 - u, u**3 - v**2]),
     ([x + y + z, x*y + y*z + x*z, x*y*z - 1], [x + y + z, y**2 + y*z + z**2, z**3 - 1]),
-]) 
-@pytest.mark.parametrize("s", ['first', 'degree', 'normal', 'random'])
+])
 @pytest.mark.parametrize("e", ['none', 'lcm', 'gebauermoeller'])
-def test_buchberger(F, G, s, e):
-    assert buchberger(F, selection=s, elimination=e) == G
+def test_buchberger(F, G, e):
+    assert buchberger(F, elimination=e)[0] == G
 
 
 @pytest.mark.parametrize("sort_reducers, r", [

@@ -28,3 +28,6 @@ cdef class CLeadMonomialsEnv:
     def seed(self, seed=None):
         if seed is not None:
             self.c_env.seed(seed)
+
+    def value(self, gamma):
+        return self.c_env.value(gamma)

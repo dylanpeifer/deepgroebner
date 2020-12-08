@@ -65,10 +65,10 @@ void update(std::vector<Polynomial>& G, std::vector<SPair>& P, const Polynomial&
     break;
   case EliminationType::GebauerMoeller:
     auto can_drop = [&G, &f](const SPair& p) {
-		      Monomial gam = lcm(G[p.i].LM(), G[p.j].LM());
-		      return (is_divisible(gam, f.LM()) &&
-			      (gam != lcm(G[p.i].LM(), f.LM())) &&
-			      (gam != lcm(G[p.j].LM(), f.LM())));
+		      Monomial m = lcm(G[p.i].LM(), G[p.j].LM());
+		      return (is_divisible(m, f.LM()) &&
+			      (m != lcm(G[p.i].LM(), f.LM())) &&
+			      (m != lcm(G[p.j].LM(), f.LM())));
 	            };
     P.erase(std::remove_if(P.begin(), P.end(), can_drop), P.end());
 
@@ -77,9 +77,11 @@ void update(std::vector<Polynomial>& G, std::vector<SPair>& P, const Polynomial&
       lcms[lcm(G[i].LM(), f.LM())].push_back(i);
     }
     std::vector<Monomial> min_lcms;
-    for (const auto& [gam, v] : lcms) {  // will be in sorted order because std::map
-      if (std::all_of(min_lcms.begin(), min_lcms.end(), [&gam](const Monomial& m) { return !is_divisible(gam, m); })) {
-	min_lcms.push_back(gam);
+    for (const auto& pair : lcms) {  // will be in sorted order because std::map
+      Monomial mon = pair.first;
+      std::vector<int> v = pair.second;
+      if (std::all_of(min_lcms.begin(), min_lcms.end(), [&mon](const Monomial& m) { return !is_divisible(mon, m); })) {
+	min_lcms.push_back(mon);
 	if (std::none_of(v.begin(), v.end(), [&G, &f](int i) { return lcm(G[i].LM(), f.LM()) == G[i].LM() * f.LM(); }))
 	  P_.push_back(SPair{v[0], m});
       }
@@ -117,28 +119,76 @@ std::vector<Polynomial> interreduce(const std::vector<Polynomial>& G) {
 }
 
 
-std::vector<Polynomial> buchberger(const std::vector<Polynomial>& F, EliminationType elimination) {
-
+std::pair<std::vector<Polynomial>, BuchbergerStats> buchberger(const std::vector<Polynomial>& F,
+							       EliminationType elimination,
+							       RewardType rewards,
+							       bool sort_input,
+							       bool sort_reducers,
+							       double gamma) {
   std::vector<Polynomial> G;
   std::vector<SPair> P;
   for (const Polynomial& f : F) {
     update(G, P, f, elimination);
   }
 
+  return buchberger(G, P, elimination, rewards, sort_reducers, gamma);
+}
+
+
+std::pair<std::vector<Polynomial>, BuchbergerStats> buchberger(const std::vector<Polynomial>& F,
+							       const std::vector<SPair>& S,
+							       EliminationType elimination,
+							       RewardType rewards,
+							       bool sort_reducers,
+							       double gamma) {
+  std::vector<Polynomial> G = F;
+  std::vector<Polynomial> G_ = F;
+  std::vector<SPair> P = S;
+  BuchbergerStats stats = {};
+  double discount = 1.0;
+
+  if (sort_reducers)
+    std::sort(G_.begin(), G_.end(), [](const Polynomial& f, const Polynomial& g) { return f.LM() < g.LM(); });
+
+  auto first = [](const SPair& p1, const SPair& p2) {
+		 return (p1.j < p2.j) || (p1.j == p2.j && p1.i < p2.i);
+	       };
+
+  auto degree = [&G](const SPair& p1, const SPair& p2) {
+		  Monomial m1 = lcm(G[p1.i].LM(), G[p1.j].LM());
+		  Monomial m2 = lcm(G[p2.i].LM(), G[p2.j].LM());
+		  return m1.deg() < m2.deg();
+		};
+
+  auto normal = [&G](const SPair& p1, const SPair& p2) {
+		  Monomial m1 = lcm(G[p1.i].LM(), G[p1.j].LM());
+		  Monomial m2 = lcm(G[p2.i].LM(), G[p2.j].LM());
+		  return m1 < m2;
+		};
+
   while (!P.empty()) {
-    auto iter = std::min_element(P.begin(), P.end(),
-				 [&G](const SPair& a, const SPair& b) {
-				     return lcm(G[a.i].LM(), G[a.j].LM()) < lcm(G[b.i].LM(), G[b.j].LM());
-				 });
+    auto iter = std::min_element(P.begin(), P.end(), degree);
     SPair p = *iter;
     P.erase(iter);
-    auto [r, stats] = reduce(spoly(G[p.i], G[p.j]), G);
+    auto [r, s] = reduce(spoly(G[p.i], G[p.j]), G_);
+    double reward = (rewards == RewardType::Additions) ? (-1.0 - s.steps) : -1.0;
+    stats.polynomial_additions += s.steps + 1;
+    stats.total_reward += reward;
+    stats.discounted_return += discount * reward;
+    discount *= gamma;
     if (r.size() != 0) {
       update(G, P, r, elimination);
+      stats.nonzero_reductions++;
+      if (sort_reducers)
+	G_.insert(std::upper_bound(G_.begin(), G_.end(), r, [](const Polynomial& f, const Polynomial& g) { return f.LM() < g.LM(); }), r);
+      else
+	G_.push_back(r);
+    } else {
+      stats.zero_reductions++;
     }
   }
 
-  return interreduce(minimalize(G));
+  return {interreduce(minimalize(G)), stats};
 }
 
 
@@ -181,10 +231,13 @@ double BuchbergerEnv::step(SPair action) {
     else
       G_.push_back(r);
   }
-  if (rewards == RewardType::Additions)
-    return -1.0 * (stats.steps + 1);
-  else
-    return -1.0;
+  return (rewards == RewardType::Additions) ? (-1.0 - stats.steps) : -1.0;
+}
+
+
+double BuchbergerEnv::value(double gamma) const {
+  auto [G_, stats] = buchberger(G, P, elimination, rewards, sort_reducers, gamma);
+  return stats.discounted_return;
 }
 
 
