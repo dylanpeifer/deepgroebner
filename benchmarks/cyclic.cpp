@@ -9,7 +9,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Usage: cyclic <number>" << std::endl;
     return 1;
   }
-  std::vector<Polynomial> F = cyclic(std::stoi(argv[1]));
-  std::vector<Polynomial> G = buchberger(F);
-  std::cout << G.size() << std::endl;
+  auto F = cyclic(std::stoi(argv[1]));
+  auto result = buchberger(F);
+  std::cout << result.first.size() << std::endl;
 }

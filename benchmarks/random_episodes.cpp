@@ -19,7 +19,7 @@ int main(int argc, char* argv[]) {
   for (int i = 0; i < episodes; i++) {
     env.reset();
     while (!env.state.empty()) {
-      std::uniform_int_distribution<int> dist{0, env.state.size() / env.cols - 1};
+      std::uniform_int_distribution<int> dist{0, static_cast<int>(env.state.size()) / env.cols - 1};
       int action = dist(rng);
       double reward = env.step(action);
       total_reward += reward;
