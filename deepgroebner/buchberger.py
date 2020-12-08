@@ -211,7 +211,6 @@ def buchberger(F, S=None, elimination='gebauermoeller', rewards='additions', sor
         G_, lmG_ = G, lmG
 
     while P:
-        print('*')
         i, j = select(G, P, strategy='degree')
         P.remove((i, j))
         s = spoly(G[i], G[j], lmf=lmG[i], lmg=lmG[j])
@@ -378,13 +377,13 @@ class BuchbergerEnv:
         self.ideal_gen.seed(seed)
 
     def value(self, gamma=0.99):
-        _, stats = buchberger([g.copy() for f in self.G],
-                              S=P.copy(),
+        _, stats = buchberger([g.copy() for g in self.G],
+                              S=self.P.copy(),
                               elimination=self.elimination,
                               rewards=self.rewards,
-                              sort_reducer=self.sort_reducers,
+                              sort_reducers=self.sort_reducers,
                               gamma=gamma)
-        return stats.discounted_return
+        return stats['discounted_return']
 
     def _make_ideal_gen(self, ideal_dist):
         """Return the ideal generator for this environment."""
@@ -530,7 +529,7 @@ class LeadMonomialsEnv:
     def seed(self, seed=None):
         self.env.seed(seed)
 
-    def value(self, gamma):
+    def value(self, gamma=0.99):
         return self.env.value(gamma)
 
     def _matrix(self):

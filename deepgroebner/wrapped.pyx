@@ -29,5 +29,5 @@ cdef class CLeadMonomialsEnv:
         if seed is not None:
             self.c_env.seed(seed)
 
-    def value(self, gamma):
+    def value(self, gamma=0.99):
         return self.c_env.value(gamma)

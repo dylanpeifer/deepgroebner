@@ -226,7 +226,7 @@ def make_value_network(args):
         if args.value_model == 'pairsleft':
             value_network = PairsLeftBaseline(gam=args.gam)
         else:
-            value_network = AgentBaseline(BuchbergerAgent('degree'), gam=args.gam)
+            value_network = 'env'
     if args.value_weights != "":
         value_network.load_weights(args.value_weights)
     return value_network

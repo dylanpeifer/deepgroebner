@@ -476,11 +476,8 @@ class Agent:
             action, logprob = self.act(state, return_logprob=True)
             if self.value_model is None:
                 value = 0
-            elif hasattr(self.value_model, 'agent'):  # this is an AgentBaseline
-                if hasattr(self.value_model.agent, 'strategy'):  # with a BuchbergerAgent
-                    value = self.value_model.predict(env.env)
-                else:  # with a PGAgent/PPOAgent
-                    value = self.value_model.predict(env)
+            elif self.value_model == 'env':
+                value = env.value(gamma=self.gam)
             else:
                 value = self.value(state)
             next_state, reward, done, _ = env.step(action.numpy())
@@ -592,7 +589,7 @@ class Agent:
 
     def _fit_value_model(self, dataset, epochs=1):
         """Fit value model using data from dataset."""
-        if self.value_model is None or hasattr(self.value_model, 'agent'):
+        if self.value_model is None or self.value_model == 'env':
             epochs = 0
         history = {'loss': []}
         for epoch in range(epochs):
