@@ -42,7 +42,7 @@ std::pair<Polynomial, ReduceStats> reduce(const Polynomial& g, const std::vector
 
   }
 
-  return {r, {steps}};
+  return {r + h, {steps}};
 }
 
 
@@ -165,6 +165,16 @@ std::pair<std::vector<Polynomial>, BuchbergerStats> buchberger(const std::vector
 		  Monomial m2 = lcm(G[p2.i].LM(), G[p2.j].LM());
 		  return m1 < m2;
 		};
+
+  auto sugar = [&G](const SPair& p1, const SPair& p2) {
+		  Monomial m1 = lcm(G[p1.i].LM(), G[p1.j].LM());
+		  Monomial m2 = lcm(G[p2.i].LM(), G[p2.j].LM());
+		  int s1 = std::max(G[p1.i].sugar() + (m1 / G[p1.i].LM()).deg(),
+				    G[p1.j].sugar() + (m1 / G[p1.j].LM()).deg());
+		  int s2 = std::max(G[p2.i].sugar() + (m2 / G[p2.i].LM()).deg(),
+				    G[p2.j].sugar() + (m2 / G[p2.j].LM()).deg());
+		  return (s1 < s2) || (s1 == s2 && m1 < m2);
+	       };
 
   while (!P.empty()) {
     auto iter = std::min_element(P.begin(), P.end(), degree);
