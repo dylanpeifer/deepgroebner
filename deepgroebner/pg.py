@@ -286,7 +286,7 @@ class Agent:
         The learning rate for the policy model.
     policy_updates : int, optional
         The number of policy updates per epoch of training.
-    value_network : network, optional
+    value_network : network, None, or 'env', optional
         The network for the value model.
     value_lr : float, optional
         The learning rate for the value model.
@@ -614,12 +614,12 @@ class Agent:
 
     def load_value_weights(self, filename):
         """Load weights from filename into the value model."""
-        if self.value_model is not None:
+        if self.value_model is not None and self.value_model != 'env':
             self.value_model.load_weights(filename)
 
     def save_value_weights(self, filename):
         """Save the current weights in the value model to filename."""
-        if self.value_model is not None:
+        if self.value_model is not None and self.value_model != 'env':
             self.value_model.save_weights(filename)
 
 
