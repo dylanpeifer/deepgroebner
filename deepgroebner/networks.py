@@ -503,6 +503,8 @@ class AttentionPMLP(tf.keras.Model):
     ----------
     dim : int
         Positive integer dimension of the attention layer.
+    n_heads : int, optional
+        Positive integer number of heads in attention layer (must divide `dim`).
     activation : {'relu', 'selu', 'elu', 'tanh', 'sigmoid'}, optional
         Activation for the embedding.
     final_activation : {'log_softmax', 'softmax'}, optional
@@ -510,10 +512,10 @@ class AttentionPMLP(tf.keras.Model):
 
     """
 
-    def __init__(self, dim, activation='relu', final_activation='log_softmax'):
+    def __init__(self, dim, n_heads=1, activation='relu', final_activation='log_softmax'):
         super(AttentionPMLP, self).__init__()
         self.embedding = ParallelEmbeddingLayer(dim, [], final_activation=activation)
-        self.trans = SelfAttentionLayer(dim, n_heads=4)
+        self.trans = SelfAttentionLayer(dim, n_heads=n_heads)
         self.deciding = ParallelDecidingLayer([], final_activation=final_activation)
 
     def call(self, batch):
@@ -537,6 +539,8 @@ class TransformerPMLP(tf.keras.Model):
         Positive integer dimension of the transformer attention layer.
     hidden_dim : int
         Positive integer dimension of the transformer hidden feedforward layer.
+    n_heads : int, optional
+        Positive integer number of heads in attention layer (must divide `dim`).
     activation : {'relu', 'selu', 'elu', 'tanh', 'sigmoid'}, optional
         Activation for the embedding.
     final_activation : {'log_softmax', 'softmax'}, optional
@@ -544,10 +548,10 @@ class TransformerPMLP(tf.keras.Model):
 
     """
 
-    def __init__(self, dim, hidden_dim, activation='relu', final_activation='log_softmax'):
+    def __init__(self, dim, hidden_dim, n_heads=1, activation='relu', final_activation='log_softmax'):
         super(TransformerPMLP, self).__init__()
         self.embedding = ParallelEmbeddingLayer(dim, [], final_activation=activation)
-        self.attn = TransformerLayer(dim, hidden_dim, n_heads=4)
+        self.attn = TransformerLayer(dim, hidden_dim, n_heads=n_heads)
         self.deciding = ParallelDecidingLayer([], final_activation=final_activation)
 
     def call(self, batch):
