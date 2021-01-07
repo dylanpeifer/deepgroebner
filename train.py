@@ -138,11 +138,11 @@ def make_parser():
                        help='size of batches in training')
     train.add_argument('--parallel',
                        type=lambda x: str(x).lower() == 'true',
-                       default=True,
+                       default=False,
                        help='whether to parallelize rollouts')
     train.add_argument('--use_gpu',
                        type=lambda x: str(x).lower() == 'true',
-                       default=True,
+                       default=False,
                        help='whether to use a GPU if available')
     train.add_argument('--verbose',
                        type=int,
