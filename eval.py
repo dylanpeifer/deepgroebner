@@ -3,12 +3,12 @@
 
 import argparse
 import datetime
+import gym
+import json
 import numpy as np
 import os
 import shutil
-import json
-
-import gym
+import tensorflow as tf
 
 from deepgroebner.buchberger import LeadMonomialsEnv
 from deepgroebner.pg import PGAgent
@@ -54,6 +54,12 @@ def make_parser():
                        default=True,
                        help='whether to use the Cython environment')
 
+    alg = parser.add_argument_group('algorithm', 'algorithm parameters')
+    alg.add_argument('--agent_seed',
+                     type=lambda x: int(x) if x.lower() != 'none' else None,
+                     default=None,
+                     help='seed for the agent')
+
     policy = parser.add_argument_group('policy model')
     policy.add_argument('--policy_model',
                         choices=['mlp', 'pmlp', 'apmlp', 'tpmlp'],
@@ -79,7 +85,7 @@ def make_parser():
                      help='max number of interactions per episode')
     run.add_argument('--use_gpu',
                      type=lambda x: str(x).lower() == 'true',
-                     default=True,
+                     default=False,
                      help='whether to use a GPU if available')
 
     save = parser.add_argument_group('saving')
@@ -165,6 +171,8 @@ if __name__ == '__main__':
     args = make_parser().parse_args()
     if not args.use_gpu:
         os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+    if args.agent_seed is not None:
+        tf.random.set_seed(args.agent_seed)
     env = make_env(args)
     agent = make_agent(args)
     logdir = make_logdir(args)

@@ -3,11 +3,11 @@
 
 import argparse
 import datetime
+import gym
+import json
 import numpy as np
 import os
-import json
-
-import gym
+import tensorflow as tf
 
 from deepgroebner.buchberger import LeadMonomialsEnv, BuchbergerAgent
 from deepgroebner.pg import PGAgent, PPOAgent
@@ -70,6 +70,10 @@ def make_parser():
                      type=float,
                      default=0.2,
                      help='clip ratio for PPO')
+    alg.add_argument('--agent_seed',
+                     type=lambda x: int(x) if x.lower() != 'none' else None,
+                     default=None,
+                     help='seed for the agent')
 
     policy = parser.add_argument_group('policy model')
     policy.add_argument('--policy_model',
@@ -164,7 +168,7 @@ def make_parser():
                        help='whether to append current time to run name')
     save.add_argument('--logdir',
                        type=str,
-                       default='data/runs',
+                       default='data/train',
                        help='base directory for training runs')
     save.add_argument('--save_freq',
                        type=int,
@@ -269,6 +273,8 @@ if __name__ == '__main__':
     args = make_parser().parse_args()
     if not args.use_gpu or args.parallel:
         os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+    if args.agent_seed is not None:
+        tf.random.set_seed(args.agent_seed)
     env = make_env(args)
     agent = make_agent(args)
     logdir = make_logdir(args)
