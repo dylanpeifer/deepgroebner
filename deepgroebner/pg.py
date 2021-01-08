@@ -607,7 +607,7 @@ class Agent:
     def _fit_value_model_step(self, states, values):
         """Fit value model on one batch of data."""
         with tf.GradientTape() as tape:
-            pred_values = self.value_model(states)
+            pred_values = tf.squeeze(self.value_model(states))
             loss = tf.reduce_mean(self.value_loss(pred_values, values))
         varis = self.value_model.trainable_variables
         grads = tape.gradient(loss, varis)
