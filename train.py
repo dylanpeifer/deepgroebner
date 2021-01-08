@@ -136,6 +136,10 @@ def make_parser():
                        type=lambda x: int(x) if x.lower() != 'none' else None,
                        default=64,
                        help='size of batches in training')
+    train.add_argument('--sort_states',
+                       type=lambda x: str(x).lower() == 'true',
+                       default=False,
+                       help='whether to sort the states before batching')
     train.add_argument('--parallel',
                        type=lambda x: str(x).lower() == 'true',
                        default=False,

@@ -355,7 +355,7 @@ class Agent:
         return self.value_model(state[tf.newaxis])[0][0]
 
     def train(self, env, episodes=10, epochs=1, max_episode_length=None, verbose=0, save_freq=1,
-              logdir=None, parallel=True, batch_size=64):
+              logdir=None, parallel=True, batch_size=64, sort_states=False):
         """Train the agent on env.
 
         Parameters
@@ -378,6 +378,8 @@ class Agent:
             Whether to run parallel rollouts.
         batch_size : int or None, optional
             The batch sizes for training (None indicates one large batch).
+        sort_states : bool, optional
+            Whether to sort the states to minimize padding.
 
         Returns
         -------
@@ -405,7 +407,7 @@ class Agent:
                 env, episodes=episodes, max_episode_length=max_episode_length,
                 store=True, parallel=parallel
             )
-            dataset = self.buffer.get(normalize_advantages=self.normalize_advantages, batch_size=batch_size)
+            dataset = self.buffer.get(normalize_advantages=self.normalize_advantages, batch_size=batch_size, sort=sort_states)
             policy_history = self._fit_policy_model(dataset, epochs=self.policy_updates)
             value_history = self._fit_value_model(dataset, epochs=self.value_updates)
 
