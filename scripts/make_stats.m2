@@ -11,8 +11,8 @@ Output is stored in file data/stats/<params>.csv. If the file already exists
 it will be appended to rather than replaced.
 *-
 
-needsPackage "Ideals"
-needsPackage "SelectionStrategies"
+needsPackage("Ideals", FileName => "m2/Ideals.m2")
+needsPackage("SelectionStrategies", FileName => "m2/SelectionStrategies.m2")
 
 capitalize = method()
 capitalize String := s -> toUpper s#0 | substring(1, #s, s)
@@ -23,7 +23,7 @@ setupFile = method(Options => {
 	Homogeneous => false,
 	Pure => false})
 setupFile(ZZ, ZZ, ZZ) := String => opts -> (n, d, s) -> (
-    fname = "../data/stats/";
+    fname = "data/stats/";
     if not isDirectory fname then makeDirectory fname;
     fname = fname | concatenate between("-", {n, d, s}/toString);
     if opts.Constants then fname = fname | "-consts";
