@@ -116,7 +116,7 @@ def make_parser():
                        help='the value model learning rate')
     value.add_argument('--value_updates',
                        type=int,
-                       default=1,
+                       default=40,
                        help='value model updates per epoch')
     value.add_argument('--value_weights',
                        type=str,
