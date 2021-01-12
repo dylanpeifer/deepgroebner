@@ -83,11 +83,11 @@ directory, we can rerun the same experiment with
     python scripts/train.py @args.txt
 
 Evaluation of trained models is performed with the `eval.py` script in the `scripts` directory, which has similar
-arguments, with `--policy_weights` referring to the file containing the trained model weights.
+arguments. In particular, `--policy_weights` should receive the file containing the trained model weights.
 
 ## Generating Statistics
 
-To generate statistics, use the `make_dist.m2', `make_stats.m2`, and `make_strat.m2` scripts in the `script`
+To generate statistics, use the `make_dist.m2`, `make_stats.m2`, and `make_strat.m2` scripts in the `script`
 directory. The basic workflow is to create a file of sampled ideals with
 
     M2 --script scripts/make_dist.m2 <distribution> <samples> <seed>
@@ -100,10 +100,11 @@ or compute performance of strategies with
 
     M2 --script scripts/make_strat.m2 <distribution> <strategy> <seed>
 
-where <seed> is only important for Random selection. Output is stored in CSV files in the `data/stats/` directory.
+where seeding is only important for Random selection. Output is stored in CSV files in the `data/stats/` directory.
 
 For example, we can compute statistics and run Degree selection on 10000 samples from 3-20-10-weighted with
 
     M2 --script scripts/make_dist.m2 3-20-10-weighted 10000 123
     M2 --script scripts/make_stats.m2 3-20-10-weighted
     M2 --script scripts/make_strat.m2 3-20-10-weighted degree
+
