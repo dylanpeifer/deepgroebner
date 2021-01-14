@@ -162,8 +162,8 @@ public:
 
   // define destructor/copy/move since std::unique_ptr has no copy constructor
   ~BuchbergerEnv() = default;
-  BuchbergerEnv(const BuchbergerEnv& other) : ideal_gen(other.ideal_gen->copy()) {}
-  BuchbergerEnv& operator=(const BuchbergerEnv& other) { ideal_gen = other.ideal_gen->copy(); return *this; }
+  BuchbergerEnv(const BuchbergerEnv& other);
+  BuchbergerEnv& operator=(const BuchbergerEnv& other);
   BuchbergerEnv(BuchbergerEnv&& other) = default;
   BuchbergerEnv& operator=(BuchbergerEnv&& other) = default;
 

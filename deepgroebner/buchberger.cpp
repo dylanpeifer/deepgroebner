@@ -212,6 +212,26 @@ BuchbergerEnv::BuchbergerEnv(std::string ideal_dist,
 }
 
 
+BuchbergerEnv::BuchbergerEnv(const BuchbergerEnv& other)
+    : ideal_gen(other.ideal_gen->copy()),
+      G(other.G), P(other.P), elimination(other.elimination), rewards(other.rewards),
+      sort_input(other.sort_input), sort_reducers(other.sort_reducers), G_(other.G_) {
+}
+
+
+BuchbergerEnv& BuchbergerEnv::operator=(const BuchbergerEnv& other) {
+    // the only non-default copy is ideal_gen
+    ideal_gen = other.ideal_gen->copy();
+    G = other.G;
+    P = other.P;
+    elimination = other.elimination;
+    rewards = other.rewards;
+    sort_input = other.sort_input;
+    sort_reducers = other.sort_reducers;
+    G_ = other.G_;
+    return *this;
+}
+
 void BuchbergerEnv::reset() {
   std::vector<Polynomial> F = ideal_gen->next();
   if (sort_input)

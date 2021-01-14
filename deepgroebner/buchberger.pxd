@@ -8,6 +8,7 @@ cdef extern from "buchberger.h":
     cdef cppclass LeadMonomialsEnv:
         LeadMonomialsEnv() except +
         LeadMonomialsEnv(string, bint, bint, int) except +
+        LeadMonomialsEnv(const LeadMonomialsEnv&)
         void reset()
         double step(int)
         void seed(int)

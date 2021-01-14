@@ -31,3 +31,8 @@ cdef class CLeadMonomialsEnv:
 
     def value(self, gamma=0.99):
         return self.c_env.value(gamma)
+
+    def copy(self):
+        copy = CLeadMonomialsEnv()
+        copy.c_env = LeadMonomialsEnv(self.c_env)
+        return copy
