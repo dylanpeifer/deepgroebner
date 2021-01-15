@@ -522,6 +522,22 @@ class AttentionPMLP(tf.keras.Model):
         X = self.deciding(X)
         return X
 
+class Score(tf.keras.Model):
+
+    """Score function to estimate value."""
+
+    def __init__(self, hidden_layers:list, activation = 'relu'):
+        super(Score, self).__init__()
+        self.encode= tf.keras.layers.GRU(128)
+        self.ff = [tf.keras.layers.Dense(dim, activation = activation) for dim in hidden_layers]
+        self.v = tf.keras.layers.Dense(1)
+    
+    def call(self, batch):
+        X = self.encode(batch)
+        for layer in self.ff:
+            X = layer(X)
+        additions_left = self.v(X)
+        return additions_left
 
 class TransformerPMLP(tf.keras.Model):
     """A parallel multilayer perceptron network with a transformer layer.
@@ -544,17 +560,19 @@ class TransformerPMLP(tf.keras.Model):
 
     """
 
-    def __init__(self, dim, hidden_dim, activation='relu', final_activation='log_softmax'):
+    def __init__(self, dim, hidden_dim, score_layers:list, activation='relu', final_activation='log_softmax'):
         super(TransformerPMLP, self).__init__()
         self.embedding = ParallelEmbeddingLayer(dim, [], final_activation=activation)
         self.attn = TransformerLayer(dim, hidden_dim, n_heads=4)
+        self.score = Score(score_layers)
         self.deciding = ParallelDecidingLayer([], final_activation=final_activation)
 
     def call(self, batch):
         X = self.embedding(batch)
         X = self.attn(X)
+        Y = self.score(X)
         X = self.deciding(X)
-        return X
+        return X, Y
 
 
 class PointerNetwork(tf.keras.Model):
@@ -678,6 +696,7 @@ class PBPointerNet(tf.keras.Model):
         cell_state = tf.squeeze(cell_state, axis = 1)
         log_prob = self.pointer(X, initial_states = [hidden_state, cell_state])
         return log_prob
+
 
 
 class PairsLeftBaseline:
