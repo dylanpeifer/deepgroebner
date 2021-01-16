@@ -337,7 +337,7 @@ class Agent:
         self.normalize_advantages = normalize_advantages
         self.kld_limit = kld_limit
 
-    #@tf.function(experimental_relax_shapes=True)
+    @tf.function(experimental_relax_shapes=True)
     def act(self, state, return_logprob=False):
         """Return an action for the given state using the policy model.
 
@@ -588,7 +588,7 @@ class Agent:
                 break
         return {k: np.array(v) for k, v in history.items()}
 
-    #@tf.function(experimental_relax_shapes=True)
+    @tf.function(experimental_relax_shapes=True)
     def _fit_policy_model_step(self, states, actions, logprobs, advantages, value, addition_estimates):
 
         def combine_grads(grad1, grad2):
