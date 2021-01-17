@@ -622,7 +622,11 @@ class Agent:
 
             varis = self.policy_model.trainable_variables
             grads_score = tape.gradient(loss_score, varis)
-            grads_score = grads_score*self.score_loss_weight
+            
+            for index, g in enumerate(grads_score):
+                if not g is None:
+                    grads_score[index] = self.score_loss_weight*g
+            
             grads = combine_grads(grads_t, grads_score)
             self.policy_optimizer.apply_gradients(zip(grads, varis))
 
