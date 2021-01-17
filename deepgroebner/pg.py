@@ -317,14 +317,14 @@ class Agent:
                  policy_network, policy_lr=1e-4, policy_updates=1,
                  value_network=None, value_lr=1e-3, value_updates=25,
                  gam=0.99, lam=0.97, normalize_advantages=True, eps=0.2,
-                 kld_limit=0.01, score = True, score_lr = 1e-3):
+                 kld_limit=0.01, score = True, score_weight = 1e-3):
         self.policy_model = policy_network
         self.policy_loss = NotImplementedError
         self.policy_optimizer = tf.keras.optimizers.Adam(lr=policy_lr)
         self.policy_updates = policy_updates
 
         self.score_loss = tf.keras.losses.MSE if score else NotImplementedError
-        self.score_optimizer = tf.keras.optimizers.Adam(lr = score_lr)
+        self.score_loss_weight = score_weight
 
         self.value_model = value_network
         self.value_loss = tf.keras.losses.mse
@@ -588,7 +588,7 @@ class Agent:
                 break
         return {k: np.array(v) for k, v in history.items()}
 
-    @tf.function(experimental_relax_shapes=True)
+    #@tf.function(experimental_relax_shapes=True)
     def _fit_policy_model_step(self, states, actions, logprobs, advantages, value, addition_estimates):
 
         def combine_grads(grad1, grad2):
@@ -622,11 +622,28 @@ class Agent:
 
             varis = self.policy_model.trainable_variables
             grads_score = tape.gradient(loss_score, varis)
+            grads_score = grads_score*self.score_loss_weight
             grads = combine_grads(grads_t, grads_score)
             self.policy_optimizer.apply_gradients(zip(grads, varis))
 
             return loss_t, loss_score, kld, ent
         return loss_t, kld, ent
+
+    @tf.function(experimental_relax_shapes=True)
+    def _fit_policy_and_value_model_step(self, states, actions, logprobs, advantages, value, addition_estimates):
+        with tf.GradientTape() as tape:
+            logpis, Y = self.policy_model(states)
+            new_logprobs = tf.reduce_sum(tf.one_hot(actions, tf.shape(logpis)[1]) * logpis, axis=1)
+
+            loss_t = tf.reduce_mean(self.policy_loss(new_logprobs, logprobs, advantages))
+            loss_score = self.score_loss(value, tf.squeeze(Y, axis = 1))
+
+            # compute and combine gradients
+
+            # aply optimizer to each set of variables
+
+            kld = tf.reduce_mean(logprobs - new_logprobs)
+            ent = -tf.reduce_mean(new_logprobs)
 
     def load_policy_weights(self, filename):
         """Load weights from filename into the policy model."""

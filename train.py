@@ -96,16 +96,14 @@ def make_parser():
                         type=str,
                         default="",
                         help='filename for initial policy weights')
-
-    scorer = parser.add_argument_group('scorer')
-    scorer.add_argument('--scorer',
+    policy.add_argument('--scorer',
                         type = bool,
                         default = True,
                         help = 'have multi objective training')
-    scorer.add_argument('--score_lr',
+    policy.add_argument('--score_weight',
                         type = float,
-                        default = 1e-4,
-                        help = 'learning rate for multi-objective network')
+                        default=1e-3,
+                        help='weight gradients of l2 loss')
 
     value = parser.add_argument_group('value model')
     value.add_argument('--value_model',

@@ -528,7 +528,7 @@ class Score(tf.keras.Model):
 
     def __init__(self, hidden_layers:list, activation = 'relu'):
         super(Score, self).__init__()
-        self.encode= tf.keras.layers.GRU(128)
+        self.encode = tf.keras.layers.GRU(128)
         self.ff = [tf.keras.layers.Dense(dim, activation = activation) for dim in hidden_layers]
         self.v = tf.keras.layers.Dense(1)
     
