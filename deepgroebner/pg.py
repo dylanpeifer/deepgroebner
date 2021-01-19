@@ -662,36 +662,64 @@ class PGAgent(Agent):
         self.policy_loss = pg_surrogate_loss
 
 
-def ppo_surrogate_loss(eps=0.2):
+def ppo_surrogate_loss(method='clip', eps=0.2, c=0.01):
     """Return loss function with gradient for proximal policy optimization.
 
     Parameters
     ----------
+    method : {'clip', 'penalty'}
+        The specific loss for PPO.
     eps : float
-        The clip ratio for PPO.
+        The clip ratio if using 'clip'.
+    c : float
+        The fixed KLD weight if using 'penalty'.
 
     """
-    @tf.function(experimental_relax_shapes=True)
-    def loss(new_logps, old_logps, advantages):
-        """Return loss with gradient for proximal policy optimization.
+    if method == 'clip':
+        @tf.function(experimental_relax_shapes=True)
+        def loss(new_logps, old_logps, advantages):
+            """Return loss with gradient for clipped PPO.
 
-        Parameters
-        ----------
-        new_logps : Tensor (batch_dim,)
-            The output of the current model for the chosen action.
-        old_logps : Tensor (batch_dim,)
-            The previous logged probability for the chosen action.
-        advantages : Tensor (batch_dim,)
-            The computed advantages.
+            Parameters
+            ----------
+            new_logps : Tensor (batch_dim,)
+                The output of the current model for the chosen action.
+            old_logps : Tensor (batch_dim,)
+                The previous logged probability for the chosen action.
+            advantages : Tensor (batch_dim,)
+                The computed advantages.
 
-        Returns
-        -------
-        loss : Tensor (batch_dim,)
-            The loss for each interaction.
-        """
-        min_adv = tf.where(advantages > 0, (1 + eps) * advantages, (1 - eps) * advantages)
-        return -tf.minimum(tf.exp(new_logps - old_logps) * advantages, min_adv)
-    return loss
+            Returns
+            -------
+            loss : Tensor (batch_dim,)
+                The loss for each interaction.
+            """
+            min_adv = tf.where(advantages > 0, (1 + eps) * advantages, (1 - eps) * advantages)
+            return -tf.minimum(tf.exp(new_logps - old_logps) * advantages, min_adv)
+        return loss
+    elif method == 'penalty':
+        @tf.function(experimental_relax_shapes=True)
+        def loss(new_logps, old_logps, advantages):
+            """Return loss with gradient for penalty PPO.
+
+            Parameters
+            ----------
+            new_logps : Tensor (batch_dim,)
+                The output of the current model for the chosen action.
+            old_logps : Tensor (batch_dim,)
+                The previous logged probability for the chosen action.
+            advantages : Tensor (batch_dim,)
+                The computed advantages.
+
+            Returns
+            -------
+            loss : Tensor (batch_dim,)
+                The loss for each interaction.
+            """
+            return -(tf.exp(new_logps - old_logps) * advantages - c * (old_logps - new_logps))
+        return loss
+    else:
+        raise ValueError('unknown PPO method')
 
 
 class PPOAgent(Agent):
@@ -701,11 +729,15 @@ class PPOAgent(Agent):
     ----------
     policy_network : network
         The network for the policy model.
-    eps : float, optional
-        The clip ratio for PPO.
+    method : {'clip', 'penalty'}
+        The specific loss for PPO.
+    eps : float
+        The clip ratio if using 'clip'.
+    c : float
+        The fixed KLD weight if using 'penalty'.
 
     """
 
-    def __init__(self, policy_network, eps=0.2, **kwargs):
+    def __init__(self, policy_network, method='clip', eps=0.2, c=0.01, **kwargs):
         super().__init__(policy_network, **kwargs)
-        self.policy_loss = ppo_surrogate_loss(eps)
+        self.policy_loss = ppo_surrogate_loss(method=method, eps=eps, c=c)

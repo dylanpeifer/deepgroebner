@@ -55,8 +55,8 @@ def make_parser():
 
     alg = parser.add_argument_group('algorithm', 'algorithm parameters')
     alg.add_argument('--algorithm',
-                     choices=['ppo', 'pg'],
-                     default='ppo',
+                     choices=['ppo-clip', 'ppo-penalty', 'pg'],
+                     default='ppo-clip',
                      help='training algorithm')
     alg.add_argument('--gam',
                      type=float,
@@ -69,7 +69,11 @@ def make_parser():
     alg.add_argument('--eps',
                      type=float,
                      default=0.2,
-                     help='clip ratio for PPO')
+                     help='clip ratio for clipped PPO')
+    alg.add_argument('--c',
+                     type=float,
+                     default=0.01,
+                     help='KLD weight for penalty PPO')
     alg.add_argument('--agent_seed',
                      type=lambda x: int(x) if x.lower() != 'none' else None,
                      default=None,
@@ -244,10 +248,20 @@ def make_agent(args):
     """Return the agent for this run."""
     policy_network = make_policy_network(args)
     value_network = make_value_network(args)
-    agent_fn = PGAgent if args.algorithm == 'pg' else PPOAgent
-    agent = agent_fn(policy_network=policy_network, policy_lr=args.policy_lr, policy_updates=args.policy_updates,
-                     value_network=value_network, value_lr=args.value_lr, value_updates=args.value_updates,
-                     gam=args.gam, lam=args.lam, kld_limit=args.policy_kld_limit)
+    if args.algorithm == 'pg':
+        agent = PGAgent(policy_network=policy_network,policy_lr=args.policy_lr, policy_updates=args.policy_updates,
+                        value_network=value_network, value_lr=args.value_lr, value_updates=args.value_updates,
+                        gam=args.gam, lam=args.lam)
+    elif args.algorithm == 'ppo-clip':
+        agent = PPOAgent(policy_network=policy_network, method='clip', eps=args.eps,
+                         policy_lr=args.policy_lr, policy_updates=args.policy_updates,
+                         value_network=value_network, value_lr=args.value_lr, value_updates=args.value_updates,
+                         gam=args.gam, lam=args.lam, kld_limit=args.policy_kld_limit)
+    elif args.algorithm == 'ppo-penalty':
+        agent = PPOAgent(policy_network=policy_network, method='penalty', c=args.c,
+                         policy_lr=args.policy_lr, policy_updates=args.policy_updates,
+                         value_network=value_network, value_lr=args.value_lr, value_updates=args.value_updates,
+                         gam=args.gam, lam=args.lam, kld_limit=args.policy_kld_limit)
     return agent
 
 
