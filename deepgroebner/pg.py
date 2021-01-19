@@ -300,13 +300,16 @@ class Agent:
         Whether to normalize advantages.
     kld_limit : float, optional
         The limit on KL divergence for early stopping policy updates.
+    ent_bonus : float, optional
+        Bonus factor for sampled policy entropy.
+
     """
 
     def __init__(self,
                  policy_network, policy_lr=1e-4, policy_updates=1,
                  value_network=None, value_lr=1e-3, value_updates=25,
                  gam=0.99, lam=0.97, normalize_advantages=True, eps=0.2,
-                 kld_limit=0.01):
+                 kld_limit=0.01, ent_bonus=0.0):
         self.policy_model = policy_network
         self.policy_loss = NotImplementedError
         self.policy_optimizer = tf.keras.optimizers.Adam(lr=policy_lr)
@@ -322,6 +325,7 @@ class Agent:
         self.buffer = TrajectoryBuffer(gam=gam, lam=lam)
         self.normalize_advantages = normalize_advantages
         self.kld_limit = kld_limit
+        self.ent_bonus = ent_bonus
 
     @tf.function(experimental_relax_shapes=True)
     def act(self, state, return_logprob=False):
@@ -573,9 +577,9 @@ class Agent:
         with tf.GradientTape() as tape:
             logpis = self.policy_model(states)
             new_logprobs = tf.reduce_sum(tf.one_hot(actions, tf.shape(logpis)[1]) * logpis, axis=1)
-            loss = tf.reduce_mean(self.policy_loss(new_logprobs, logprobs, advantages))
-            kld = tf.reduce_mean(logprobs - new_logprobs)
             ent = -tf.reduce_mean(new_logprobs)
+            loss = tf.reduce_mean(self.policy_loss(new_logprobs, logprobs, advantages)) - self.ent_bonus * ent
+            kld = tf.reduce_mean(logprobs - new_logprobs)
         varis = self.policy_model.trainable_variables
         grads = tape.gradient(loss, varis)
         self.policy_optimizer.apply_gradients(zip(grads, varis))

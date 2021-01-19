@@ -74,6 +74,10 @@ def make_parser():
                      type=float,
                      default=0.01,
                      help='KLD weight for penalty PPO')
+    alg.add_argument('--ent_bonus',
+                     type=float,
+                     default=0.0,
+                     help='bonus factor for sampled policy entropy')
     alg.add_argument('--agent_seed',
                      type=lambda x: int(x) if x.lower() != 'none' else None,
                      default=None,
@@ -251,17 +255,17 @@ def make_agent(args):
     if args.algorithm == 'pg':
         agent = PGAgent(policy_network=policy_network,policy_lr=args.policy_lr, policy_updates=args.policy_updates,
                         value_network=value_network, value_lr=args.value_lr, value_updates=args.value_updates,
-                        gam=args.gam, lam=args.lam)
+                        gam=args.gam, lam=args.lam, kld_limit=args.policy_kld_limit, ent_bonus=args.ent_bonus)
     elif args.algorithm == 'ppo-clip':
         agent = PPOAgent(policy_network=policy_network, method='clip', eps=args.eps,
                          policy_lr=args.policy_lr, policy_updates=args.policy_updates,
                          value_network=value_network, value_lr=args.value_lr, value_updates=args.value_updates,
-                         gam=args.gam, lam=args.lam, kld_limit=args.policy_kld_limit)
+                         gam=args.gam, lam=args.lam, kld_limit=args.policy_kld_limit, ent_bonus=args.ent_bonus)
     elif args.algorithm == 'ppo-penalty':
         agent = PPOAgent(policy_network=policy_network, method='penalty', c=args.c,
                          policy_lr=args.policy_lr, policy_updates=args.policy_updates,
                          value_network=value_network, value_lr=args.value_lr, value_updates=args.value_updates,
-                         gam=args.gam, lam=args.lam, kld_limit=args.policy_kld_limit)
+                         gam=args.gam, lam=args.lam, kld_limit=args.policy_kld_limit, ent_bonus=args.ent_bonus)
     return agent
 
 
