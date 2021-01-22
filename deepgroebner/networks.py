@@ -319,10 +319,10 @@ class TransformerLayer(tf.keras.layers.Layer):
         """
         X1 = self.attention(batch, mask=mask)
         X1 = self.dropout1(X1, training=training)
-        X1 = self.layer_norm1(batch + X1)
+        X1 = self.layer_norm1(batch + X1, training=training)
         X2 = self.dense2(self.dense1(X1))
         X2 = self.dropout2(X2, training=training)
-        output = self.layer_norm2(X1 + X2)
+        output = self.layer_norm2(X1 + X2, training=training)
         return output
 
 
@@ -554,9 +554,9 @@ class TransformerPMLP(tf.keras.Model):
         self.attn = TransformerLayer(dim, hidden_dim, n_heads=n_heads)
         self.deciding = ParallelDecidingLayer([], final_activation=final_activation)
 
-    def call(self, batch):
+    def call(self, batch, training=False):
         X = self.embedding(batch)
-        X = self.attn(X)
+        X = self.attn(X, training=training)
         X = self.deciding(X)
         return X
 

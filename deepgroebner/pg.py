@@ -575,7 +575,7 @@ class Agent:
     def _fit_policy_model_step(self, states, actions, logprobs, advantages):
         """Fit policy model on one batch of data."""
         with tf.GradientTape() as tape:
-            logpis = self.policy_model(states)
+            logpis = self.policy_model(states, training=True)
             new_logprobs = tf.reduce_sum(tf.one_hot(actions, tf.shape(logpis)[1]) * logpis, axis=1)
             ent = -tf.reduce_mean(new_logprobs)
             loss = tf.reduce_mean(self.policy_loss(new_logprobs, logprobs, advantages)) - self.ent_bonus * ent
@@ -611,7 +611,7 @@ class Agent:
     def _fit_value_model_step(self, states, values):
         """Fit value model on one batch of data."""
         with tf.GradientTape() as tape:
-            pred_values = tf.squeeze(self.value_model(states))
+            pred_values = tf.squeeze(self.value_model(states, training=True))
             loss = tf.reduce_mean(self.value_loss(pred_values, values))
         varis = self.value_model.trainable_variables
         grads = tape.gradient(loss, varis)
