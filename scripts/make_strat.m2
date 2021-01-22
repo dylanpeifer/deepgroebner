@@ -63,7 +63,7 @@ setupOutFile(String, String) := String => (dist, strategy) -> (
 writePerformanceToFile = method()
 writePerformanceToFile(Ideal, String, String) := (I, strategy, fname) -> (
     -- Append a line for strategy performance on I to fname.
-    (G, stats) := buchberger(I, SelectionStrategy => strategy);
+    (G, stats) := buchberger(I, SelectionStrategy => strategy, Minimalize => false, Interreduce => false);
     F := openOutAppend fname;
     F << stats#"zeroReductions" << ","
       << stats#"nonzeroReductions" << ","
