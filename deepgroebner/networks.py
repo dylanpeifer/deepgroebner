@@ -565,7 +565,7 @@ class TransformerPMLP(tf.keras.Model):
 
     """
 
-    def __init__(self, dim, hidden_dim, activation='relu', final_activation='log_softmax'):
+    def __init__(self, dim, hidden_dim, score_layers:list, activation='relu', final_activation='log_softmax'):
         super(TransformerPMLP, self).__init__()
         self.embedding = ParallelEmbeddingLayer(dim, [], final_activation=activation)
         self.attn = TransformerLayer(dim, hidden_dim, n_heads=4)
