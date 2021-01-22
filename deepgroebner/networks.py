@@ -569,8 +569,8 @@ class TransformerPMLP(tf.keras.Model):
         super(TransformerPMLP, self).__init__()
         self.embedding = ParallelEmbeddingLayer(dim, [], final_activation=activation)
         self.attn = TransformerLayer(dim, hidden_dim, n_heads=4)
-        self.deciding = ParallelDecidingLayer([], final_activation=final_activation)
         self.score = Score(score_layers)
+        self.deciding = ParallelDecidingLayer([], final_activation=final_activation)
 
     def call(self, batch):
         X = self.embedding(batch)
