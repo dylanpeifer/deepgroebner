@@ -577,7 +577,7 @@ class TransformerPMLP(tf.keras.Model):
         X = self.attn(X)
         Y = self.score(X)
         X = self.deciding(X)
-        return X
+        return X, Y
 
 class TransformerPMLP_Score_MHA(TransformerPMLP):
     """A parallel multilayer perceptron network with a transformer layer.
