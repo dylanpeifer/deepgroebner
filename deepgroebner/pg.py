@@ -489,7 +489,6 @@ class Agent:
                     tf.summary.histogram('returns', return_history['returns'], step=i)
                     tf.summary.histogram('lengths', return_history['lengths'], step=i)
 
-                    print(self.buffer.get_perror())
 
                     tf.summary.histogram('percent_error', self.buffer.get_perror(), step = i)
                     tf.summary.histogram('correlation', self.buffer.get_correlation(), step = i)
