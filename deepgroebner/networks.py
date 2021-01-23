@@ -575,7 +575,8 @@ class TransformerPMLP(tf.keras.Model):
 
     def call(self, batch):
         X = self.embedding(batch)
-        X = self.attn(X)
+        for layer in self.attn:
+            X = layer(X)
         X = self.deciding(X)
         return X
 
@@ -606,7 +607,8 @@ class TransformerPMLP_Score_MHA(TransformerPMLP):
 
     def call(self, batch):
         X = self.embedding(batch)
-        X = self.attn(X)
+        for layer in self.attn:
+            X = layer(X)
         Y = self.score(X)
         X = self.deciding(X)
         return X, (Y+1)
