@@ -565,19 +565,17 @@ class TransformerPMLP(tf.keras.Model):
 
     """
 
-    def __init__(self, dim, hidden_dim, score_layers:list, activation='relu', final_activation='log_softmax'):
+    def __init__(self, dim, hidden_dim, activation='relu', final_activation='log_softmax'):
         super(TransformerPMLP, self).__init__()
         self.embedding = ParallelEmbeddingLayer(dim, [], final_activation=activation)
         self.attn = TransformerLayer(dim, hidden_dim, n_heads=4)
-        self.score = Score(score_layers)
         self.deciding = ParallelDecidingLayer([], final_activation=final_activation)
 
     def call(self, batch):
         X = self.embedding(batch)
         X = self.attn(X)
-        Y = self.score(X)
         X = self.deciding(X)
-        return X, Y
+        return X
 
 class TransformerPMLP_Score_MHA(TransformerPMLP):
     """A parallel multilayer perceptron network with a transformer layer.
@@ -601,7 +599,7 @@ class TransformerPMLP_Score_MHA(TransformerPMLP):
     """
 
     def __init__(self, score_layers:list, dim, hidden_dim):
-        super().__init__(dim, hidden_dim, score_layers)
+        super().__init__(dim, hidden_dim)
         self.score = Score(score_layers)
 
     def call(self, batch):
@@ -609,7 +607,7 @@ class TransformerPMLP_Score_MHA(TransformerPMLP):
         X = self.attn(X)
         Y = self.score(X)
         X = self.deciding(X)
-        return X, Y
+        return X, (Y+1)
 
 class TransformerLayer_Learn_Q(TransformerPMLP):
     
