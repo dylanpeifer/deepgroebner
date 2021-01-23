@@ -172,7 +172,9 @@ class TrajectoryBuffer:
 
         # probably a better place to do these calculations!!
         error = calc_error(values, self.scores[tau])
-        for e in error: self.percent_error.append(e)
+        for e in error: 
+            if e != np.inf and e != -np.inf:
+                self.percent_error.append(e)
 
         corr = calc_correlation(values, self.scores[tau])
         self.correlation.append(corr)
@@ -196,6 +198,7 @@ class TrajectoryBuffer:
         self.values.clear()
         self.scores.clear()
         self.percent_error.clear()
+        self.correlation.clear()
         self.start = 0
         self.end = 0
 
@@ -485,6 +488,8 @@ class Agent:
                     tf.summary.scalar('std_ep_lens', history['std_ep_lens'][i], step=i)
                     tf.summary.histogram('returns', return_history['returns'], step=i)
                     tf.summary.histogram('lengths', return_history['lengths'], step=i)
+
+                    print(self.buffer.get_perror())
 
                     tf.summary.histogram('percent_error', self.buffer.get_perror(), step = i)
                     tf.summary.histogram('correlation', self.buffer.get_correlation(), step = i)
