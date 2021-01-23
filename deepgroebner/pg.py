@@ -81,6 +81,18 @@ def compute_advantages(rewards, values, gam, lam):
     delta[:-1] += gam * values[1:]
     return discount_rewards(delta, gam * lam)
 
+def calc_error(true, predicted):
+    true = np.array(true, dtype = np.float)
+    predicted = np.array(predicted, dtype = np.float)
+    delta = predicted - true
+    percent_error = delta/true
+    return percent_error
+
+def calc_correlation(true, predicted):
+    true = np.array(true, dtype = np.float)
+    predicted = np.array(predicted, dtype = np.float)
+    return np.corrcoef(true, predicted)[0,1]
+
 
 class TrajectoryBuffer:
     """A buffer to store and compute with trajectories.
@@ -114,6 +126,10 @@ class TrajectoryBuffer:
         self.logprobs = []
         self.values = []
         self.scores = []
+
+        self.percent_error = []
+        self.correlation = []
+
         self.start = 0  # index to start of current episode
         self.end = 0  # index to one past end of current episode
 
@@ -152,9 +168,24 @@ class TrajectoryBuffer:
         tau = slice(self.start, self.end)
         rewards = discount_rewards(self.rewards[tau], self.gam)
         values = compute_advantages(self.rewards[tau], self.values[tau], self.gam, self.lam)
+        
+
+        # probably a better place to do these calculations!!
+        error = calc_error(values, self.scores[tau])
+        for e in error: self.percent_error.append(e)
+
+        corr = calc_correlation(values, self.scores[tau])
+        self.correlation.append(corr)
+
         self.rewards[tau] = rewards
         self.values[tau] = values
         self.start = self.end
+    
+    def get_perror(self):
+        return self.percent_error
+
+    def get_correlation(self):
+        return self.correlation
 
     def clear(self):
         """Reset the buffer."""
@@ -164,6 +195,7 @@ class TrajectoryBuffer:
         self.logprobs.clear()
         self.values.clear()
         self.scores.clear()
+        self.percent_error.clear()
         self.start = 0
         self.end = 0
 
@@ -453,6 +485,10 @@ class Agent:
                     tf.summary.scalar('std_ep_lens', history['std_ep_lens'][i], step=i)
                     tf.summary.histogram('returns', return_history['returns'], step=i)
                     tf.summary.histogram('lengths', return_history['lengths'], step=i)
+
+                    tf.summary.histogram('percent_error', self.buffer.get_perror(), step = i)
+                    tf.summary.histogram('correlation', self.buffer.get_correlation(), step = i)
+
                     tf.summary.scalar('policy_updates', history['policy_updates'][i], step=i)
                     tf.summary.scalar('delta_policy_loss', history['delta_policy_loss'][i], step=i)
                     tf.summary.scalar('policy_ent', history['policy_ent'][i], step=i)
