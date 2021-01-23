@@ -565,10 +565,12 @@ class TransformerPMLP(tf.keras.Model):
 
     """
 
-    def __init__(self, dim, hidden_dim, activation='relu', final_activation='log_softmax'):
+    def __init__(self, dim, hidden_dim, num_layers = 1, activation='relu', final_activation='log_softmax'):
         super(TransformerPMLP, self).__init__()
         self.embedding = ParallelEmbeddingLayer(dim, [], final_activation=activation)
-        self.attn = TransformerLayer(dim, hidden_dim, n_heads=4)
+        self.attn = []
+        for _ in range(num_layers):
+            self.attn.append(TransformerLayer(dim, hidden_dim, n_heads=n_heads))
         self.deciding = ParallelDecidingLayer([], final_activation=final_activation)
 
     def call(self, batch):
@@ -598,8 +600,8 @@ class TransformerPMLP_Score_MHA(TransformerPMLP):
 
     """
 
-    def __init__(self, score_layers:list, dim, hidden_dim):
-        super().__init__(dim, hidden_dim)
+    def __init__(self, score_layers:list, dim, hidden_dim, num_layers = 1):
+        super().__init__(dim, hidden_dim, num_layers)
         self.score = Score(score_layers)
 
     def call(self, batch):
