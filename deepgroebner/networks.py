@@ -600,8 +600,8 @@ class TransformerPMLP_Score_MHA(TransformerPMLP):
 
     """
 
-    def __init__(self, score_layers:list, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, score_layers:list, dim, hidden_dim):
+        super().__init__(dim, hidden_dim, score_layers)
         self.score = Score(score_layers)
 
     def call(self, batch):
