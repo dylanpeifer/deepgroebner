@@ -658,7 +658,7 @@ class Agent:
         if not self.score_loss is NotImplementedError:
             with tf.GradientTape() as tape:
                 _, Y = self.policy_model(states)
-                loss_score = self.score_loss(tf.squeeze(Y, axis = 1), value)
+                loss_score = self.score_loss(tf.squeeze(Y, axis = 1), -value)
 
             varis = self.policy_model.trainable_variables
             grads_score = tape.gradient(loss_score, varis)
