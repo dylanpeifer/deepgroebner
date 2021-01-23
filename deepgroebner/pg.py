@@ -82,14 +82,14 @@ def compute_advantages(rewards, values, gam, lam):
     return discount_rewards(delta, gam * lam)
 
 def calc_error(true, predicted):
-    true = np.array(true, dtype = np.float)
+    true = -np.array(true, dtype = np.float)
     predicted = np.array(predicted, dtype = np.float)
     delta = predicted - true
     percent_error = delta/true
     return percent_error
 
 def calc_correlation(true, predicted):
-    true = np.array(true, dtype = np.float)
+    true = -np.array(true, dtype = np.float)
     predicted = np.array(predicted, dtype = np.float)
     return np.corrcoef(true, predicted)[0,1]
 

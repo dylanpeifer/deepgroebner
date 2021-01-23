@@ -66,7 +66,7 @@ class SelfAttentionLayer_Score_Q(tf.keras.layers.Layer):
         output = self.dense(X)
         score = self.scorer(Y)
 
-        return output, score[0]
+        return output, score[0]+1
 
     def get_qval(self, batch_size):
         return self.qval_learner(tf.ones([batch_size, 1, 1]))
