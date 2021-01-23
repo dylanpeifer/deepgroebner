@@ -84,7 +84,7 @@ def compute_advantages(rewards, values, gam, lam):
 def calc_error(true, predicted):
     true = -np.array(true, dtype = np.float)
     predicted = np.array(predicted, dtype = np.float)
-    delta = predicted - true
+    delta = np.abs(predicted - true)
     percent_error = delta/true
     return percent_error
 
@@ -92,6 +92,11 @@ def calc_correlation(true, predicted):
     true = -np.array(true, dtype = np.float)
     predicted = np.array(predicted, dtype = np.float)
     return np.corrcoef(true, predicted)[0,1]
+
+def calc_difference(true, predicted):
+    true = -np.array(true, dtype = np.float)
+    predicted = np.array(predicted, dtype = np.float)
+    return (predicted - true)
 
 
 class TrajectoryBuffer:
@@ -129,6 +134,7 @@ class TrajectoryBuffer:
 
         self.percent_error = []
         self.correlation = []
+        self.difference = []
 
         self.start = 0  # index to start of current episode
         self.end = 0  # index to one past end of current episode
@@ -179,6 +185,9 @@ class TrajectoryBuffer:
         corr = calc_correlation(values, self.scores[tau])
         self.correlation.append(corr)
 
+        diff = calc_difference(values, self.scores[tau])
+        for d in diff: self.difference.append(d)
+
         self.rewards[tau] = rewards
         self.values[tau] = values
         self.start = self.end
@@ -188,6 +197,9 @@ class TrajectoryBuffer:
 
     def get_correlation(self):
         return self.correlation
+
+    def get_difference(self):
+        return self.difference
 
     def clear(self):
         """Reset the buffer."""
@@ -199,6 +211,7 @@ class TrajectoryBuffer:
         self.scores.clear()
         self.percent_error.clear()
         self.correlation.clear()
+        self.difference.clear()
         self.start = 0
         self.end = 0
 
@@ -492,6 +505,7 @@ class Agent:
 
                     tf.summary.histogram('percent_error', self.buffer.get_perror(), step = i)
                     tf.summary.histogram('correlation', self.buffer.get_correlation(), step = i)
+                    tf.summary.histogram('Difference', self.buffer.get_difference(), step = i)
 
                     tf.summary.scalar('policy_updates', history['policy_updates'][i], step=i)
                     tf.summary.scalar('delta_policy_loss', history['delta_policy_loss'][i], step=i)
@@ -552,6 +566,59 @@ class Agent:
         if buffer is not None:
             buffer.finish()
         return total_reward, episode_length
+
+    def run_episode_pe_eval(self, env, max_episode_length=None, buffer=None):
+        """Run an episode and return total reward and episode length.
+
+        Parameters
+        ----------
+        env : environment
+            The environment to interact with.
+        max_episode_length : int, optional
+            The maximum number of interactions before the episode ends.
+        buffer : TrajectoryBuffer object, optional
+            If included, it will store the whole rollout in the given buffer.
+
+        Returns
+        -------
+        (total_reward, episode_length) : (float, int)
+            The total nondiscounted reward obtained in this episode and the
+            episode length.
+
+        """
+        state = env.reset()
+        done = False
+        episode_length = 0
+        total_reward = 0
+        pe_error = []
+        corr = 0.0
+        while not done:
+            if state.dtype == np.float64:
+                state = state.astype(np.float32)
+            action, logprob, score = self.act(state, return_logprob=True)
+
+            if self.value_model is None:
+                value = 0
+            elif self.value_model == 'env':
+                value = env.value(gamma=self.gam)
+            else:
+                value = self.value(state)
+
+            next_state, reward, done, _ = env.step(action.numpy())
+
+            if buffer is not None:
+                buffer.store(state, action, reward, logprob, value, score)
+
+            episode_length += 1
+            total_reward += reward
+            if max_episode_length is not None and episode_length > max_episode_length:
+                break
+            state = next_state
+        if buffer is not None:
+            buffer.finish()
+            diff = buffer.get_difference()
+            corr = buffer.get_correlation()
+        return total_reward, episode_length, diff, corr
 
     def _parallel_run_episode(self, env, max_episode_length, random_seed, output, packet_size):
         np.random.seed(random_seed)
