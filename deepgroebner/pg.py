@@ -204,7 +204,7 @@ class TrajectoryBuffer:
         return self.difference
     
     def get_value(self):
-        return self.value
+        return self.values
 
     def get_predicted_value(self):
         return self.scores
