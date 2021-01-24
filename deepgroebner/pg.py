@@ -130,8 +130,8 @@ class TrajectoryBuffer:
         self.rewards = []
         self.logprobs = []
         self.values = []
+        
         self.scores = []
-
         self.percent_error = []
         self.correlation = []
         self.difference = []
@@ -183,8 +183,6 @@ class TrajectoryBuffer:
                 self.percent_error.append(e)
 
         corr = calc_correlation(values, self.scores[tau])
-        if corr < 0:
-            print("Why?")
         self.correlation.append(corr)
 
         diff = calc_difference(values, self.scores[tau])

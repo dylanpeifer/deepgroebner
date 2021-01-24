@@ -16,8 +16,8 @@ from deepgroebner.pg import TrajectoryBuffer
 from deepgroebner.buchberger import LeadMonomialsEnv
 from deepgroebner.pg import PGAgent
 from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, \
-                                    AttentionPMLP, TransformerPMLP, TransformerPMLP_Score_MHA, \
-                                    TransformerLayer_Learn_Q 
+                                    AttentionPMLP, TransformerPMLP, TransformerPMLP_Score_MHA
+from deepgroebner.new_networks import TransformerPMLP_Score_Q
 from deepgroebner.wrapped import CLeadMonomialsEnv
 
 
@@ -134,7 +134,7 @@ def make_policy_network(args):
         elif args.policy_model == 'tpmlp':
             policy_network = TransformerPMLP(**args.policy_kwargs)
         elif args.policy_model == 'tpmlp_q_scorer':
-            policy_network = TransformerLayer_Learn_Q(**args.policy_kwargs)
+            policy_network = TransformerPMLP_Score_Q(**args.policy_kwargs)
         else:
             policy_network = TransformerPMLP_Score_MHA(**args.policy_kwargs)
         batch = np.zeros((1, 10, 2 * args.k * int(args.distribution.split('-')[0])), dtype=np.int32)
