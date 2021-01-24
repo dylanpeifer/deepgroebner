@@ -183,6 +183,8 @@ class TrajectoryBuffer:
                 self.percent_error.append(e)
 
         corr = calc_correlation(values, self.scores[tau])
+        if corr < 0:
+            print("Why?")
         self.correlation.append(corr)
 
         diff = calc_difference(values, self.scores[tau])
@@ -200,6 +202,12 @@ class TrajectoryBuffer:
 
     def get_difference(self):
         return self.difference
+    
+    def get_value(self):
+        return self.value
+
+    def get_predicted_value(self):
+        return self.scores
 
     def clear(self):
         """Reset the buffer."""
@@ -567,7 +575,7 @@ class Agent:
             buffer.finish()
         return total_reward, episode_length
 
-    def run_episode_pe_eval(self, env, max_episode_length=None, buffer=None):
+    def run_episode_v2(self, env, max_episode_length=None, buffer=None, num_episode = None):
         """Run an episode and return total reward and episode length.
 
         Parameters
@@ -587,10 +595,11 @@ class Agent:
 
         """
         state = env.reset()
+        starting_ideal = state
         done = False
         episode_length = 0
         total_reward = 0
-        pe_error = []
+        diff = []
         corr = 0.0
         while not done:
             if state.dtype == np.float64:
@@ -616,9 +625,69 @@ class Agent:
             state = next_state
         if buffer is not None:
             buffer.finish()
+
             diff = buffer.get_difference()
             corr = buffer.get_correlation()
-        return total_reward, episode_length, diff, corr
+            predicted = buffer.get_predicted_value()
+            discounted_value = buffer.get_value()
+            value_pairs = list(zip(predicted, discounted_value))
+            if not num_episode is None:
+                value_pairs = [(pair[0], pair[1], num_episode) for pair in value_pairs]
+
+            return total_reward, episode_length, diff, corr, value_pairs, starting_ideal
+        return total_reward, episode_length, starting_ideal
+
+    def run_episode_ideal_tracking(self, env, max_episode_length=None, buffer=None):
+        """Run an episode and return total reward and episode length.
+
+        Parameters
+        ----------
+        env : environment
+            The environment to interact with.
+        max_episode_length : int, optional
+            The maximum number of interactions before the episode ends.
+        buffer : TrajectoryBuffer object, optional
+            If included, it will store the whole rollout in the given buffer.
+
+        Returns
+        -------
+        (total_reward, episode_length) : (float, int)
+            The total nondiscounted reward obtained in this episode and the
+            episode length.
+
+        """
+        state = env.reset()
+
+        ideal = state # storing for later
+
+        done = False
+        episode_length = 0
+        total_reward = 0
+        while not done:
+            if state.dtype == np.float64:
+                state = state.astype(np.float32)
+            action, logprob, score = self.act(state, return_logprob=True)
+
+            if self.value_model is None:
+                value = 0
+            elif self.value_model == 'env':
+                value = env.value(gamma=self.gam)
+            else:
+                value = self.value(state)
+
+            next_state, reward, done, _ = env.step(action.numpy())
+
+            if buffer is not None:
+                buffer.store(state, action, reward, logprob, value, score)
+
+            episode_length += 1
+            total_reward += reward
+            if max_episode_length is not None and episode_length > max_episode_length:
+                break
+            state = next_state
+        if buffer is not None:
+            buffer.finish()
+        return total_reward, episode_length, ideal
 
     def _parallel_run_episode(self, env, max_episode_length, random_seed, output, packet_size):
         np.random.seed(random_seed)
@@ -739,22 +808,6 @@ class Agent:
 
             return loss_t, loss_score, kld, ent
         return loss_t, kld, ent
-
-    @tf.function(experimental_relax_shapes=True)
-    def _fit_policy_and_value_model_step(self, states, actions, logprobs, advantages, value, addition_estimates):
-        with tf.GradientTape() as tape:
-            logpis, Y = self.policy_model(states)
-            new_logprobs = tf.reduce_sum(tf.one_hot(actions, tf.shape(logpis)[1]) * logpis, axis=1)
-
-            loss_t = tf.reduce_mean(self.policy_loss(new_logprobs, logprobs, advantages))
-            loss_score = self.score_loss(value, tf.squeeze(Y, axis = 1))
-
-            # compute and combine gradients
-
-            # aply optimizer to each set of variables
-
-            kld = tf.reduce_mean(logprobs - new_logprobs)
-            ent = -tf.reduce_mean(new_logprobs)
 
     def load_policy_weights(self, filename):
         """Load weights from filename into the policy model."""
