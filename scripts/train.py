@@ -152,10 +152,6 @@ def make_parser():
                        type=lambda x: str(x).lower() == 'true',
                        default=False,
                        help='whether to sort the states before batching')
-    train.add_argument('--parallel',
-                       type=lambda x: str(x).lower() == 'true',
-                       default=False,
-                       help='whether to parallelize rollouts')
     train.add_argument('--use_gpu',
                        type=lambda x: str(x).lower() == 'true',
                        default=False,
@@ -299,5 +295,4 @@ if __name__ == '__main__':
     print("Saving run in", logdir)
     agent.train(env, episodes=args.episodes, epochs=args.epochs,
                 save_freq=args.save_freq, logdir=logdir, verbose=args.verbose,
-                max_episode_length=args.max_episode_length, parallel=args.parallel,
-                batch_size=args.batch_size)
+                max_episode_length=args.max_episode_length, batch_size=args.batch_size)
