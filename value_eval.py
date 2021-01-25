@@ -211,20 +211,14 @@ if __name__ == '__main__':
         f.write("Return,Length\n")
         
     with open(os.path.join(logdir, "predicted_vs_value.csv"), "w") as f:
-        f.write("Predicted,Discounted Value\n")
+        f.write("Predicted,Discounted Value,Episode\n")
 
     for i in range(args.episodes):
-        returns, length, _, _, value_pairs, ideal = agent.run_episode_v2(env, max_episode_length=args.max_episode_length, buffer = buffer, num_episode=i)
-        dataset.append((ideal, returns, length))
+        reward, length, _, _, value_pairs, ideal = agent.run_episode_v2(env, max_episode_length=args.max_episode_length, buffer = buffer, num_episode=i)
         with open(os.path.join(logdir, "predicted_vs_value.csv"), "a") as f:
-            csvWriter = csv.writer(f)
-            for datum in value_pairs:
-                csvWriter.writerow([d for d in datum])
+            f.write(f"{value_pairs[0]},{value_pairs[1]},{value_pairs[2]}")
         with open(os.path.join(logdir, "results.csv"), "a") as f:
-            csvWriter = csv.writer(f)
-            csvWriter.writerow([returns, length])
-
-    data_one, data_two = eval_analysis(dataset)
-    save(logdir, "whole_dataset.npz", dataset)
-    save(logdir, "one_std_dataset.npz", data_one)
-    save(logdir, "two_std_dataset.npz", data_two)
+            f.write(f"{reward},{length}\n")
+        dataset.append((ideal, reward, length))
+        if i in [2500, 5000, 7500, args.episodes - 1]:
+            save(logdir, "fractional_dataset"+i+".npz", dataset)
