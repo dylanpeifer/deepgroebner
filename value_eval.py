@@ -217,7 +217,8 @@ if __name__ == '__main__':
         reward, length, _, _, value_pairs, ideal = agent.run_episode_v2(env, max_episode_length=args.max_episode_length, buffer = buffer, num_episode=i)
         if i < 200:
             with open(os.path.join(logdir, "predicted_vs_value.csv"), "a") as f:
-                f.write(f"{value_pairs[0]},{value_pairs[1]},{value_pairs[2]}")
+                for pair in value_pairs:
+                    f.write(f"{float(pair[0])},{pair[1]},{pair[2]}")
         with open(os.path.join(logdir, "results.csv"), "a") as f:
             f.write(f"{reward},{length}\n")
         dataset.append((ideal, reward, length))
