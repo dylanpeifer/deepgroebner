@@ -224,4 +224,4 @@ if __name__ == '__main__':
             f.write(f"{reward},{length}\n")
         dataset.append((ideal, reward, length))
         if i in [2500, 5000, 7500, args.episodes - 1]:
-            save(logdir, "fractional_dataset"+i+".npz", dataset)
+            save(logdir, "fractional_dataset"+str(i)+".npz", dataset)
