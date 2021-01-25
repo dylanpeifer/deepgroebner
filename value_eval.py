@@ -219,7 +219,7 @@ if __name__ == '__main__':
             with open(os.path.join(logdir, "predicted_vs_value.csv"), "a") as f:
                 for pair in value_pairs:
                     predicted_val = float(pair[0])
-                    f.write(f"{float(predicted_val)},{pair[1]},{pair[2]}")
+                    f.write(f"{float(predicted_val)},{pair[1]},{pair[2]}\n")
         with open(os.path.join(logdir, "results.csv"), "a") as f:
             f.write(f"{reward},{length}\n")
         dataset.append((ideal, reward, length))
