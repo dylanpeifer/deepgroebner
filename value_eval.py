@@ -214,8 +214,9 @@ if __name__ == '__main__':
         f.write("Predicted,Discounted Value,Episode\n")
 
     for i in range(args.episodes):
+        buffer.clear()
         reward, length, _, _, value_pairs, ideal = agent.run_episode_v2(env, max_episode_length=args.max_episode_length, buffer = buffer, num_episode=i)
-        if i < 200:
+        if i < 5000:
             with open(os.path.join(logdir, "predicted_vs_value.csv"), "a") as f:
                 for pair in value_pairs:
                     predicted_val = float(pair[0])
