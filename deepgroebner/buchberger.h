@@ -185,7 +185,7 @@ public:
 
   int nvars() const { return ideal_gen->nvars(); }
 
-  double value(double gamma = 0.99) const;
+  double value(std::string strategy = "degree", double gamma = 0.99) const;
 
   std::vector<Polynomial> G;
   std::vector<SPair> P;
@@ -237,7 +237,7 @@ public:
 
   void seed(int seed) { env.seed(seed); };
 
-  double value(double gamma = 0.99) const { return env.value(gamma); };
+  double value(std::string strategy = "degree", double gamma = 0.99) const { return env.value(strategy, gamma); };
 
   std::vector<int> state;
   int cols;

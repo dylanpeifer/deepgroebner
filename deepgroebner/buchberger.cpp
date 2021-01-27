@@ -288,8 +288,15 @@ double BuchbergerEnv::step(SPair action) {
 }
 
 
-double BuchbergerEnv::value(double gamma) const {
-  auto [G_, stats] = buchberger(G, P, SelectionType::Degree, elimination, rewards, sort_reducers, gamma);
+double BuchbergerEnv::value(std::string strategy, double gamma) const {
+  std::map<std::string, SelectionType> select = {
+      {"first", SelectionType::First},
+      {"degree", SelectionType::Degree},
+      {"normal", SelectionType::Normal},
+      {"sugar", SelectionType::Sugar},
+      {"random", SelectionType::Random}
+  };
+  auto [G_, stats] = buchberger(G, P, select[strategy], elimination, rewards, sort_reducers, gamma);
   return stats.discounted_return;
 }
 

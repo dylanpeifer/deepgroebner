@@ -12,7 +12,7 @@ cdef extern from "buchberger.h":
         void reset()
         double step(int)
         void seed(int)
-        double value(double)
+        double value(string, double)
 
         vector[int] state
         int cols
