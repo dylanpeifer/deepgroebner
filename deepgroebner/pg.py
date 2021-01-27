@@ -6,11 +6,7 @@ agent.
 """
 
 import numpy as np
-import multiprocessing as mp
 import tensorflow as tf
-
-
-PACKET_SIZE = 10 # this must divide the number of episodes, and ideally should divide (episodes)/(number of cores)
 
 
 def discount_rewards(rewards, gam):
@@ -248,21 +244,6 @@ class TrajectoryBuffer:
         return len(self.states)
 
 
-def _merge_buffers(bufferlist):
-    output = bufferlist[0]
-    assert output.start == output.end, "Must apply self.finish() before merging buffers"
-    for b in bufferlist[1:]:
-        assert b.start == b.end, "Must apply self.finish() before merging buffers"
-        output.states += b.states
-        output.actions += b.actions
-        output.rewards += b.rewards
-        output.logprobs += b.logprobs
-        output.values += b.values
-    output.end = len(output.states)
-    output.start = output.end
-    return output
-
-
 def print_status_bar(i, epochs, history, verbose=1):
     """Print a formatted status line."""
     metrics = "".join([" - {}: {:.4f}".format(m, history[m][i])
@@ -359,7 +340,7 @@ class Agent:
         return self.value_model(state[tf.newaxis])[0][0]
 
     def train(self, env, episodes=10, epochs=1, max_episode_length=None, verbose=0, save_freq=1,
-              logdir=None, parallel=True, batch_size=64, sort_states=False):
+              logdir=None, batch_size=64, sort_states=False):
         """Train the agent on env.
 
         Parameters
@@ -378,8 +359,6 @@ class Agent:
             How often to save the model weights, measured in epochs.
         logdir : str, optional
             The directory to store Tensorboard logs and model weights.
-        parallel : bool, optional
-            Whether to run parallel rollouts.
         batch_size : int or None, optional
             The batch sizes for training (None indicates one large batch).
         sort_states : bool, optional
@@ -407,10 +386,7 @@ class Agent:
 
         for i in range(epochs):
             self.buffer.clear()
-            return_history = self.run_episodes(
-                env, episodes=episodes, max_episode_length=max_episode_length,
-                store=True, parallel=parallel
-            )
+            return_history = self.run_episodes(env, episodes=episodes, max_episode_length=max_episode_length, store=True)
             dataset = self.buffer.get(normalize_advantages=self.normalize_advantages, batch_size=batch_size, sort=sort_states)
             policy_history = self._fit_policy_model(dataset, epochs=self.policy_updates)
             value_history = self._fit_value_model(dataset, epochs=self.value_updates)
@@ -498,15 +474,7 @@ class Agent:
             buffer.finish()
         return total_reward, episode_length
 
-    def _parallel_run_episode(self, env, max_episode_length, random_seed, output, packet_size):
-        np.random.seed(random_seed)
-        buff = TrajectoryBuffer(gam=self.gam, lam=self.lam)
-        results = []
-        for i in range(packet_size):
-            results.append(self.run_episode(env, max_episode_length=max_episode_length, buffer=buff))
-        output.put((results,buff))
-
-    def run_episodes(self, env, episodes=100, max_episode_length=None, store=False, parallel=True):
+    def run_episodes(self, env, episodes=100, max_episode_length=None, store=False):
         """Run several episodes, store interaction in buffer, and return history.
 
         Parameters
@@ -519,7 +487,6 @@ class Agent:
             The maximum number of steps before the episode is terminated.
         store : bool, optional
             Whether or not to store the rollout in self.buffer.
-        parallel : bool, optional
 
         Returns
         -------
@@ -529,28 +496,10 @@ class Agent:
         """
         history = {'returns': np.zeros(episodes),
                    'lengths': np.zeros(episodes)}
-        if parallel:
-            output = mp.Queue()
-            assert episodes % PACKET_SIZE == 0, "PACKET_SIZE must divide the number of episodes"
-            num_processes = int(episodes / PACKET_SIZE)
-            processes = [mp.Process(target=self._parallel_run_episode,
-                                    args=(env, max_episode_length, seed, output, PACKET_SIZE))
-                         for seed in np.random.randint(0, 4294967295, num_processes)]
-            for p in processes:
-                p.start()
-            results = [output.get() for p in processes]
-            for p in processes:
-                p.join()
-            self.buffer=_merge_buffers([b for (_, b) in results])
-            returns = [x for (t,_) in results for x in t]
-            for i in range(episodes):
-                (history['returns'][i], history['lengths'][i]) = returns[i]
-        else:
-            for i in range(episodes):
-                R, L = self.run_episode(env, max_episode_length=max_episode_length, buffer=self.buffer)
-                history['returns'][i] = R
-                history['lengths'][i] = L
-
+        for i in range(episodes):
+            R, L = self.run_episode(env, max_episode_length=max_episode_length, buffer=self.buffer)
+            history['returns'][i] = R
+            history['lengths'][i] = L
         return history
 
     def _fit_policy_model(self, dataset, epochs=1):

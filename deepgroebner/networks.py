@@ -49,7 +49,7 @@ class MultilayerPerceptron(tf.keras.Model):
 class ParallelEmbeddingLayer(tf.keras.layers.Layer):
     """A layer for computing a nonlinear embedding of non-negative integer feature vectors.
 
-    This layer is used with the LeadMonomialsWrapper to embed the exponent vectors of pairs
+    This layer is used with the LeadMonomialsEnv to embed the exponent vectors of pairs
     into feature vectors. Each vector is embedded independently by a single learned multilayer
     perceptron. A mask is generated and attached to the output based on padding by -1.
 
@@ -98,7 +98,7 @@ class ParallelEmbeddingLayer(tf.keras.layers.Layer):
 class RecurrentEmbeddingLayer(tf.keras.layers.Layer):
     """A layer for computing a nonlinear embedding of non-negative integer feature vectors.
 
-    This layer is used with the LeadMonomialsWrapper to embed the exponent vectors of pairs
+    This layer is used with the LeadMonomialsEnv to embed the exponent vectors of pairs
     into feature vectors. An RNN is used so vector embeddings can depend on other vectors.
     A mask is generated and attached to the output based on padding by -1.
 
@@ -142,6 +142,65 @@ class RecurrentEmbeddingLayer(tf.keras.layers.Layer):
             X, *state = layer(X, mask=mask)
         output, *state = self.final_layer(X, mask=mask, initial_state=initial_state)
         return (output, *state)
+
+    def compute_mask(self, batch, mask=None):
+        return tf.math.not_equal(batch[:, :, -1], -1)
+
+
+class MonomialEncodingLayer(tf.keras.layers.Layer):
+    """A layer for computing a vocab-like embedding of monomials.
+
+    This layer is used with the LeadMonomialsEnv to map pairs to feature vectors.
+    It does this by learning an embedding on monomials and concatenating the embeddings
+    for the the monomials shown for each pair. Not all monomials are embeddable - any
+    monomial with a variable raised to a power greater than `max_power` is mapped to the
+    same fixed overflow value. This means that this layer has generally worse
+    performance than the ParallelEmbeddingLayer.
+
+    Parameters
+    ----------
+    dim : int
+        Dimension of the embedded monomial vectors (output dim will be 2 * dim * k).
+    n : int 
+        Number of variables in the polynomials.
+    k : int
+        Number of lead terms shown in each polynomial.
+    max_power : int
+        Maximum power of a variable in an embeddable monomial.
+
+    """
+
+    def __init__(self, dim, n=3, k=1, max_power=10):
+        super(MonomialEncodingLayer, self).__init__()
+        self.dim = dim
+        self.n = n
+        self.k = k
+        self.max_power = max_power
+        self.embed = tf.keras.layers.Embedding((max_power + 1) ** n + 1, dim, input_length=2*k)
+
+    def call(self, batch):
+        """Return the embedding for this batch.
+
+        Parameters
+        ----------
+        batch : `Tensor` of type `tf.int32` and shape (batch_dim, padded_dim, 2 * n * k)
+            Input batch, with padded rows indicated by -1 and all other values non-negative.
+
+        Returns
+        -------
+        output : `Tensor` of type `tf.float32` and shape (batch_dim, padded_dim, 2 * dim * k)
+            Embedding of the input batch with attached mask indicating valid rows.
+
+        """
+        batch += tf.cast(tf.math.equal(batch, -1), tf.int32)
+        batch_size = tf.shape(batch)[0]
+        monomials = tf.reshape(batch, (batch_size, -1, self.n))
+        powers = tf.math.cumprod(tf.fill((self.n, 1), self.max_power + 1), exclusive=True)
+        values = tf.squeeze(tf.matmul(monomials, powers))
+        valid = tf.cast(tf.reduce_max(monomials, axis=-1) <= self.max_power, tf.int32)
+        encoded = values * valid + (1 - valid) * (self.max_power + 1) ** self.n
+        encoded = tf.reshape(encoded, (batch_size, -1, 2 * self.k))
+        return tf.reshape(self.embed(encoded), (batch_size, -1, 2 * self.k * self.dim))
 
     def compute_mask(self, batch, mask=None):
         return tf.math.not_equal(batch[:, :, -1], -1)
