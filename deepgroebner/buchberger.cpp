@@ -289,6 +289,15 @@ double BuchbergerEnv::step(SPair action) {
 
 
 double BuchbergerEnv::value(std::string strategy, double gamma) const {
+  if (strategy == "sample") {
+    auto [G_, stats] = buchberger(G, P, SelectionType::Degree, elimination, rewards, sort_reducers, gamma);
+    double best = stats.discounted_return;
+    for (int i = 0; i < 100; i++) {
+      std::tie(G_, stats) = buchberger(G, P, SelectionType::Random, elimination, rewards, sort_reducers, gamma);
+      best = std::max(best, stats.discounted_return);
+    }
+    return best;
+  }
   std::map<std::string, SelectionType> select = {
       {"first", SelectionType::First},
       {"degree", SelectionType::Degree},

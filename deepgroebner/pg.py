@@ -267,7 +267,7 @@ class Agent:
         The learning rate for the policy model.
     policy_updates : int, optional
         The number of policy updates per epoch of training.
-    value_network : network, None, or 'env', optional
+    value_network : network, None, or string, optional
         The network for the value model.
     value_lr : float, optional
         The learning rate for the value model.
@@ -458,8 +458,8 @@ class Agent:
             action, logprob = self.act(state, return_logprob=True)
             if self.value_model is None:
                 value = 0
-            elif self.value_model == 'env':
-                value = env.value(gamma=self.gam)
+            elif isinstance(self.value_model, str):
+                value = env.value(strategy=self.value_model, gamma=self.gam)
             else:
                 value = self.value(state)
             next_state, reward, done, _ = env.step(action.numpy())
@@ -544,7 +544,7 @@ class Agent:
 
     def _fit_value_model(self, dataset, epochs=1):
         """Fit value model using data from dataset."""
-        if self.value_model is None or self.value_model == 'env':
+        if self.value_model is None or isinstance(self.value_model, str):
             epochs = 0
         history = {'loss': []}
         for epoch in range(epochs):
@@ -574,7 +574,7 @@ class Agent:
 
     def save_value_weights(self, filename):
         """Save the current weights in the value model to filename."""
-        if self.value_model is not None and self.value_model != 'env':
+        if self.value_model is not None and not isinstance(self.value_model, str):
             self.value_model.save_weights(filename)
 
 

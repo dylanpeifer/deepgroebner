@@ -111,7 +111,7 @@ def make_parser():
 
     value = parser.add_argument_group('value model')
     value.add_argument('--value_model',
-                       choices=['none', 'mlp', 'pairsleft', 'degree'],
+                       choices=['none', 'mlp', 'pairsleft', 'degree', 'sample'],
                        default='none',
                        help='value network type')
     value.add_argument('--value_kwargs',
@@ -238,7 +238,7 @@ def make_value_network(args):
         if args.value_model == 'pairsleft':
             value_network = PairsLeftBaseline(gam=args.gam)
         else:
-            value_network = 'env'
+            value_network = args.value_model
     if args.value_weights != "":
         value_network.load_weights(args.value_weights)
     return value_network
@@ -285,7 +285,7 @@ def make_logdir(args):
 
 if __name__ == '__main__':
     args = make_parser().parse_args()
-    if not args.use_gpu or args.parallel:
+    if not args.use_gpu:
         os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
     if args.agent_seed is not None:
         tf.random.set_seed(args.agent_seed)
