@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <iostream>
 #include <numeric>
+#include <sstream>
+#include <string>
 #include <tuple>
 
 
@@ -20,6 +22,7 @@ Coefficient operator/(Coefficient c1, Coefficient c2) {
   return c1.c * a;
 }
 
+
 Monomial::Monomial(std::initializer_list<int> exp) {
   if (exp.size() > N) throw std::invalid_argument("exponent vector is too large");
   std::fill(exponent.begin(), exponent.end(), 0);
@@ -27,11 +30,13 @@ Monomial::Monomial(std::initializer_list<int> exp) {
   degree = std::accumulate(exponent.begin(), exponent.end(), 0);
 }
 
+
 Monomial::Monomial(std::array<int, N> exp) {
   std::fill(exponent.begin(), exponent.end(), 0);
   std::copy(exp.begin(), exp.end(), exponent.begin());
   degree = std::accumulate(exponent.begin(), exponent.end(), 0);
 }  
+
 
 Monomial operator*(const Monomial& m1, const Monomial& m2) {
   Monomial m;
@@ -41,6 +46,7 @@ Monomial operator*(const Monomial& m1, const Monomial& m2) {
   return m;
 }
 
+
 Monomial operator/(const Monomial& m1, const Monomial& m2) {
   Monomial m;
   m.degree = m1.degree - m2.degree;
@@ -49,6 +55,7 @@ Monomial operator/(const Monomial& m1, const Monomial& m2) {
   }
   return m;
 }
+
 
 bool operator>(const Monomial& m1, const Monomial& m2) {
   if (m1.degree > m2.degree) {
@@ -66,11 +73,13 @@ bool operator>(const Monomial& m1, const Monomial& m2) {
   return false; 
 }
 
+
 bool operator==(const Monomial& m1, const Monomial& m2) {
   for (int i = 0; i < N; i++)
     if (m1.exponent[i] != m2.exponent[i]) return false;
   return true;
 }
+
 
 std::ostream& operator<<(std::ostream& os, const Monomial& m) {
   os << "x^[";
@@ -80,12 +89,14 @@ std::ostream& operator<<(std::ostream& os, const Monomial& m) {
   return os;
 }
 
+
 bool is_divisible(const Monomial& m1, const Monomial& m2) {
   for (int i = 0; i < N; i++) {
     if (m1[i] < m2[i]) return false;
   }
   return true;
 }
+
 
 Monomial gcd(const Monomial& m1, const Monomial& m2) {
   Monomial m;
@@ -96,6 +107,7 @@ Monomial gcd(const Monomial& m1, const Monomial& m2) {
   return m;
 }
 
+
 Monomial lcm(const Monomial& m1, const Monomial& m2) {
   Monomial m;
   for (int i = 0; i < N; i++) {
@@ -104,6 +116,7 @@ Monomial lcm(const Monomial& m1, const Monomial& m2) {
   }
   return m;
 }
+
 
 std::ostream& operator<<(std::ostream& os, const Term& t) {
   if (t.monom == Monomial{}) {
@@ -114,6 +127,7 @@ std::ostream& operator<<(std::ostream& os, const Term& t) {
   return os;
 }
 
+
 Polynomial::Polynomial(std::initializer_list<Term> tms) {
   for (Term t : tms)
     terms.push_back(t);
@@ -122,12 +136,14 @@ Polynomial::Polynomial(std::initializer_list<Term> tms) {
   sug = terms[0].monom.deg();
 }
 
+
 Polynomial::Polynomial(std::vector<Term> tms) {
   terms = tms;
   std::sort(terms.begin(), terms.end(),
 	    [](const Term& t1, const Term& t2) { return t1.monom > t2.monom; });
   sug = terms[0].monom.deg();
 }  
+
 
 Polynomial operator+(const Polynomial& f1, const Polynomial& f2) {
   Polynomial g;
@@ -160,6 +176,7 @@ Polynomial operator+(const Polynomial& f1, const Polynomial& f2) {
   return g;
 }
 
+
 Polynomial operator-(const Polynomial& f1, const Polynomial& f2) {
   Polynomial f = f2;
   for (Term& t : f.terms)
@@ -167,12 +184,14 @@ Polynomial operator-(const Polynomial& f1, const Polynomial& f2) {
   return f1 + f;
 }
 
+
 bool operator==(const Polynomial& f1, const Polynomial& f2) {
   if (f1.terms.size() != f2.terms.size()) return false;
   for (int i = 0; i < f1.terms.size(); i++)
     if (f1.terms[i] != f2.terms[i]) return false;
   return true;
 }
+
 
 Polynomial operator*(const Term& t, const Polynomial& f) {
   Polynomial g;
@@ -182,12 +201,14 @@ Polynomial operator*(const Term& t, const Polynomial& f) {
   return g;
 }
 
+
 Polynomial operator*(const Polynomial& f1, const Polynomial& f2) {
   Polynomial g;
   for (const Term& t : f1.terms)
     g = g + t * f2;
   return g;
 }
+
 
 std::ostream& operator<<(std::ostream& os, const Polynomial& f) {
   int n = f.terms.size();
@@ -199,4 +220,75 @@ std::ostream& operator<<(std::ostream& os, const Polynomial& f) {
     os << f.terms[i] << " + "; 
   os << f.terms[n-1]; 
   return os;
+}
+
+
+Monomial parse_monomial(std::istringstream& is) {
+  if (std::isalpha(is.peek())) {
+    int i = is.get() - (int) 'a';
+    std::array<int, N> exp {};
+    switch(is.peek()) {
+    case '^':
+      is.get();
+      int power;
+      is >> power;
+      exp[i] += power;
+      if (is.peek() == '*') {
+	is.get();
+	return Monomial(exp) * parse_monomial(is);
+      } else {
+	return Monomial(exp);
+      }
+    case '*':
+      is.get();
+      exp[i] += 1;
+      return Monomial(exp) * parse_monomial(is);
+    default:
+      exp[i] += 1;
+      return Monomial(exp);
+    }
+  } else {
+    return Monomial{};
+  }
+}
+
+
+Term parse_term(std::istringstream& is) {
+  if (std::isdigit(is.peek())) {
+    int c;
+    is >> c;
+    if (is.peek() == '*') {
+      is.get();
+      Monomial m = parse_monomial(is);
+      return {Coefficient{c},  m};
+    } else {
+      return {Coefficient{c}, {}};
+    }
+  } else {
+    Monomial m = parse_monomial(is);
+    return {Coefficient{1},  m};
+  }
+}
+
+
+Polynomial parse_polynomial(std::istringstream& is) {
+  switch(is.peek()) {
+  case '+':
+    is.get();
+    return parse_polynomial(is);
+  case '-':
+    is.get();
+    return Term{Coefficient{-1}, {}} * parse_polynomial(is);
+  case EOF:
+    return Polynomial{};
+  default:
+    Term t = parse_term(is);
+    return Polynomial{t} + parse_polynomial(is);
+  }
+}
+
+
+Polynomial parse_polynomial(const std::string& poly_string) {
+  std::istringstream iss(poly_string);
+  return parse_polynomial(iss);
 }

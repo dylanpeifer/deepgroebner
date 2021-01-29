@@ -215,3 +215,25 @@ TEST(Polynomial, multiply_polynomial) {
 		   {1, {1,0,0}}};
   EXPECT_EQ(p1 * p2, p3);
 }
+
+TEST(parse_polynomial, example1) {
+  Polynomial p1 = parse_polynomial("a^2*b+c*d");
+  Polynomial p2 = {{1, {2,1,0,0}},
+		   {1, {0,0,1,1}}};
+  EXPECT_EQ(p1, p2);
+}
+
+TEST(parse_polynomial, example2) {
+  Polynomial p1 = parse_polynomial("413*a^2*b^5*c+32*d^2-5");
+  Polynomial p2 = {{413, {2,5,1,0}},
+		   { 32, {0,0,0,2}},
+		   { -5, {0,0,0,0}}};
+  EXPECT_EQ(p1, p2);
+}
+
+TEST(parse_polynomial, example3) {
+  Polynomial p1 = parse_polynomial("3");
+  Polynomial p2 = {{3, {}}};
+  EXPECT_EQ(p1, p2);
+}
+
