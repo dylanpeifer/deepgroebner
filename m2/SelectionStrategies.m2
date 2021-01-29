@@ -317,11 +317,14 @@ selectPair(List) := SPair => opts -> (P) -> (
     else if opts.Strategy === "Last" then (
 	p = P#(#P-1);
 	)
+    else if opts.Strategy === "Codegree" then (
+	p = P#(argmax(P, p -> {degree p, indices p}));
+	)
     else if opts.Strategy === "Strange" then (
-	p = P#(argmax(P, lcm));
+	p = P#(argmax(P, p -> {lcm p, indices p}));
 	)
     else if opts.Strategy === "Spice" then (
-	p = P#(argmax(P, p -> {sugar p, lcm p}));
+	p = P#(argmax(P, p -> {sugar p, lcm p, indices p}));
 	);
 
     P = delete(p, P);
