@@ -14,6 +14,9 @@ add_executable(random_episodes scripts/random_episodes.cpp deepgroebner/ideals.c
   deepgroebner/polynomials.cpp deepgroebner/buchberger.cpp)
 target_include_directories(random_episodes PUBLIC deepgroebner)
 
+add_executable(make_strat scripts/make_strat.cpp deepgroebner/ideals.cpp
+  deepgroebner/polynomials.cpp deepgroebner/buchberger.cpp)
+target_include_directories(make_strat PUBLIC deepgroebner)
 
 add_executable(test_polynomials tests/test_polynomials.cpp
   deepgroebner/polynomials.cpp)
