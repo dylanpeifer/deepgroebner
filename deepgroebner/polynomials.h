@@ -100,13 +100,13 @@ private:
  * Polynomials have the form
  *
  *  polynomial = term polynomial
- *             | "-" polynomial
- *             | "+" polynomial
  *        term = integer * monomial
  *             | integer
  *             | monomial
+ *             | + term
+ *             | - term
  *    monomial = variable ^ integer * monomial
-               | variable ^ integer
+ *             | variable ^ integer
  *             | variable * monomial
  *             | variable
  *

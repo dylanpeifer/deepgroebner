@@ -237,3 +237,11 @@ TEST(parse_polynomial, example3) {
   EXPECT_EQ(p1, p2);
 }
 
+TEST(parse_polynomial, example4) {
+  Polynomial p1 = parse_polynomial("12*a^2-b*c+13*d");
+  Polynomial p2 = {{12, {2,0,0,0}},
+		   {-1, {0,1,1,0}},
+		   {13, {0,0,0,1}}};
+  EXPECT_EQ(p1, p2);
+}
+

@@ -223,65 +223,71 @@ std::ostream& operator<<(std::ostream& os, const Polynomial& f) {
 }
 
 
+int parse_variable(std::istringstream& is) {
+  int i = is.get() - (int) 'a';
+  if (i < 0 || i > N) throw std::invalid_argument("invalid variable name");
+  return i;
+}
+
+
 Monomial parse_monomial(std::istringstream& is) {
-  if (std::isalpha(is.peek())) {
-    int i = is.get() - (int) 'a';
-    std::array<int, N> exp {};
-    switch(is.peek()) {
-    case '^':
+  if (is.peek() == EOF) return Monomial{};
+  int var = parse_variable(is);
+  std::array<int, N> exp = {};
+  switch(is.peek()) {
+  case '^':
+    is.get();
+    int power;
+    is >> power;
+    exp[var] += power;
+    if (is.peek() == '*') {
       is.get();
-      int power;
-      is >> power;
-      exp[i] += power;
-      if (is.peek() == '*') {
-	is.get();
-	return Monomial(exp) * parse_monomial(is);
-      } else {
-	return Monomial(exp);
-      }
-    case '*':
-      is.get();
-      exp[i] += 1;
       return Monomial(exp) * parse_monomial(is);
-    default:
-      exp[i] += 1;
+    } else {
       return Monomial(exp);
     }
-  } else {
-    return Monomial{};
+  case '*':
+    is.get();
+    exp[var] += 1;
+    return Monomial(exp) * parse_monomial(is);
+  default:
+    exp[var] += 1;
+    return Monomial(exp);
   }
 }
 
 
 Term parse_term(std::istringstream& is) {
-  if (std::isdigit(is.peek())) {
-    int c;
-    is >> c;
-    if (is.peek() == '*') {
-      is.get();
-      Monomial m = parse_monomial(is);
-      return {Coefficient{c},  m};
+  switch (is.peek()) {
+  case '+':
+    is.get();
+    return parse_term(is);
+  case '-':
+    is.get();
+    return Term{-1, {}} * parse_term(is);
+  default:
+    if (std::isdigit(is.peek())) {
+      int c;
+      is >> c;
+      if (is.peek() == '*') {
+	is.get();
+	Monomial m = parse_monomial(is);
+	return {Coefficient{c},  m};
+      } else {
+	return {Coefficient{c}, {}};
+      }
     } else {
-      return {Coefficient{c}, {}};
+      Monomial m = parse_monomial(is);
+      return {Coefficient{1},  m};
     }
-  } else {
-    Monomial m = parse_monomial(is);
-    return {Coefficient{1},  m};
   }
 }
 
 
 Polynomial parse_polynomial(std::istringstream& is) {
-  switch(is.peek()) {
-  case '+':
-    is.get();
-    return parse_polynomial(is);
-  case '-':
-    is.get();
-    return Term{Coefficient{-1}, {}} * parse_polynomial(is);
-  case EOF:
+  if (is.peek() == EOF) {
     return Polynomial{};
-  default:
+  } else {
     Term t = parse_term(is);
     return Polynomial{t} + parse_polynomial(is);
   }
