@@ -49,6 +49,10 @@ int main(int argc, char* argv[]) {
       {"degree", SelectionType::Degree},
       {"normal", SelectionType::Normal},
       {"sugar", SelectionType::Sugar},
+      {"last", SelectionType::Last},
+      {"codegree", SelectionType::Codegree},
+      {"strange", SelectionType::Strange},
+      {"spice", SelectionType::Spice}
   };
   SelectionType select = select_map[strat];
 

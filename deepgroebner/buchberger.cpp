@@ -161,15 +161,15 @@ std::pair<std::vector<Polynomial>, BuchbergerStats> buchberger(const std::vector
   switch (selection) {
   case SelectionType::First:
     select = [](const SPair& p1, const SPair& p2) {
-	       return (p1.j < p2.j) || (p1.j == p2.j && p1.i < p2.i);
+	       return std::tie(p1.j, p1.i) < std::tie(p2.j, p2.i);
 	     };
     random = false;
     break;
   case SelectionType::Degree:
     select = [&G](const SPair& p1, const SPair& p2) {
-	       Monomial m1 = lcm(G[p1.i].LM(), G[p1.j].LM());
-	       Monomial m2 = lcm(G[p2.i].LM(), G[p2.j].LM());
-	       return m1.deg() < m2.deg();
+	       int d1 = lcm(G[p1.i].LM(), G[p1.j].LM()).deg();
+	       int d2 = lcm(G[p2.i].LM(), G[p2.j].LM()).deg();
+	       return std::tie(d1, p1.j, p1.i) < std::tie(d2, p2.j, p2.i);
 	     };
     random = false;
     break;
@@ -177,7 +177,7 @@ std::pair<std::vector<Polynomial>, BuchbergerStats> buchberger(const std::vector
     select = [&G](const SPair& p1, const SPair& p2) {
 	       Monomial m1 = lcm(G[p1.i].LM(), G[p1.j].LM());
 	       Monomial m2 = lcm(G[p2.i].LM(), G[p2.j].LM());
-	       return m1 < m2;
+	       return std::tie(m1, p1.j, p1.i) < std::tie(m2, p2.j, p2.i);
 	     };
     random = false;
     break;
@@ -189,13 +189,47 @@ std::pair<std::vector<Polynomial>, BuchbergerStats> buchberger(const std::vector
 				 G[p1.j].sugar() + (m1 / G[p1.j].LM()).deg());
 	       int s2 = std::max(G[p2.i].sugar() + (m2 / G[p2.i].LM()).deg(),
 				 G[p2.j].sugar() + (m2 / G[p2.j].LM()).deg());
-	       return (s1 < s2) || (s1 == s2 && m1 < m2);
+	       return std::tie(s1, m1, p1.j, p1.i) < std::tie(s2, m2, p2.j, p2.i);
 	     };
     random = false;
     break;
   case SelectionType::Random:
     rng.seed(rand());
     random = true;
+    break;
+  case SelectionType::Last:
+    select = [](const SPair& p1, const SPair& p2) {
+	       return std::tie(p1.j, p1.i) > std::tie(p2.j, p2.i);
+	     };
+    random = false;
+    break;
+  case SelectionType::Codegree:
+    select = [&G](const SPair& p1, const SPair& p2) {
+	       int d1 = lcm(G[p1.i].LM(), G[p1.j].LM()).deg();
+	       int d2 = lcm(G[p2.i].LM(), G[p2.j].LM()).deg();
+	       return std::tie(d1, p1.j, p1.i) > std::tie(d2, p2.j, p2.i);
+	     };
+    random = false;
+    break;
+  case SelectionType::Strange:
+    select = [&G](const SPair& p1, const SPair& p2) {
+	       Monomial m1 = lcm(G[p1.i].LM(), G[p1.j].LM());
+	       Monomial m2 = lcm(G[p2.i].LM(), G[p2.j].LM());
+	       return std::tie(m1, p1.j, p1.i) > std::tie(m2, p2.j, p2.i);
+	     };
+    random = false;
+    break;
+  case SelectionType::Spice:
+    select = [&G](const SPair& p1, const SPair& p2) {
+	       Monomial m1 = lcm(G[p1.i].LM(), G[p1.j].LM());
+	       Monomial m2 = lcm(G[p2.i].LM(), G[p2.j].LM());
+	       int s1 = std::max(G[p1.i].sugar() + (m1 / G[p1.i].LM()).deg(),
+				 G[p1.j].sugar() + (m1 / G[p1.j].LM()).deg());
+	       int s2 = std::max(G[p2.i].sugar() + (m2 / G[p2.i].LM()).deg(),
+				 G[p2.j].sugar() + (m2 / G[p2.j].LM()).deg());
+	       return std::tie(s1, m1, p1.j, p1.i) > std::tie(s2, m2, p2.j, p2.i);
+	     };
+    random = false;
     break;
   }
 

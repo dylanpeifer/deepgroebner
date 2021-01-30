@@ -107,7 +107,7 @@ struct BuchbergerStats {
 /**
  * Selection option for selecting next pairs from the pair set.
  */
-enum class SelectionType {First, Degree, Normal, Sugar, Random};
+enum class SelectionType {First, Degree, Normal, Sugar, Random, Last, Codegree, Strange, Spice};
 
 
 /**
