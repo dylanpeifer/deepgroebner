@@ -27,7 +27,7 @@ int main(int argc, char* argv[]) {
   }
   std::string dist = argv[1];
   std::string strat = argv[2];
-  int seed = (argc > 3) ? std::stoi(argv[3]) : 0;
+  std::optional<int> seed = (argc > 3) ? std::optional<int>{std::stoi(argv[3])} : std::nullopt;
 
   std::ifstream in_file {"data/stats/" + dist + "/" + dist + ".csv"};
   if(!in_file.good()) {
@@ -49,6 +49,7 @@ int main(int argc, char* argv[]) {
       {"degree", SelectionType::Degree},
       {"normal", SelectionType::Normal},
       {"sugar", SelectionType::Sugar},
+      {"random", SelectionType::Random},
       {"last", SelectionType::Last},
       {"codegree", SelectionType::Codegree},
       {"strange", SelectionType::Strange},
@@ -60,7 +61,7 @@ int main(int argc, char* argv[]) {
   std::getline(in_file, line);  // remove column name
   while(std::getline(in_file, line)) {
     auto F = parse_ideal_string(line);
-    auto [G, stats] = buchberger(F, select);
+    auto [G, stats] = buchberger(F, select, EliminationType::GebauerMoeller, RewardType::Additions, false, true, 0.99, seed);
     out_file << stats.zero_reductions << ","
              << stats.nonzero_reductions << ","
              << stats.polynomial_additions << std::endl;

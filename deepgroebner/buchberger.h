@@ -7,6 +7,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "ideals.h"
@@ -120,6 +121,7 @@ enum class SelectionType {First, Degree, Normal, Sugar, Random, Last, Codegree, 
  * @param sort_input Whether to sort the initial generating set by lead monomial.
  * @param sort_reducers Whether to choose reducers in sorted order by lead monomial.
  * @param gamma Discount rate for rewards.
+ * @param seed Optional seed if using Random selection.
  */
 std::pair<std::vector<Polynomial>, BuchbergerStats> buchberger(const std::vector<Polynomial>& F,
 							       SelectionType selection = SelectionType::Degree,
@@ -127,7 +129,8 @@ std::pair<std::vector<Polynomial>, BuchbergerStats> buchberger(const std::vector
 							       RewardType rewards = RewardType::Additions,
 							       bool sort_input = false,
 							       bool sort_reducers = true,
-							       double gamma = 0.99);
+							       double gamma = 0.99,
+							       std::optional<int> seed = std::nullopt);
 
 
 /**
@@ -140,6 +143,7 @@ std::pair<std::vector<Polynomial>, BuchbergerStats> buchberger(const std::vector
  * @param rewards Reward value for each step.
  * @param sort_reducers Whether to choose reducers in sorted order by lead monomial.
  * @param gamma Discount rate for rewards.
+ * @param seed Optional seed if using Random selection.
  */
 std::pair<std::vector<Polynomial>, BuchbergerStats> buchberger(const std::vector<Polynomial>& F,
 							       const std::vector<SPair>& S,
@@ -147,7 +151,8 @@ std::pair<std::vector<Polynomial>, BuchbergerStats> buchberger(const std::vector
 							       EliminationType elimination = EliminationType::GebauerMoeller,
 							       RewardType rewards = RewardType::Additions,
 							       bool sort_reducers = true,
-							       double gamma = 0.99);
+							       double gamma = 0.99,
+							       std::optional<int> seed = std::nullopt);
 
 
 /**

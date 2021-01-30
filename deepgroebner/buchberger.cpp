@@ -6,6 +6,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <optional>
 #include <random>
 #include <vector>
 
@@ -127,14 +128,15 @@ std::pair<std::vector<Polynomial>, BuchbergerStats> buchberger(const std::vector
 							       RewardType rewards,
 							       bool sort_input,
 							       bool sort_reducers,
-							       double gamma) {
+							       double gamma,
+							       std::optional<int> seed) {
   std::vector<Polynomial> G;
   std::vector<SPair> P;
   for (const Polynomial& f : F) {
     update(G, P, f, elimination);
   }
 
-  return buchberger(G, P, selection, elimination, rewards, sort_reducers, gamma);
+  return buchberger(G, P, selection, elimination, rewards, sort_reducers, gamma, seed);
 }
 
 
@@ -144,7 +146,8 @@ std::pair<std::vector<Polynomial>, BuchbergerStats> buchberger(const std::vector
 							       EliminationType elimination,
 							       RewardType rewards,
 							       bool sort_reducers,
-							       double gamma) {
+							       double gamma,
+							       std::optional<int> seed) {
   std::vector<Polynomial> G = F;
   std::vector<Polynomial> G_ = F;
   std::vector<SPair> P = S;
@@ -194,7 +197,11 @@ std::pair<std::vector<Polynomial>, BuchbergerStats> buchberger(const std::vector
     random = false;
     break;
   case SelectionType::Random:
-    rng.seed(rand());
+    if (seed) {
+      rng.seed(seed.value());
+    } else {
+      rng.seed(rand());
+    }
     random = true;
     break;
   case SelectionType::Last:
