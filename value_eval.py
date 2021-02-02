@@ -191,7 +191,7 @@ def eval_analysis(dataset):
     return one_std_dataset, two_std_dataset
 
 def save(logdir, name, dataset):
-    np.savez(os.path.join(logdir, name), allow_pickle = True, *dataset)
+    np.savez(os.path.join(logdir, name), allow_pickle = True, dtype = object, *dataset)
 
 if __name__ == '__main__':
     args = make_parser().parse_args()
