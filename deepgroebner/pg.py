@@ -392,7 +392,7 @@ class Agent:
         self.kld_limit = kld_limit
 
     @tf.function(experimental_relax_shapes=True)
-    def act(self, state, return_logprob=False):
+    def act(self, state, return_logprob=False, return_all_logpi = False):
         """Return an action for the given state using the policy model.
 
         Parameters
@@ -405,8 +405,11 @@ class Agent:
         """
         logpi, score = self.policy_model(state[tf.newaxis])
         action = tf.random.categorical(logpi, 1)[0, 0]
+
         if return_logprob:
             return action, logpi[:, action][0], score[0][0]
+        elif return_all_logpi:
+            return action, logpi
         else:
             return action, score
 

@@ -12,7 +12,7 @@ import gym
 from deepgroebner.buchberger import LeadMonomialsEnv, BuchbergerAgent
 from deepgroebner.pg import PGAgent, PPOAgent
 from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, AttentionPMLP, TransformerPMLP, PairsLeftBaseline, AgentBaseline, TransformerPMLP_Score_MHA
-from deepgroebner.new_networks import TransformerPMLP_Score_Q
+from deepgroebner.new_networks import TransformerPMLP_Score_Q, TransformerPMLP_DVal, TransformerPMLP_MHA_Q_Scorer
 from deepgroebner.wrapped import CLeadMonomialsEnv
 
 
@@ -74,7 +74,7 @@ def make_parser():
 
     policy = parser.add_argument_group('policy model')
     policy.add_argument('--policy_model',
-                        choices=['mlp', 'pmlp', 'apmlp', 'tpmlp', 'tpmlp_q_scorer', 'tpmlp_MHA_scorer'],
+                        choices=['mlp', 'pmlp', 'apmlp', 'tpmlp', 'tpmlp_q_scorer', 'tpmlp_MHA_scorer', 'dval', 'qmha'],
                         default='pmlp',
                         help='policy network type')
     policy.add_argument('--policy_kwargs',
@@ -211,8 +211,12 @@ def make_policy_network(args):
             policy_network = TransformerPMLP(**args.policy_kwargs)
         elif args.policy_model == 'tpmlp_q_scorer':
             policy_network = TransformerPMLP_Score_Q(**args.policy_kwargs)
-        else:
+        elif args.policy_model == 'tpmlp_MHA_scorer':
             policy_network = TransformerPMLP_Score_MHA(**args.policy_kwargs)
+        elif args.policy_model == 'dval':
+            policy_network = TransformerPMLP_DVal(**args.policy_kwargs)
+        else:
+            pass
         batch = np.zeros((1, 10, 2 * args.k * int(args.distribution.split('-')[0])), dtype=np.int32)
     policy_network(batch)  # build network
     if args.policy_weights != "":
