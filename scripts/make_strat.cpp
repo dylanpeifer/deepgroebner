@@ -36,6 +36,9 @@ int main(int argc, char* argv[]) {
   }
 
   std::string out_filename = "data/stats/" + dist + "/" + dist + "_" + strat + ".csv";
+  if (argc > 3 && strat == "random") {
+    out_filename = "data/stats/" + dist + "/" + dist + "_" + strat + "_" + argv[3] + ".csv";
+  }
   if (std::ifstream{out_filename}) {
     std::cout << "Output file " << out_filename
 	      << " already exists. Delete or move it first." << std::endl;

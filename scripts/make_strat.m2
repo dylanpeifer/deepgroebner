@@ -39,27 +39,6 @@ parseIdealDist String := HashTable => dist -> (
     hashTable L
     )
 
-setupInFile = method()
-setupInFile String := String => dist -> (
-    -- Setup input file and return its name.
-    inFile := "data/stats/" | dist | "/" | dist | ".csv";
-    if not fileExists inFile then
-        error("No distribution file found. Run scripts/make_dist.m2 first.");
-    inFile
-    )
-
-setupOutFile = method()
-setupOutFile(String, String) := String => (dist, strategy) -> (
-    -- Setup output file and return its name.
-    outFile := "data/stats/" | dist | "/" | dist | "_" | strategy | ".csv";
-    if fileExists outFile then
-        error("Output file " | outFile | " already exists. Delete or move it first.");
-    F := openOut outFile;
-    F << "ZeroReductions,NonzeroReductions,PolynomialAdditions,MonomialAdditions" << endl;
-    close F;
-    outFile
-    )
-
 writePerformanceToFile = method()
 writePerformanceToFile(Ideal, String, String) := (I, strategy, fname) -> (
     -- Append a line for strategy performance on I to fname.
@@ -76,8 +55,18 @@ dist = scriptCommandLine#1;
 strategy = scriptCommandLine#2;
 if #scriptCommandLine == 4 then setRandomSeed(value(scriptCommandLine#3));
 
-inFile = setupInFile dist;
-outFile = setupOutFile(dist, strategy);
+inFile := "data/stats/" | dist | "/" | dist | ".csv";
+if not fileExists inFile then error("No distribution file found. Run scripts/make_dist.m2 first.");
+
+outFile := "data/stats/" | dist | "/" | dist | "_" | strategy | ".csv";
+if #scriptCommandLine == 4 and strategy == "random" then (
+    outFile = "data/stats/" | dist | "/" | dist | "_" | strategy | "_" | scriptCommandLine#3 | ".csv";
+    );
+if fileExists outFile then error("Output file " | outFile | " already exists. Delete or move it first.");
+F := openOut outFile;
+F << "ZeroReductions,NonzeroReductions,PolynomialAdditions,MonomialAdditions" << endl;
+close F;
+
 H = parseIdealDist dist;
 R = ZZ/32003[vars(0..(H#"n" - 1))];
 ideals = apply(drop(lines get inFile, 1), s -> ideal value replace("\\|", ",", s));
