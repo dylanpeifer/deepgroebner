@@ -50,19 +50,25 @@ setupOutFile String := String => dist -> (
     if fileExists outFile then
         error("Output file " | outFile | " already exists. Delete or move it first.");
     F := openOut outFile;
-    F << "GroebnerBasis,Degree,Dimension,Regularity" << endl;
+    F << "GroebnerBasis,SizeGroebnerBasis,MaxDegreeGroebnerBasis,Degree,Dimension,Regularity" << endl;
     close F;
-    outFile
+    outFile 
     )
 
 writeStatsToFile = method()
 writeStatsToFile(Ideal, String) := (I, fname) -> (
-    -- Append a line for Groebner basis, degree, dimension, and regularity of I to fname.
-    G := gb I;
-    s := toString first entries gens G;
+    -- Append a line for computed stats of I to fname.
+    G := first entries gens gb I;
+    s := toString G;
     s = replace("{|}", "", s);
     s = replace(", ", "|", s);
-    stats := {degree I, dim I, regularity I};
+    stats := {
+	length G,
+	max(apply(G, g -> first degree g)),
+	degree I,
+	dim I,
+	if isHomogeneous I then regularity I else regularity ideal leadTerm I
+	};
     F := openOutAppend fname;
     F << s << "," << concatenate between(",", apply(stats, toString)) << endl;
     close F
@@ -74,8 +80,9 @@ inFile = setupInFile dist;
 outFile = setupOutFile dist;
 H = parseIdealDist dist;
 R = ZZ/32003[vars(0..(H#"n" - 1))];
-ideals = apply(drop(lines get inFile, 1), s -> ideal value replace("\\|", ",", s));
+idealStrs = apply(drop(lines get inFile, 1), s -> replace("\\|", ",", s));
 
-for I in ideals do (
+for idealStr in idealStrs do (
+    I = ideal value idealStr;
     writeStatsToFile(I, outFile);
     );
