@@ -312,7 +312,7 @@ class Score_Decider(tf.keras.layers.Layer):
         super(Score_Decider, self).__init__()
         layers = []
         for dim in hidden_layers:
-            layers.append(tf.keras.layers.Dense(dim, activition = 'elu'))
+            layers.append(tf.keras.layers.Dense(dim, activation = 'elu'))
         layers.append(tf.keras.layers.Dense(1, activation=last_activation))
         self.scorer = tf.keras.Sequential(layers=layers)
     
