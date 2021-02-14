@@ -20,18 +20,34 @@ parseIdealDist = method()
 parseIdealDist String := HashTable => dist -> (
     -- Return HashTable with parameters for ideal distribution.
     args := separate("-", dist);
-    if member(args#3, {"uniform", "weighted", "maximum"}) then (
-	L := {"n" => value(args#0),
-	      "d" => value(args#1),
-	      "s" => value(args#2),
-	      "degs" => args#3,
-	      "consts" => member("consts", args),
-	      "homog" => member("homog", args),
-	      "pure" => member("pure", args)};
-    ) else (
-    	error("must be a binomial ideal distribution");
-	);
-    hashTable L
+    params := {};
+    if args#0 == "poly" then (
+	params = {"kind" => "poly",
+	          "n" => value(args#1),
+	          "d" => value(args#2),
+	          "s" => value(args#3),
+		  "lambda" => value(args#4),
+	          "degs" => args#5,
+	          "consts" => member("consts", args)};
+	)
+    else if args#0 == "toric" then (
+	params = {"kind" => "toric",
+	          "n" => value(args#1),
+	          "L" => value(args#2),
+		  "U" => value(args#3),
+		  "M" => value(args#4)};
+	)
+    else (
+	params = {"kind" => "binom",
+	          "n" => value(args#0),
+	          "d" => value(args#1),
+	          "s" => value(args#2),
+	          "degs" => args#3,
+	          "consts" => member("consts", args),
+	          "homog" => member("homog", args),
+	          "pure" => member("pure", args)};
+        );
+    hashTable params
     )
 
 setupOutFile = method()
@@ -65,13 +81,30 @@ if #scriptCommandLine == 4 then setRandomSeed(value(scriptCommandLine#3));
 
 outFile = setupOutFile dist;
 H = parseIdealDist dist;
-R = ZZ/32003[vars(0..(H#"n" - 1))];
-opts = new OptionTable from {Constants => H#"consts",
-                             Degrees => capitalize H#"degs",
-                             Homogeneous => H#"homog",
-                             Pure => H#"pure"};
 
-for sample from 1 to samples do (
-    I := randomBinomialIdeal(R, H#"d", H#"s", opts);
-    writeIdealToFile(I, outFile);
-    );
+if H#"kind" == "binom" then (
+    R = ZZ/32003[vars(0..(H#"n" - 1))];
+    opts = new OptionTable from {Constants => H#"consts",
+                                 Degrees => capitalize H#"degs",
+                                 Homogeneous => H#"homog",
+                                 Pure => H#"pure"};
+    for sample from 1 to samples do (
+        I = randomBinomialIdeal(R, H#"d", H#"s", opts);
+        writeIdealToFile(I, outFile);
+        );
+) else if H#"kind" == "poly" then (
+    R = ZZ/32003[vars(0..(H#"n" - 1))];
+    opts = new OptionTable from {Constants => H#"consts",
+	                         Degrees => capitalize H#"degs"};
+    for sample from 1 to samples do (
+        I = randomPolynomialIdeal(R, H#"d", H#"s", H#"lambda", opts);
+        writeIdealToFile(I, outFile);
+        );
+) else (
+    for sample from 1 to samples do (
+        I = randomToricIdeal(H#"n", H#"L", H#"U", H#"M");
+        writeIdealToFile(I, outFile);
+        );
+);
+    
+    

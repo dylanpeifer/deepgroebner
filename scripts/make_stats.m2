@@ -20,18 +20,34 @@ parseIdealDist = method()
 parseIdealDist String := HashTable => dist -> (
     -- Return HashTable with parameters for ideal distribution.
     args := separate("-", dist);
-    if member(args#3, {"uniform", "weighted", "maximum"}) then (
-	L := {"n" => value(args#0),
-	      "d" => value(args#1),
-	      "s" => value(args#2),
-	      "degs" => args#3,
-	      "consts" => member("consts", args),
-	      "homog" => member("homog", args),
-	      "pure" => member("pure", args)};
-    ) else (
-    	error("must be a binomial ideal distribution");
-	);
-    hashTable L
+    params := {};
+    if args#0 == "poly" then (
+	params = {"kind" => "poly",
+	          "n" => value(args#1),
+	          "d" => value(args#2),
+	          "s" => value(args#3),
+		  "lambda" => value(args#4),
+	          "degs" => args#5,
+	          "consts" => member("consts", args)};
+	)
+    else if args#0 == "toric" then (
+	params = {"kind" => "toric",
+	          "n" => value(args#1),
+	          "L" => value(args#2),
+		  "U" => value(args#3),
+		  "M" => value(args#4)};
+	)
+    else (
+	params = {"kind" => "binom",
+	          "n" => value(args#0),
+	          "d" => value(args#1),
+	          "s" => value(args#2),
+	          "degs" => args#3,
+	          "consts" => member("consts", args),
+	          "homog" => member("homog", args),
+	          "pure" => member("pure", args)};
+        );
+    hashTable params
     )
 
 setupInFile = method()
@@ -79,7 +95,7 @@ dist = scriptCommandLine#1;
 inFile = setupInFile dist;
 outFile = setupOutFile dist;
 H = parseIdealDist dist;
-R = ZZ/32003[vars(0..(H#"n" - 1))];
+R = if H#"kind" == "toric" then ZZ/32003[vars(0..(H#"M" - 1))] else ZZ/32003[vars(0..(H#"n" - 1))];
 idealStrs = apply(drop(lines get inFile, 1), s -> replace("\\|", ",", s));
 
 for idealStr in idealStrs do (
