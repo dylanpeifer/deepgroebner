@@ -159,7 +159,7 @@ class TrajectoryBuffer:
         self.start = 0
         self.end = 0
 
-    def get(self, batch_size=64, normalize_advantages=True, sort=False, drop_remainder=True):
+    def get(self, batch_size=64, normalize_advantages=True, sort=False, drop_remainder=False):
         """Return a tf.Dataset of training data from this TrajectoryBuffer.
 
         Parameters
