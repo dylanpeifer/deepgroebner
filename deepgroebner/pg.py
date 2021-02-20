@@ -8,7 +8,7 @@ agent.
 import numpy as np
 import multiprocessing as mp
 import tensorflow as tf
-from environments import VectorEnv, AlphabeticalEnv
+from deepgroebner.environments import VectorEnv, AlphabeticalEnv
 
 
 PACKET_SIZE = 10 # this must divide the number of episodes, and ideally should divide (episodes)/(number of cores)
