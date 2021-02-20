@@ -226,7 +226,7 @@ def make_policy_network(args):
     if args.environment == 'VectorEnv':
         batch = np.zeros((1, 10, 64), dtype=np.int32)
     elif args.environment == 'AlphabeticalEnv':
-        pass
+        batch = np.zeros((1, 10, 1128), dtype=np.int32)
     policy_network(batch)  # build network
     if args.policy_weights != "":
         policy_network.load_weights(args.policy_weights)
