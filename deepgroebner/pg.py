@@ -8,6 +8,7 @@ agent.
 import numpy as np
 import multiprocessing as mp
 import tensorflow as tf
+from environments import VectorEnv, AlphabeticalEnv
 
 
 PACKET_SIZE = 10 # this must divide the number of episodes, and ideally should divide (episodes)/(number of cores)
@@ -177,7 +178,7 @@ class TrajectoryBuffer:
         
 
         # probably a better place to do these calculations!!
-        error = calc_error(values, self.scores[tau])
+        error = calc_error(rewards, self.scores[tau])
         for e in error: 
             if e != np.inf and e != -np.inf:
                 self.percent_error.append(e)
@@ -201,8 +202,8 @@ class TrajectoryBuffer:
     def get_difference(self):
         return self.difference
     
-    def get_value(self):
-        return self.values
+    def get_discounted_rewards(self):
+        return self.rewards
 
     def get_predicted_value(self):
         return self.scores
@@ -564,8 +565,10 @@ class Agent:
 
             next_state, reward, done, _ = env.step(action.numpy())
 
-            if buffer is not None:
+            if buffer is not None and not (isinstance(env, VectorEnv) or isinstance(env, AlphabeticalEnv)):
                 buffer.store(state, action, reward, logprob, value, score)
+            elif buffer is not None:
+                buffer.store(state, action, reward, logprob, score, score)
 
             episode_length += 1
             total_reward += reward
@@ -630,7 +633,7 @@ class Agent:
             diff = buffer.get_difference()
             corr = buffer.get_correlation()
             predicted = buffer.get_predicted_value()
-            discounted_value = buffer.get_value()
+            discounted_value = buffer.get_discounted_rewards()
             value_pairs = list(zip(predicted, discounted_value))
             if not num_episode is None:
                 value_pairs = [(pair[0], pair[1], num_episode) for pair in value_pairs]

@@ -15,6 +15,7 @@ from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPercep
 from deepgroebner.new_networks import TransformerPMLP_Score_Q, TransformerPMLP_DVal, TransformerPMLP_MHA_Q_Scorer
 from deepgroebner.wrapped import CLeadMonomialsEnv
 
+from deepgroebner.environments import VectorEnv, AlphabeticalEnv
 
 def make_parser():
     """Return the command line argument parser for this script."""
@@ -181,7 +182,11 @@ def make_parser():
 
 def make_env(args):
     """Return the training environment for this run."""
-    if args.environment in ['CartPole-v0', 'CartPole-v1', 'LunarLander-v2']:
+    if args.environment == 'VectorEnv':
+        env = VectorEnv()
+    elif args.environment == 'AlphabeticalEnv':
+        env = AlphabeticalEnv()
+    elif args.environment in ['CartPole-v0', 'CartPole-v1', 'LunarLander-v2']:
         env = gym.make(args.environment)
     elif args.use_cython:
         env = CLeadMonomialsEnv(args.distribution, elimination=args.elimination, rewards=args.rewards, k=args.k)
