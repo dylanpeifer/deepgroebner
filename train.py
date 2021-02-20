@@ -25,7 +25,7 @@ def make_parser():
     env = parser.add_argument_group('environment', 'environment type')
     env.add_argument('--environment',
                      choices=['RandomBinomialIdeal', 'RandomIdeal',
-                              'CartPole-v0', 'CartPole-v1', 'LunarLander-v2'],
+                              'CartPole-v0', 'CartPole-v1', 'LunarLander-v2', 'VectorEnv', 'AlphabeticalEnv'],
                      default='RandomBinomialIdeal',
                      help='training environment')
     env.add_argument('--env_seed',
