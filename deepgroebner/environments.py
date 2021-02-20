@@ -82,7 +82,7 @@ class AlphabeticalEnv():
         done
         info
         """
-        reward = -1
+        reward = -10
         done = False
         if action == self.correct_sequence[self.index]:
             self.predicted_seq.append(self.data[list(self.state[action]).index(1)][1])
@@ -91,6 +91,7 @@ class AlphabeticalEnv():
             self.index += 1
             if self.index == self.sample_size:
                 done = True
+            reward = -1
         return self.state, reward, done, {}
 
     def seed(self, seed = None):
@@ -124,7 +125,7 @@ class VectorEnv():
         self.state = mat
 
     def step(self, action):
-        reward = -1
+        reward = -10
         done = False
         if action == self.correct_sequence[self.index]:
             self.picked_sequence.append(self.state[action])
@@ -133,6 +134,7 @@ class VectorEnv():
             self.index += 1
             if self.index == len(self.correct_sequence):
                 done = True
+            reward = -1
         return self.state, reward, done, {}
 
     def reset(self):
