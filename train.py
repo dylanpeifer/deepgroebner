@@ -223,6 +223,10 @@ def make_policy_network(args):
         else:
             pass
         batch = np.zeros((1, 10, 2 * args.k * int(args.distribution.split('-')[0])), dtype=np.int32)
+    if args.environment == 'VectorEnv':
+        batch = np.zeros((1, 10, 64), dtype=np.int32)
+    elif args.environment == 'AlphabeticalEnv':
+        pass
     policy_network(batch)  # build network
     if args.policy_weights != "":
         policy_network.load_weights(args.policy_weights)
