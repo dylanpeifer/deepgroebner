@@ -70,7 +70,7 @@ class SelfAttentionLayer_Score_Q(tf.keras.layers.Layer):
         output = self.dense(X)
         score = self.scorer(Y)
 
-        return output, score[0]+1
+        return output, score
 
     def get_qval(self, batch_size):
         return self.qval_learner(tf.ones([batch_size, 1, 1]))
@@ -197,7 +197,7 @@ class TransformerPMLP_Score_Q(tf.keras.Model):
         X = self.embedding(batch)
         X, score = self.attn(X)
         X = self.deciding(X)
-        return X, score
+        return X, tf.squeeze(score, axis = -1)
 
 class SelfAttentionLayer_DVal(SelfAttentionLayer):
     """A multi head self attention layer.

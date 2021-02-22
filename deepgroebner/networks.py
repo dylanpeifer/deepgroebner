@@ -611,16 +611,7 @@ class TransformerPMLP_Score_MHA(TransformerPMLP):
             X = layer(X)
         Y = self.score(X)
         X = self.deciding(X)
-        return X, (Y+1)
-
-class TransformerLayer_Learn_Q(TransformerPMLP):
-    
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.Q_val = tf.keras
-
-    def call(self, batch):
-        pass
+        return X, Y
 
 class PointerNetwork(tf.keras.Model):
     """Recurrent embedding followed by pointer."""
