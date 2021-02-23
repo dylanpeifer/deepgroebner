@@ -202,7 +202,7 @@ class SelfAttentionLayer(tf.keras.layers.Layer):
 
     """
 
-    def __init__(self, dim, n_heads=1):
+    def __init__(self, dim, softmax = True, n_heads=1):
         super(SelfAttentionLayer, self).__init__()
         assert dim % n_heads == 0, "number of heads must divide dimension"
         self.dim = dim
@@ -212,6 +212,10 @@ class SelfAttentionLayer(tf.keras.layers.Layer):
         self.Wk = tf.keras.layers.Dense(dim)
         self.Wv = tf.keras.layers.Dense(dim)
         self.dense = tf.keras.layers.Dense(dim)
+        if softmax:
+            self.attention_function = tf.nn.softmax
+        else:
+            self.attention_function = tf.nn.sigmoid
         self.supports_masking = True
 
         self.Q_val = tf.keras.layers.Dense(32)
@@ -276,7 +280,7 @@ class SelfAttentionLayer(tf.keras.layers.Layer):
         attention_logits = QK / tf.math.sqrt(d)
         if mask is not None:
             attention_logits += tf.cast(~mask, tf.float32) * -1e9
-        attention_weights = tf.nn.softmax(attention_logits)
+        attention_weights = self.attention_function(attention_logits)
         output = tf.matmul(attention_weights, V)
         return output, attention_weights
 
@@ -297,9 +301,9 @@ class TransformerLayer(tf.keras.layers.Layer):
 
     """
 
-    def __init__(self, dim, hidden_dim, n_heads=1, dropout=0.1):
+    def __init__(self, dim, hidden_dim, softmax = True, n_heads=1, dropout=0.1):
         super(TransformerLayer, self).__init__()
-        self.attention = SelfAttentionLayer(dim, n_heads=n_heads)
+        self.attention = SelfAttentionLayer(dim, softmax=softmax,n_heads=n_heads)
         self.dense1 = tf.keras.layers.Dense(hidden_dim, activation='relu')
         self.dense2 = tf.keras.layers.Dense(dim)
         self.dropout1 = tf.keras.layers.Dropout(dropout)
@@ -565,12 +569,12 @@ class TransformerPMLP(tf.keras.Model):
 
     """
 
-    def __init__(self, dim, hidden_dim, num_layers = 1, n_heads = 4, activation='relu', final_activation='log_softmax'):
+    def __init__(self, dim, hidden_dim, softmax = True, num_layers = 1, n_heads = 4, activation='relu', final_activation='log_softmax'):
         super(TransformerPMLP, self).__init__()
         self.embedding = ParallelEmbeddingLayer(dim, [], final_activation=activation)
         self.attn = []
         for _ in range(num_layers):
-            self.attn.append(TransformerLayer(dim, hidden_dim, n_heads=n_heads))
+            self.attn.append(TransformerLayer(dim, hidden_dim, softmax=softmax, n_heads=n_heads))
         self.deciding = ParallelDecidingLayer([], final_activation=final_activation)
 
     def call(self, batch):

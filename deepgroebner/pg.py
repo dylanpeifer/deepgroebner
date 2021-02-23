@@ -372,14 +372,15 @@ class Agent:
                  policy_network, policy_lr=1e-4, policy_updates=1,
                  value_network=None, value_lr=1e-3, value_updates=25,
                  gam=0.99, lam=0.97, normalize_advantages=True, eps=0.2,
-                 kld_limit=0.01, score = True, score_weight = 1e-3):
+                 kld_limit=0.01, pv_function = False, score_weight = 1e-3):
         self.policy_model = policy_network
         self.policy_loss = NotImplementedError
         self.policy_optimizer = tf.keras.optimizers.Adam(lr=policy_lr)
         self.policy_updates = policy_updates
 
-        self.score = score #Value model in there 
-        self.score_loss = tf.keras.losses.MSE if score else NotImplementedError
+        self.score = pv_function #Value model in there 
+        assert self.score == False
+        self.score_loss = tf.keras.losses.MSE if pv_function else NotImplementedError
         self.score_loss_weight = score_weight
 
         self.value_model = value_network
@@ -572,18 +573,18 @@ class Agent:
         done = False
         episode_length = 0
         total_reward = 0
-        score = 0
+        state_val = 0
         while not done:
             if state.dtype == np.float64:
                 state = state.astype(np.float32)
             
             if self.score:
-                action, logprob, score = self.value_act(state, return_logprob=True)
+                action, logprob, state_val = self.value_act(state, return_logprob=True)
             else:
                 action, logprob = self.act(state, return_logprob = True)
 
             if self.score and self.value_model is None: 
-                value = score
+                value = state_val
             elif self.value_model is None:
                 value = 0
             elif self.value_model == 'env':
@@ -594,7 +595,7 @@ class Agent:
             next_state, reward, done, _ = env.step(action.numpy())
 
             if buffer is not None:
-                buffer.store(state, action, reward, logprob, value, score)
+                buffer.store(state, action, reward, logprob, value, state_val)
 
             episode_length += 1
             total_reward += reward
@@ -876,7 +877,7 @@ class Agent:
         history = {'loss': []}
         for epoch in range(epochs):
             loss, batches = 0, 0
-            for states, _, _, _, values in dataset:
+            for states, _, _, _, values,_ in dataset:
                 batch_loss = self._fit_value_model_step(states, values)
                 loss += batch_loss
                 batches += 1

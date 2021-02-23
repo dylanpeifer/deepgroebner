@@ -98,8 +98,8 @@ def make_parser():
                         type=str,
                         default="",
                         help='filename for initial policy weights')
-    policy.add_argument('--scorer',
-                        type = bool,
+    policy.add_argument('--score',
+                        type = lambda x: str(x).lower() == 'true',
                         default = True,
                         help = 'have multi objective training')
     policy.add_argument('--score_weight',
@@ -265,7 +265,7 @@ def make_agent(args):
     agent_fn = PGAgent if args.algorithm == 'pg' else PPOAgent
     agent = agent_fn(policy_network=policy_network, policy_lr=args.policy_lr, policy_updates=args.policy_updates,
                      value_network=value_network, value_lr=args.value_lr, value_updates=args.value_updates,
-                     gam=args.gam, lam=args.lam, kld_limit=args.policy_kld_limit)
+                     gam=args.gam, lam=args.lam, kld_limit=args.policy_kld_limit, pv_function=args.score)
     return agent
 
 
