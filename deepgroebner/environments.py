@@ -11,7 +11,7 @@ def get_data(filename):
     vocab = []
     with open(filename, 'r+', encoding='utf-8') as data:
         line = data.readline()
-        while line and len(vocab) < 1000:
+        while line and len(vocab) < 5000:
             line_data = line.split('\t')
             summary = line_data[6]
             words = word_tokenize(summary.strip('\n'))
