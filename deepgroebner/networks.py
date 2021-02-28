@@ -797,3 +797,49 @@ class AgentBaseline:
 
     def load_weights(self, filename):
         pass
+
+
+class RecurrentValueModel(tf.keras.Model):
+
+    def __init__(self, units):
+        super(RecurrentValueModel, self).__init__()
+        self.embedding = ParallelEmbeddingLayer(units, [])
+        self.rnn = tf.keras.layers.LSTM(units)
+        self.dense = tf.keras.layers.Dense(1, activation='linear')
+
+    def call(self, batch):
+        return self.dense(self.rnn(self.embedding(batch)))
+
+
+class GlobalSumPooling1D(tf.keras.layers.Layer):
+
+    def __init__(self):
+        super(GlobalSumPooling1D, self).__init__()
+
+    def call(self, batch, mask=None):
+        if mask is not None:
+            batch = batch * tf.cast(tf.expand_dims(mask, -1), tf.float32)
+        return tf.reduce_sum(batch, axis=-2)
+
+
+class PoolingValueModel(tf.keras.Model):
+
+    def __init__(self, hidden_layers1, hidden_layers2, method='max'):
+        super(PoolingValueModel, self).__init__()
+        self.embedding = ParallelEmbeddingLayer(hidden_layers1[-1], hidden_layers1[:-1])
+        if method == 'max':
+            self.pooling = tf.keras.layers.GlobalMaxPooling1D()
+        elif method == 'mean':
+            self.pooling = tf.keras.layers.GlobalAveragePooling1D()
+        elif method == 'sum':
+            self.pooling = GlobalSumPooling1D()
+        else:
+            raise ValueError('invalid method')
+        self.hidden_layers = [tf.keras.layers.Dense(u, activation='relu') for u in hidden_layers2]
+        self.final_layer = tf.keras.layers.Dense(1, activation='linear')
+
+    def call(self, batch):
+        X = self.pooling(self.embedding(batch))
+        for layer in self.hidden_layers:
+            X = layer(X)
+        return self.final_layer(X)
