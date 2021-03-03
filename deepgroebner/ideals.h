@@ -89,6 +89,8 @@ public:
 
   virtual std::vector<Polynomial> next() = 0;
 
+  virtual ~IdealGenerator() {};
+
   virtual void seed(int seed) {}
 
   virtual int nvars() const = 0;
