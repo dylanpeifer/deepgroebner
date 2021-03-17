@@ -27,10 +27,10 @@ class SelfAttentionLayer_Score_Q(tf.keras.layers.Layer):
         self.Wk = tf.keras.layers.Dense(dim)
         self.Wv = tf.keras.layers.Dense(dim)
         self.dense = tf.keras.layers.Dense(dim)
-        if softmax:
-            self.attention_function= tf.nn.softmax
-        else:
-            self.attention_function = tf.keras.activations.sigmoid
+        self.attention_function=tf.nn.softmax
+        if not softmax:
+            self.score_attention = tf.keras.activations.sigmoid
+        self.softmax = softmax
         self.supports_masking = True
 
         self.qval_learner = tf.keras.layers.Dense(dim)
@@ -64,8 +64,11 @@ class SelfAttentionLayer_Score_Q(tf.keras.layers.Layer):
 
         mask = mask[:, tf.newaxis, tf.newaxis, :]
 
-        X = self.finish_attn(Q,K,V,batch_size,mask=mask)
-        Y = self.finish_attn(Q_val,K,V,batch_size,mask=mask)
+        X = self.finish_attn(Q,K,V,batch_size,self.attention_function,mask=mask)
+        if self.softmax:
+            Y = self.finish_attn(Q_val,K,V,batch_size,self.attention_function,mask=mask)
+        else:
+            Y = self.finish_attn(Q_val,K,V,batch_size,self.score_attention, mask = mask)
 
         output = self.dense(X)
         score = self.scorer(Y)
@@ -75,8 +78,8 @@ class SelfAttentionLayer_Score_Q(tf.keras.layers.Layer):
     def get_qval(self, batch_size):
         return self.qval_learner(tf.ones([batch_size, 1, 1]))
     
-    def finish_attn(self, Q, K, V, batch_size, mask = None):
-        X, attn_weights = self.scaled_dot_product_attention(Q, K, V, mask=mask)
+    def finish_attn(self, Q, K, V, batch_size, attention_function, mask = None):
+        X, attn_weights = self.scaled_dot_product_attention(Q, K, V, attention_function, mask=mask)
         X = tf.transpose(X, perm=[0, 2, 1, 3])
         X = tf.reshape(X, (batch_size, -1, self.dim))
         return X
@@ -86,7 +89,7 @@ class SelfAttentionLayer_Score_Q(tf.keras.layers.Layer):
         X = tf.reshape(batch, (batch_size, -1, self.n_heads, self.depth))
         return tf.transpose(X, perm=[0, 2, 1, 3])
 
-    def scaled_dot_product_attention(self, Q, K, V, mask=None):
+    def scaled_dot_product_attention(self, Q, K, V, attention_function, mask=None):
         """Return calculated vectors and attention weights.
 
         Parameters
@@ -113,7 +116,7 @@ class SelfAttentionLayer_Score_Q(tf.keras.layers.Layer):
         attention_logits = QK / tf.math.sqrt(d)
         if mask is not None:
             attention_logits += tf.cast(~mask, tf.float32) * -1e9
-        attention_weights = self.attention_function(attention_logits)
+        attention_weights = attention_function(attention_logits)
         output = tf.matmul(attention_weights, V)
         return output, attention_weights
 

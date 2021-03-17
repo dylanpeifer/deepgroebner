@@ -32,6 +32,10 @@ def make_parser():
                      type=lambda x: int(x) if x.lower() != 'none' else None,
                      default=None,
                      help='seed for the environment')
+    env.add_argument('--alpha_dataset_size',
+                    type=int,
+                    default=1000,
+                    help='If using the AlphabetEnvironment then set dataset size')
 
     ideal = parser.add_argument_group('ideals', 'ideal distribution and environment options')
     ideal.add_argument('--distribution',
@@ -226,7 +230,7 @@ def make_policy_network(args):
     if args.environment == 'VectorEnv':
         batch = np.zeros((1, 10, 64), dtype=np.int32)
     elif args.environment == 'AlphabeticalEnv':
-        batch = np.zeros((1, 10, 5030), dtype=np.int32)
+        batch = np.zeros((1, 10, args.alpha_dataset_size), dtype=np.int32)
     policy_network(batch)  # build network
     if args.policy_weights != "":
         policy_network.load_weights(args.policy_weights)

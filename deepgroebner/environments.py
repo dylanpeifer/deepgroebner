@@ -7,11 +7,11 @@ from nltk.tokenize import word_tokenize
 
 FILENAME = '/Users/christianvarner/Research/deepgroebner/deepgroebner/booksummaries/booksummaries.txt'
 
-def get_data(filename):
+def get_data(filename, dataset_size = 1000):
     vocab = []
     with open(filename, 'r+', encoding='utf-8') as data:
         line = data.readline()
-        while line and len(vocab) < 5000:
+        while line and len(vocab) < dataset_size:
             line_data = line.split('\t')
             summary = line_data[6]
             words = word_tokenize(summary.strip('\n'))
@@ -19,7 +19,7 @@ def get_data(filename):
             [no_dup.append(w.lower()) for w in words if not w.lower() in no_dup and w.isalpha()]
             vocab += [w for w in no_dup if not w in vocab]
             line = data.readline()
-    return list(enumerate(sorted(vocab)))
+    return list(enumerate(sorted(vocab)))[0:dataset_size]
 
 def save_data(loc, vocab):
     with open(loc, 'w+') as f:
@@ -34,8 +34,8 @@ def get_saved_data(loc):
     return vocab
 
 class AlphabeticalEnv():
-    def __init__(self, number_of_words = 10):
-        self.data = get_data(filename = FILENAME)
+    def __init__(self, number_of_words = 10, dataset_size = 1000):
+        self.data = get_data(filename = FILENAME, dataset_size = dataset_size)
         self.sample_size = number_of_words
         self.correct_sequence = []
         self.index = 0
@@ -147,7 +147,7 @@ class VectorEnv():
     def seed(self, seed = None):
         pass
 
-def run_episode(env):
+def run_episode_test(env):
     _ = env.reset()
 
     gold_standard = env.correct
@@ -176,10 +176,12 @@ def run_episode(env):
             raise RuntimeError('One of the predicted element was not equal to the corresponding correct element')
     print("Done")
 
+def run_episode_agent():
+    pass
 
 def main():
     env = AlphabeticalEnv(number_of_words=10)
-    run_episode(env)
+    run_episode_test(env)
 
 if __name__ == '__main__':
     main()

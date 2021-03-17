@@ -379,7 +379,6 @@ class Agent:
         self.policy_updates = policy_updates
 
         self.score = pv_function #Value model in there 
-        assert self.score == False
         self.score_loss = tf.keras.losses.MSE if pv_function else NotImplementedError
         self.score_loss_weight = score_weight
 
@@ -490,7 +489,8 @@ class Agent:
                    'delta_policy_loss': np.zeros(epochs),
                    'policy_ent': np.zeros(epochs),
                    'policy_kld': np.zeros(epochs),
-                   'policy_score':np.zeros(epochs)}
+                   'policy_score':np.zeros(epochs),
+                   'mean_mse':np.zeros(epochs)}
 
         for i in range(epochs):
             self.buffer.clear()
@@ -503,6 +503,7 @@ class Agent:
 
             if not self.score:
                 value_history = self._fit_value_model(dataset, epochs=self.value_updates)
+                history['mean_mse'][i] = np.mean(value_history['loss'])
 
             history['mean_returns'][i] = np.mean(return_history['returns'])
             history['min_returns'][i] = np.min(return_history['returns'])
@@ -531,6 +532,11 @@ class Agent:
                     tf.summary.scalar('min_ep_lens', history['min_ep_lens'][i], step=i)
                     tf.summary.scalar('max_ep_lens', history['max_ep_lens'][i], step=i)
                     tf.summary.scalar('std_ep_lens', history['std_ep_lens'][i], step=i)
+
+                    if (not self.value_model is None) and not self.score: # If we aren't using a combo value-policy model and the 'env'
+                        tf.summary.scalar('mean_mse', history['mean_mse'][i], step = i)
+                        tf.summary.histogram('mse_distribution', value_history['loss'], step=i)
+
                     tf.summary.histogram('returns', return_history['returns'], step=i)
                     tf.summary.histogram('lengths', return_history['lengths'], step=i)
 
@@ -847,7 +853,7 @@ class Agent:
         if not self.score_loss is NotImplementedError:
             with tf.GradientTape() as tape:
                 _, Y = self.policy_model(states)
-                loss_score = self.score_loss(tf.squeeze(Y, axis = 1), -value)
+                loss_score = tf.reduce_mean(self.score_loss(tf.squeeze(Y, axis = 1), -value)) # Negative sign does anything?
 
             varis = self.policy_model.trainable_variables
             grads_score = tape.gradient(loss_score, varis)
