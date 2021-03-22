@@ -99,7 +99,7 @@ class SelfAttentionLayer(tf.keras.layers.Layer):
         attention_logits = QK / tf.math.sqrt(d)
         if mask is not None:
             attention_logits += tf.cast(~mask, tf.float32) * -1e9
-        attention_weights = self.attention_function(attention_logits)
+        attention_weights = tf.math.add(self.attention_function(attention_logits), tf.constant(1, dtype=tf.float32))
         output = tf.matmul(attention_weights, V)
         return output, attention_weights
 
@@ -112,11 +112,11 @@ class Value_Function(tf.keras.layers.Layer):
         super(Value_Function, self).__init__()
         self.value_function = tf.keras.Sequential()
         for layer in hidden_layers:
-            self.value_function.add(tf.keras.layers.Dense(layer, activation='selu'))
+            self.value_function.add(tf.keras.layers.Dense(layer, activation='relu'))
         self.value_function.add(tf.keras.layers.Dense(1, activation='relu'))
 
     def call(self, batch):
-        return self.value_function(batch)
+        return tf.math.negative(self.value_function(batch))
 
 class TransformerValueModel(tf.keras.models.Model):
     """

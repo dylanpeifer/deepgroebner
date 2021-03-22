@@ -10,20 +10,8 @@ from deepgroebner.wrapped import CLeadMonomialsEnv
 from deepgroebner.environments import VectorEnv, AlphabeticalEnv
 from deepgroebner.transformer_value_network import TransformerValueModel
 
-env = AlphabeticalEnv()
-model = ParallelMultilayerPerceptron([128])
-value_model = TransformerValueModel([128, 64, 32], 128, softmax = False)
-batch = np.zeros((1, 10, 1000), dtype=np.int32)
-model(batch)
-value_model(batch)
 
-model.load_weights('/Users/christianvarner/Research/deepgroebner/data/runs/pmlp_sig_tran/policy-500.h5')
-value_model.load_weights('/Users/christianvarner/Research/deepgroebner/data/runs/pmlp_sig_tran/value-500.h5')
-
-agent = PPOAgent(model, policy_updates=10, value_network=value_model, pv_function=False)
-agent.train(env, epochs = 500, episodes = 100, verbose=2, logdir = 'data/runs/pmlp_sig_val_function', parallel=False, max_episode_length=500)
-
-def run_episodes(env, agent, value_model, num_episodes = 10000, max_cut_off = 500):
+def run_episodes(env, agent, value_model, num_episodes = 10, max_cut_off = 500):
     p_values = []
     a_values = []
     for _ in range(num_episodes):
@@ -39,8 +27,13 @@ def run_episode(env, agent, value_model, max_cut_off = 500):
     predicted_values = []
     rewards = []
     while not done and step < max_cut_off:
-        action = agent(state)
-        predicted_values.append(value_model(state))
+        if state.dtype == np.float64:
+                state = state.astype(np.float32)
+
+        logpi = agent(state[tf.newaxis])
+        action = tf.random.categorical(logpi, 1)[0, 0]
+
+        predicted_values.append(float(value_model(state[tf.newaxis])[0][0]))
         next_state, reward, done, _ = env.step(action)
         rewards.append(reward)
         state = next_state
@@ -67,3 +60,39 @@ def save_data(predict, actual, filename):
         for trajectory in list(zip(predict, actual)):
             csvWriter.writerow(trajectory[0]) # predicted row
             csvWriter.writerow(trajectory[1]) # actual row
+
+# env = AlphabeticalEnv()
+# policy_path = '/Users/christianvarner/Research/deepgroebner/data/runs/pmlp_sig_val_function/policy-500.h5'
+# value_path = '/Users/christianvarner/Research/deepgroebner/data/runs/pmlp_sig_val_function/value-500.h5'
+
+# model = ParallelMultilayerPerceptron([128])
+# value_model = TransformerValueModel([128, 64, 32], 128, softmax = False)
+# batch = np.zeros((1, 10, 1000), dtype=np.int32)
+# model(batch)
+# value_model(batch)
+
+# model.load_weights(policy_path)
+# value_model.load_weights(value_path)
+
+# predicted, actual = run_episodes(env, model, value_model)
+# save_data(predicted, actual, 'value_model_data.csv')
+
+# exit()
+
+env = AlphabeticalEnv()
+model = ParallelMultilayerPerceptron([128])
+value_model = TransformerValueModel([128, 64, 32], 128, softmax = False)
+
+# batch = np.zeros((1, 10, 1000), dtype=np.int32)
+# model(batch)
+# value_model(batch)
+
+# policy_path = '/Users/christianvarner/Research/deepgroebner/data/runs/pmlp_sig_val_function_v4/policy-500.h5'
+# value_path = '/Users/christianvarner/Research/deepgroebner/data/runs/pmlp_sig_val_function_v4/value-500.h5'
+
+# model.load_weights(policy_path)
+# value_model.load_weights(value_path)
+
+agent = PPOAgent(model, policy_updates=10, value_network=value_model, pv_function=False)
+#logdir = 'data/runs/pmlp_sig_val_function_v4.5'
+agent.train(env, epochs = 500, episodes = 100, verbose=2, save_freq=25, logdir = 'data/runs/pmlp_sig_val_function_v6', parallel=False, max_episode_length=500)
