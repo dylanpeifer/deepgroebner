@@ -457,6 +457,7 @@ class PointerDecidingLayer(tf.keras.layers.Layer):
         self.softmax = tf.nn.log_softmax if prob == 'log' else tf.nn.softmax
         self.dot_prod_attention = dot_product_attention
         self.input_size = input_dim
+        self.start_token = tf.ones([1, 1, self.input_size])
         if not dot_product_attention:
             self.encoder_weight = tf.keras.layers.Dense(embed_dim)
             self.decode_weight = tf.keras.layers.Dense(embed_dim)
@@ -472,7 +473,7 @@ class PointerDecidingLayer(tf.keras.layers.Layer):
                 size: (batch, seq_len, input_dim)
             initial_states: hidden and cell states from the encoder block
        '''
-        batch_size = encoder_output.shape[0]
+        batch_size = tf.shape(encoder_output)[0]
         start_token = self.initialize_start_token(batch_size)
         lstm_decoder_output,*state = self.decoder_layer(start_token, initial_state=initial_states) #(batch, 1, input_dim)
         if self.dot_prod_attention:
@@ -492,10 +493,16 @@ class PointerDecidingLayer(tf.keras.layers.Layer):
         Params:
             batch_size: size of batch
         '''
-        np.random.seed(42)
-        start_token = tf.convert_to_tensor(np.random.random([batch_size,1,self.input_size]).astype(np.float32))
-        np.random.seed()
-        return start_token
+        return tf.tile(self.start_token, [batch_size, 1, 1])
+    
+    
+        #np.random.seed(42)
+        #tf.random.set_seed(42)
+        #start_token = tf.random.uniform([batch_size,1,self.input_size])
+        #start_token = tf.convert_to_tensor(np.random.random([batch_size,1,self.input_size]).astype(np.float32))
+        #np.random.seed()
+        #tf.random.set_seed()
+        #return start_token
 
 
 class ParallelMultilayerPerceptron(tf.keras.Model):
