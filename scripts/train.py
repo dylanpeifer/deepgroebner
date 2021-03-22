@@ -11,7 +11,7 @@ import tensorflow as tf
 
 from deepgroebner.buchberger import LeadMonomialsEnv, BuchbergerAgent
 from deepgroebner.pg import PGAgent, PPOAgent
-from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, AttentionPMLP, TransformerPMLP, PairsLeftBaseline, AgentBaseline
+from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, AttentionPMLP, TransformerPMLP, PairsLeftBaseline, AgentBaseline, RecurrentValueModel, PoolingValueModel
 from deepgroebner.wrapped import CLeadMonomialsEnv
 
 
@@ -111,7 +111,7 @@ def make_parser():
 
     value = parser.add_argument_group('value model')
     value.add_argument('--value_model',
-                       choices=['none', 'mlp', 'pairsleft', 'degree', 'sample'],
+                       choices=['none', 'mlp', 'pairsleft', 'degree', 'sample', 'rnn', 'pool'],
                        default='none',
                        help='value network type')
     value.add_argument('--value_kwargs',
@@ -234,11 +234,14 @@ def make_value_network(args):
         value_network = MultilayerPerceptron(1, final_activation='linear', **args.value_kwargs)
         batch = np.zeros((1, 4), dtype=np.float32)
         value_network(batch)  # build network
+    elif args.value_model == 'pairsleft':
+        value_network = PairsLeftBaseline(gam=args.gam)
+    elif args.value_model == 'rnn':
+        value_network = RecurrentValueModel(**args.value_kwargs)
+    elif args.value_model == 'pool':
+        value_network = PoolingValueModel(**args.value_kwargs)
     else:
-        if args.value_model == 'pairsleft':
-            value_network = PairsLeftBaseline(gam=args.gam)
-        else:
-            value_network = args.value_model
+        value_network = args.value_model
     if args.value_weights != "":
         value_network.load_weights(args.value_weights)
     return value_network
