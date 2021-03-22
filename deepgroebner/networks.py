@@ -843,3 +843,60 @@ class PoolingValueModel(tf.keras.Model):
         for layer in self.hidden_layers:
             X = layer(X)
         return self.final_layer(X)
+
+
+@tf.function
+def scaled_dot_product_attention(Q, K, V, mask=None):
+    """Return calculated vectors and attention weights.
+
+    Parameters
+    ----------
+    Q : `Tensor` of type `tf.float32' and shape (..., dq, d1)
+        Tensor of queries as rows.
+    K : `Tensor` of type `tf.float32` and shape (..., dkv, d1)
+        Tensor of keys as rows.
+    V : `Tensor` of type `tf.float32` and shape (..., dkv, d2)
+        Tensor of values as rows.
+    mask : `Tensor of type `tf.bool' and shape (..., 1, dkv)
+        The mask representing valid key/value rows.
+
+    Returns
+    -------
+    output : `Tensor` of type `tf.float32` and shape (..., dq, d2)
+        Processed batch of Q, K, V.
+    attention_weights : `Tensor` of type `tf.float32` and shape (..., dq, dkv)
+        Attention weights from intermediate step.
+
+    """
+    QK = tf.matmul(Q, K, transpose_b=True)
+    d = tf.cast(tf.shape(K)[-1], tf.float32)
+    attention_logits = QK / tf.math.sqrt(d)
+    if mask is not None:
+        attention_logits += tf.cast(~mask, tf.float32) * -1e9
+    attention_weights = tf.nn.softmax(attention_logits)
+    output = tf.matmul(attention_weights, V)
+    return output, attention_weights
+
+
+class AttentionPoolingLayer(tf.keras.layers.Layer):
+    
+    def __init__(self, dim):
+        super(AttentionPoolingLayer, self).__init__()
+        self.dim = dim
+        self.Wk = tf.keras.layers.Dense(dim)
+        self.Wv = tf.keras.layers.Dense(dim)
+        self.dense = tf.keras.layers.Dense(1)
+    
+    def build(self, batch_input_shape):
+        self.Q = self.add_weight(name='query',
+                                 shape=[1, self.dim],
+                                 initializer='glorot_normal')
+        super(AttentionPoolingLayer, self).build(batch_input_shape)
+
+    def call(self, batch, mask=None):
+        K = self.Wk(batch)
+        V = self.Wv(batch)
+        if mask is not None:
+            mask = mask[:, tf.newaxis, tf.newaxis, :]
+        X, attn_weights = scaled_dot_product_attention(self.Q, K, V, mask=mask)
+        return tf.squeeze(self.dense(X), axis=-1)
