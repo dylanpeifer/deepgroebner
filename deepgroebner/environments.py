@@ -82,7 +82,7 @@ class AlphabeticalEnv():
         done
         info
         """
-        reward = -10
+        reward = -1
         done = False
         if action == self.correct_sequence[self.index]:
             self.predicted_seq.append(self.data[list(self.state[action]).index(1)][1])
@@ -107,7 +107,7 @@ class VectorEnv():
         self.index = 0
 
         # Debugging lists
-        self.picked_sequence = []
+        self.predicted_seq = []
         self.correct = []
 
     def set_correct_sequence(self):
@@ -128,7 +128,7 @@ class VectorEnv():
         reward = -10
         done = False
         if action == self.correct_sequence[self.index]:
-            self.picked_sequence.append(self.state[action])
+            self.predicted_seq.append(self.state[action])
             self.state = np.delete(self.state, action, 0)
             self.update_correct_sequence(action)
             self.index += 1
@@ -154,15 +154,17 @@ def run_episode_test(env):
     sorted_gs = []
     if isinstance(env, AlphabeticalEnv):
         sorted_gs = sorted(gold_standard) # sort the correct sequence should result in the same sequence
+        for gs, sgs in list(zip(gold_standard, sorted_gs)):
+            if gs != sgs:
+                raise RuntimeError("Correct sequence was not actually correct")
     elif isinstance(env, VectorEnv):
-        norms = list(np.linalg.norm(env.original_state, ord = env.norm, axis = 1))
+        norms = list(np.linalg.norm(env.state, ord = env.norm, axis = 1))
         sorted_norms = sorted(list(enumerate(norms)), key=lambda x:x[1])
         correct_sequence = [x[0] for x in sorted_norms]
-        sorted_gs = [env.original_state[i] for i in correct_sequence]      
-
-    for gs, sgs in list(zip(gold_standard, sorted_gs)):
-        if gs != sgs:
-            raise RuntimeError("Correct sequence was not actually correct")
+        sorted_gs = [env.state[i] for i in correct_sequence]   
+        for gs, sgs in list(zip(gold_standard, sorted_gs)):
+            if np.sum(gs == sgs) == env.set_size:
+                raise RuntimeError("Correct sequence was not actually correct")   
 
     index = 0
     done = False
@@ -170,17 +172,21 @@ def run_episode_test(env):
     while not done:
         _, _, done, _ = env.step(action[index])
         index += 1
-        
-    for p, c in list(zip(env.predicted_seq, env.correct)):
-        if p != c:
-            raise RuntimeError('One of the predicted element was not equal to the corresponding correct element')
+    if isinstance(env, AlphabeticalEnv):
+        for p, c in list(zip(env.predicted_seq, env.correct)):
+            if p != c:
+                raise RuntimeError('One of the predicted element was not equal to the corresponding correct element')
+    elif isinstance(env, VectorEnv):
+        for p, c in list(zip(env.predicted_seq, env.correct)):
+            if np.sum(p != c) == env.set_size:
+                raise RuntimeError('One of the predicted element was not equal to the corresponding correct element')
     print("Done")
 
 def run_episode_agent():
     pass
 
 def main():
-    env = AlphabeticalEnv(number_of_words=10)
+    env = VectorEnv(vector_length=20, norm = 1)
     run_episode_test(env)
 
 if __name__ == '__main__':
