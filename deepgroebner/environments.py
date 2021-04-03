@@ -3,54 +3,20 @@ import random
 import csv
 
 import numpy as np
-from nltk.tokenize import word_tokenize
-
-FILENAME = '/Users/christianvarner/Research/deepgroebner/deepgroebner/booksummaries/booksummaries.txt'
-
-def get_data(filename, dataset_size = 1000):
-    vocab = []
-    with open(filename, 'r+', encoding='utf-8') as data:
-        line = data.readline()
-        while line and len(vocab) < dataset_size:
-            line_data = line.split('\t')
-            summary = line_data[6]
-            words = word_tokenize(summary.strip('\n'))
-            no_dup = []
-            [no_dup.append(w.lower()) for w in words if not w.lower() in no_dup and w.isalpha()]
-            vocab += [w for w in no_dup if not w in vocab]
-            line = data.readline()
-    return list(enumerate(sorted(vocab)))[0:dataset_size]
-
-def save_data(loc, vocab):
-    with open(loc, 'w+') as f:
-        csvwriter = csv.writer(f)
-        csvwriter.writerow(vocab)
-
-def get_saved_data(loc):
-    with open(loc, 'r+') as f:
-        csvreader = csv.reader(f)
-        for row in csvreader:
-            vocab = row
-    return vocab
 
 class AlphabeticalEnv():
-    def __init__(self, number_of_words = 10, dataset_size = 1000):
-        self.data = get_data(filename = FILENAME, dataset_size = dataset_size)
+    def __init__(self, number_of_words = 10, dim = 12):
+        self.dim = dim
         self.sample_size = number_of_words
         self.correct_sequence = []
         self.index = 0
         self.state = None
         self.words = []
 
-        # Debugging sequence
-        self.predicted_seq = []
-        self.correct = []
-
     def set_correct_sequence(self, sample):
         sample = list(enumerate(sample))
-        sample = sorted(sample, key = lambda x : x[1][0])
+        sample = sorted(sample, key = lambda x : x[1])
         self.correct_sequence = [w[0] for w in sample]
-        self.correct = [s[1][1] for s in sample]
 
     def get_correct_sequence(self):
         return self.correct_sequence
@@ -61,10 +27,10 @@ class AlphabeticalEnv():
                 self.correct_sequence[index] = correct_action - 1
 
     def reset(self):
-        mat = np.zeros((self.sample_size, len(self.data)))
-        sample = random.sample(self.data, self.sample_size) # sample of 10 words
+        mat = np.zeros((self.sample_size, self.dim)) # (sample_size, vector dimension)
+        sample = np.random.choice([i for i in range(self.dim)], size = self.sample_size, replace = False) # sample of 10 words
         for index, w in list(enumerate(sample)):
-            mat[index, w[0]] = 1
+            mat[index, w] = 1
         self.words = sample
         self.set_correct_sequence(sample)
         self.index = 0
@@ -85,7 +51,6 @@ class AlphabeticalEnv():
         reward = -1
         done = False
         if action == self.correct_sequence[self.index]:
-            self.predicted_seq.append(self.data[list(self.state[action]).index(1)][1])
             self.state = np.delete(self.state, action, 0)
             self.update_correct_sequence(action)
             self.index += 1
@@ -125,7 +90,7 @@ class VectorEnv():
         self.state = mat
 
     def step(self, action):
-        reward = -10
+        reward = -1
         done = False
         if action == self.correct_sequence[self.index]:
             self.predicted_seq.append(self.state[action])
@@ -152,12 +117,7 @@ def run_episode_test(env):
 
     gold_standard = env.correct
     sorted_gs = []
-    if isinstance(env, AlphabeticalEnv):
-        sorted_gs = sorted(gold_standard) # sort the correct sequence should result in the same sequence
-        for gs, sgs in list(zip(gold_standard, sorted_gs)):
-            if gs != sgs:
-                raise RuntimeError("Correct sequence was not actually correct")
-    elif isinstance(env, VectorEnv):
+    if isinstance(env, VectorEnv):
         norms = list(np.linalg.norm(env.state, ord = env.norm, axis = 1))
         sorted_norms = sorted(list(enumerate(norms)), key=lambda x:x[1])
         correct_sequence = [x[0] for x in sorted_norms]
@@ -186,8 +146,7 @@ def run_episode_agent():
     pass
 
 def main():
-    env = VectorEnv(vector_length=20, norm = 1)
-    run_episode_test(env)
+    pass
 
 if __name__ == '__main__':
     main()

@@ -32,16 +32,19 @@ class SelfAttentionLayer(tf.keras.layers.Layer):
         self.Wk = tf.keras.layers.Dense(dim)
         self.Wv = tf.keras.layers.Dense(dim)
         self.dense = tf.keras.layers.Dense(dim)
+        
+        # Initialization of value q
         self.Value_Q = self.set_q(dim)
+        
         if softmax:
             self.attention_function = tf.nn.softmax
         else:
             self.attention_function = tf.nn.sigmoid
-        self.supports_masking = True
+        self.supports_masking = False # Suspicious that it is true
 
     def set_q(self, dim):
-        temp = tf.random.uniform(shape=(1, 1, dim), dtype = tf.float32, seed = 0)
-        return tf.Variable(temp, trainable = True)
+        temp = tf.random.uniform(shape=(1, 1, dim), dtype = tf.float32)
+        return tf.Variable(temp, trainable = True, name = 'Query Vector')
    
     def call(self, batch, mask=None):
         """Return the processed batch.
@@ -99,7 +102,9 @@ class SelfAttentionLayer(tf.keras.layers.Layer):
         attention_logits = QK / tf.math.sqrt(d)
         if mask is not None:
             attention_logits += tf.cast(~mask, tf.float32) * -1e9
-        attention_weights = tf.math.add(self.attention_function(attention_logits), tf.constant(1, dtype=tf.float32))
+
+        # Question!
+        attention_weights = self.attention_function(attention_logits) # Add 1 suspicious
         output = tf.matmul(attention_weights, V)
         return output, attention_weights
 
@@ -113,10 +118,10 @@ class Value_Function(tf.keras.layers.Layer):
         self.value_function = tf.keras.Sequential()
         for layer in hidden_layers:
             self.value_function.add(tf.keras.layers.Dense(layer, activation='relu'))
-        self.value_function.add(tf.keras.layers.Dense(1, activation='relu'))
+        self.value_function.add(tf.keras.layers.Dense(1))
 
     def call(self, batch):
-        return tf.math.negative(self.value_function(batch))
+        return self.value_function(batch)
 
 class TransformerValueModel(tf.keras.models.Model):
     """
@@ -126,8 +131,8 @@ class TransformerValueModel(tf.keras.models.Model):
     def __init__(self, hidden_layers, dim, softmax, n_heads = 4):
         super(TransformerValueModel, self).__init__()
         self.embedding = ParallelEmbeddingLayer(dim, [])
-        self.value_model = Value_Function(hidden_layers)
         self.mha = SelfAttentionLayer(dim, softmax, n_heads)
+        self.value_model = Value_Function(hidden_layers)
 
     def call(self, batch):
         X = self.embedding(batch)
