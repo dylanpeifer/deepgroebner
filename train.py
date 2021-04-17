@@ -13,6 +13,7 @@ from deepgroebner.buchberger import LeadMonomialsEnv, BuchbergerAgent
 from deepgroebner.pg import PGAgent, PPOAgent
 from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, AttentionPMLP, TransformerPMLP, PairsLeftBaseline, AgentBaseline, TransformerPMLP_Score_MHA
 from deepgroebner.new_networks import TransformerPMLP_Score_Q, TransformerPMLP_DVal, TransformerPMLP_MHA_Q_Scorer
+from deepgroebner.transformer_value_network import TransformerValueModel
 from deepgroebner.wrapped import CLeadMonomialsEnv
 
 from deepgroebner.environments import VectorEnv, AlphabeticalEnv
@@ -79,7 +80,7 @@ def make_parser():
 
     policy = parser.add_argument_group('policy model')
     policy.add_argument('--policy_model',
-                        choices=['mlp', 'pmlp', 'apmlp', 'tpmlp', 'tpmlp_q_scorer', 'tpmlp_MHA_scorer', 'dval', 'qmha'],
+                        choices=['mlp', 'pmlp', 'apmlp', 'tpmlp'],
                         default='pmlp',
                         help='policy network type')
     policy.add_argument('--policy_kwargs',
@@ -113,7 +114,7 @@ def make_parser():
 
     value = parser.add_argument_group('value model')
     value.add_argument('--value_model',
-                       choices=['none', 'mlp', 'pairsleft', 'degree'],
+                       choices=['none', 'mlp', 'pairsleft', 'degree', 'tvm'],
                        default='none',
                        help='value network type')
     value.add_argument('--value_kwargs',
@@ -255,6 +256,10 @@ def make_value_network(args):
     else:
         if args.value_model == 'pairsleft':
             value_network = PairsLeftBaseline(gam=args.gam)
+        elif args.value_model == 'tvm':
+            value_network = TransformerValueModel(**args.value_kwargs)
+            batch = np.zeros((1, 10, 2 * args.k * int(args.distribution.split('-')[0])), dtype=np.int32)
+            value_network(batch)
         else:
             value_network = 'env'
     if args.value_weights != "":

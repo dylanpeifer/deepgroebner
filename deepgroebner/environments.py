@@ -48,7 +48,7 @@ class AlphabeticalEnv():
         done
         info
         """
-        reward = -1
+        reward = -10
         done = False
         if action == self.correct_sequence[self.index]:
             self.state = np.delete(self.state, action, 0)
@@ -90,7 +90,7 @@ class VectorEnv():
         self.state = mat
 
     def step(self, action):
-        reward = -1
+        reward = -10
         done = False
         if action == self.correct_sequence[self.index]:
             self.predicted_seq.append(self.state[action])

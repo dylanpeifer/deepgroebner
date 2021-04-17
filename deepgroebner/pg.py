@@ -8,7 +8,6 @@ agent.
 import numpy as np
 import multiprocessing as mp
 import tensorflow as tf
-from deepgroebner.environments import VectorEnv, AlphabeticalEnv
 
 
 PACKET_SIZE = 10 # this must divide the number of episodes, and ideally should divide (episodes)/(number of cores)
@@ -383,7 +382,7 @@ class Agent:
         self.score_loss_weight = score_weight
 
         self.value_model = value_network
-        self.value_loss = tf.keras.losses.mse
+        self.value_loss = tf.keras.losses.MAE
         self.value_optimizer = tf.keras.optimizers.Adam(lr=value_lr)
         self.value_updates = value_updates
 
@@ -409,7 +408,7 @@ class Agent:
         action = tf.random.categorical(logpi, 1)[0, 0]
 
         if return_logprob:
-            return action, logpi[:, action][0], score[0][0]
+            return action, logpi[:, action][0], score
         else:
             return action, score
 
@@ -501,7 +500,7 @@ class Agent:
             dataset = self.buffer.get(normalize_advantages=self.normalize_advantages, batch_size=batch_size)
             policy_history = self._fit_policy_model(dataset, epochs=self.policy_updates)
 
-            if not self.score:
+            if not self.value_model is None and self.value_model != 'env':
                 value_history = self._fit_value_model(dataset, epochs=self.value_updates)
                 history['mean_mse'][i] = np.mean(value_history['loss'])
 
@@ -586,16 +585,17 @@ class Agent:
             
             if self.score:
                 action, logprob, state_val = self.value_act(state, return_logprob=True)
+                state_val = float(state_val)
             else:
                 action, logprob = self.act(state, return_logprob = True)
 
-            if self.score and self.value_model is None: 
+            if self.score and self.value_model is None: # If we are doing actor critic
                 value = state_val
-            elif self.value_model is None:
+            elif self.value_model is None: # Else we have no value_model
                 value = 0
-            elif self.value_model == 'env':
+            elif self.value_model == 'env': # Else we have environment
                 value = env.value(gamma=self.gam)
-            else:
+            else: # Else we have value model
                 value = self.value(state)
 
             next_state, reward, done, _ = env.step(action.numpy())
@@ -611,123 +611,6 @@ class Agent:
         if buffer is not None:
             buffer.finish()
         return total_reward, episode_length
-
-    def run_episode_v2(self, env, max_episode_length=None, buffer=None, num_episode = None):
-        """Run an episode and return total reward and episode length.
-
-        Parameters
-        ----------
-        env : environment
-            The environment to interact with.
-        max_episode_length : int, optional
-            The maximum number of interactions before the episode ends.
-        buffer : TrajectoryBuffer object, optional
-            If included, it will store the whole rollout in the given buffer.
-
-        Returns
-        -------
-        (total_reward, episode_length) : (float, int)
-            The total nondiscounted reward obtained in this episode and the
-            episode length.
-
-        """
-        state = env.reset()
-        starting_ideal = state
-        done = False
-        episode_length = 0
-        total_reward = 0
-        diff = []
-        corr = 0.0
-        while not done:
-            if state.dtype == np.float64:
-                state = state.astype(np.float32)
-            action, logprob, score = self.act(state, return_logprob=True)
-
-            if self.value_model is None:
-                value = 0
-            elif self.value_model == 'env':
-                value = env.value(gamma=self.gam)
-            else:
-                value = self.value(state)
-
-            next_state, reward, done, _ = env.step(action.numpy())
-
-            if buffer is not None:
-                buffer.store(state, action, reward, logprob, value, score)
-
-            episode_length += 1
-            total_reward += reward
-            if max_episode_length is not None and episode_length > max_episode_length:
-                break
-            state = next_state
-        if buffer is not None:
-            buffer.finish()
-
-            diff = buffer.get_difference()
-            corr = buffer.get_correlation()
-            predicted = buffer.get_predicted_value()
-            discounted_value = buffer.get_discounted_rewards()
-            value_pairs = list(zip(predicted, discounted_value))
-            if not num_episode is None:
-                value_pairs = [(pair[0], pair[1], num_episode) for pair in value_pairs]
-
-            return total_reward, episode_length, diff, corr, value_pairs, starting_ideal
-        return total_reward, episode_length, starting_ideal
-
-    def run_episode_ideal_tracking(self, env, max_episode_length=None, buffer=None):
-        """Run an episode and return total reward and episode length.
-
-        Parameters
-        ----------
-        env : environment
-            The environment to interact with.
-        max_episode_length : int, optional
-            The maximum number of interactions before the episode ends.
-        buffer : TrajectoryBuffer object, optional
-            If included, it will store the whole rollout in the given buffer.
-
-        Returns
-        -------
-        (total_reward, episode_length) : (float, int)
-            The total nondiscounted reward obtained in this episode and the
-            episode length.
-
-        """
-        state = env.reset()
-
-        ideal = state # storing for later
-
-        done = False
-        episode_length = 0
-        total_reward = 0
-        while not done:
-            if state.dtype == np.float64:
-                state = state.astype(np.float32)
-            
-            action, logprob, score = self.act(state, return_logprob=True)
-
-            if self.score and self.value_model is None:
-                value = score
-            elif self.value_model is None:
-                value = 0
-            elif self.value_model == 'env':
-                value = env.value(gamma=self.gam)
-            else:
-                value = self.value(state)
-
-            next_state, reward, done, _ = env.step(action.numpy())
-
-            if buffer is not None:
-                buffer.store(state, action, reward, logprob, value, score)
-
-            episode_length += 1
-            total_reward += reward
-            if max_episode_length is not None and episode_length > max_episode_length:
-                break
-            state = next_state
-        if buffer is not None:
-            buffer.finish()
-        return total_reward, episode_length, ideal
 
     def _parallel_run_episode(self, env, max_episode_length, random_seed, output, packet_size):
         np.random.seed(random_seed)
@@ -823,50 +706,70 @@ class Agent:
         self.policy_optimizer.apply_gradients(zip(grads, varis))
         return loss, kld, ent
 
-    @tf.function(experimental_relax_shapes=True)
-    def _fit_pv_model_step(self, states, actions, logprobs, advantages, value, addition_estimates):
+    # @tf.function(experimental_relax_shapes=True)
+    # def _fit_pv_model_step(self, states, actions, logprobs, advantages, value, addition_estimates):
 
-        def combine_grads(grad1, grad2):
-            grads = []
-            for index, grad in enumerate(grad1):
-                grad2_val = grad2[index]
-                if grad is None:
-                    grads.append(grad2_val)
-                elif grad2_val is None:
-                    grads.append(grad)
-                else:
-                    grads.append(grad + grad2_val)
-            return grads
+    #     def combine_grads(grad1, grad2):
+    #         grads = []
+    #         for index, grad in enumerate(grad1):
+    #             grad2_val = grad2[index]
+    #             if grad is None:
+    #                 grads.append(grad2_val)
+    #             elif grad2_val is None:
+    #                 grads.append(grad)
+    #             else:
+    #                 grads.append(grad + grad2_val)
+    #         return grads
 
 
-        """Fit policy model on one batch of data."""
-        with tf.GradientTape() as tape:
-            logpis, _ = self.policy_model(states)
-            new_logprobs = tf.reduce_sum(tf.one_hot(actions, tf.shape(logpis)[1]) * logpis, axis=1)
-            loss_t = tf.reduce_mean(self.policy_loss(new_logprobs, logprobs, advantages))
-            kld = tf.reduce_mean(logprobs - new_logprobs)
-            ent = -tf.reduce_mean(new_logprobs)
+    #     """Fit policy model on one batch of data."""
+    #     with tf.GradientTape() as tape:
+    #         logpis, _ = self.policy_model(states)
+    #         new_logprobs = tf.reduce_sum(tf.one_hot(actions, tf.shape(logpis)[1]) * logpis, axis=1)
+    #         loss_t = tf.reduce_mean(self.policy_loss(new_logprobs, logprobs, advantages))
+    #         kld = tf.reduce_mean(logprobs - new_logprobs)
+    #         ent = -tf.reduce_mean(new_logprobs)
         
+    #     varis = self.policy_model.trainable_variables
+    #     grads_t = tape.gradient(loss_t, varis)
+
+    #     if not self.score_loss is NotImplementedError:
+    #         with tf.GradientTape() as tape:
+    #             _, Y = self.policy_model(states)
+    #             loss_score = tf.reduce_mean(self.score_loss(tf.squeeze(Y), value))
+
+    #         varis = self.policy_model.trainable_variables
+    #         grads_score = tape.gradient(loss_score, varis)
+            
+    #         for index, g in enumerate(grads_score):
+    #             if not g is None:
+    #                 grads_score[index] = self.score_loss_weight*g
+            
+    #         grads = combine_grads(grads_t, grads_score)
+    #         self.policy_optimizer.apply_gradients(zip(grads, varis))
+
+    #         return loss_t, loss_score, kld, ent
+    #     return loss_t, kld, ent
+
+    @tf.function(experimental_relax_shapes=True)
+    def _fit_pv_model_step(self, states, actions, logprobs, advantages, values, addition_estimates):
+        with tf.GradientTape() as tape:
+            logpis, value_est = self.policy_model(states, training = True)
+
+            # Policy loss
+            new_logprobs = tf.reduce_sum(tf.one_hot(actions, tf.shape(logpis)[1]) * logpis, axis=1)
+            ent = -tf.reduce_mean(new_logprobs)
+            policy_loss = tf.reduce_mean(self.policy_loss(new_logprobs, logprobs, advantages))
+            kld = tf.reduce_mean(logprobs - new_logprobs)
+
+            # Value loss
+            value_loss = tf.reduce_mean(self.score_loss(value_est, values))
+            loss = tf.reduce_mean(.75*policy_loss + .25*value_loss)
+
         varis = self.policy_model.trainable_variables
-        grads_t = tape.gradient(loss_t, varis)
-
-        if not self.score_loss is NotImplementedError:
-            with tf.GradientTape() as tape:
-                _, Y = self.policy_model(states)
-                loss_score = tf.reduce_mean(self.score_loss(tf.squeeze(Y, axis = 1), -value)) # Negative sign does anything?
-
-            varis = self.policy_model.trainable_variables
-            grads_score = tape.gradient(loss_score, varis)
-            
-            for index, g in enumerate(grads_score):
-                if not g is None:
-                    grads_score[index] = self.score_loss_weight*g
-            
-            grads = combine_grads(grads_t, grads_score)
-            self.policy_optimizer.apply_gradients(zip(grads, varis))
-
-            return loss_t, loss_score, kld, ent
-        return loss_t, kld, ent
+        grads = tape.gradient(loss, varis)
+        self.policy_optimizer.apply_gradients(zip(grads, varis))
+        return policy_loss, value_loss, kld, ent  
 
     def load_policy_weights(self, filename):
         """Load weights from filename into the policy model."""
@@ -894,7 +797,7 @@ class Agent:
     def _fit_value_model_step(self, states, values):
         """Fit value model on one batch of data."""
         with tf.GradientTape() as tape:
-            pred_values = self.value_model(states)
+            pred_values = tf.squeeze(self.value_model(states, training = True)) 
             loss = tf.reduce_mean(self.value_loss(pred_values, values))
         varis = self.value_model.trainable_variables
         grads = tape.gradient(loss, varis)

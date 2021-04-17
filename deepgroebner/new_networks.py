@@ -253,7 +253,7 @@ class SelfAttentionLayer_DVal(SelfAttentionLayer):
 
         Y = self.finish_attn(Q_val,K,V,batch_size,mask=mask)
         score = self.scorer(Y)
-        return score[0]+1
+        return tf.math.add(score, tf.constant(1, dtype = tf.float32))
 
     def get_qval(self, batch_size):
         return self.qval_learner(tf.ones([batch_size, 1, 1]))
