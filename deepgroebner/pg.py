@@ -532,7 +532,7 @@ class Agent:
                     tf.summary.scalar('max_ep_lens', history['max_ep_lens'][i], step=i)
                     tf.summary.scalar('std_ep_lens', history['std_ep_lens'][i], step=i)
 
-                    if (not self.value_model is None) and not self.score: # If we aren't using a combo value-policy model and the 'env'
+                    if not self.value_model is None and self.value_model != 'env': # If we aren't using a combo value-policy model and the 'env'
                         tf.summary.scalar('mean_mse', history['mean_mse'][i], step = i)
                         tf.summary.histogram('mse_distribution', value_history['loss'], step=i)
 
