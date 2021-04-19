@@ -750,7 +750,27 @@ class RecurrentValueModel(tf.keras.Model):
     def call(self, batch):
         return self.dense(self.rnn(self.embedding(batch)))
 
+class PoolingValueModel(tf.keras.Model):
 
+    def __init__(self, hidden_layers1, hidden_layers2, method='max'):
+        super(PoolingValueModel, self).__init__()
+        self.embedding = ParallelEmbeddingLayer(hidden_layers1[-1], hidden_layers1[:-1])
+        if method == 'max':
+            self.pooling = tf.keras.layers.GlobalMaxPooling1D()
+        elif method == 'mean':
+            self.pooling = tf.keras.layers.GlobalAveragePooling1D()
+        elif method == 'sum':
+            self.pooling = GlobalSumPooling1D()
+        else:
+            raise ValueError('invalid method')
+        self.hidden_layers = [tf.keras.layers.Dense(u, activation='relu') for u in hidden_layers2]
+        self.final_layer = tf.keras.layers.Dense(1, activation='linear')
+
+    def call(self, batch):
+        X = self.pooling(self.embedding(batch))
+        for layer in self.hidden_layers:
+            X = layer(X)
+        return self.final_layer(X)
 
 class PairsLeftBaseline:
     """A Buchberger value network that returns discounted pairs left."""
