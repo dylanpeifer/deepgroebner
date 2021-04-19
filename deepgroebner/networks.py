@@ -739,6 +739,17 @@ class PBPointerNet(tf.keras.Model):
         log_prob = self.pointer(X, initial_states = [hidden_state, cell_state])
         return log_prob
 
+class RecurrentValueModel(tf.keras.Model):
+
+    def __init__(self, units):
+        super(RecurrentValueModel, self).__init__()
+        self.embedding = ParallelEmbeddingLayer(units, [])
+        self.rnn = tf.keras.layers.LSTM(units)
+        self.dense = tf.keras.layers.Dense(1, activation='linear')
+
+    def call(self, batch):
+        return self.dense(self.rnn(self.embedding(batch)))
+
 
 
 class PairsLeftBaseline:
