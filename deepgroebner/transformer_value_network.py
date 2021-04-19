@@ -6,6 +6,7 @@ from deepgroebner.networks import ParallelEmbeddingLayer, ParallelDecidingLayer
 
 import numpy as np
 import tensorflow as tf
+from deepgroebner.networks import SelfAttentionLayer as sal
 
 class SelfAttentionLayer(tf.keras.layers.Layer):
 
@@ -128,14 +129,18 @@ class TransformerValueModel(tf.keras.models.Model):
     Combination of the self attention layer of a transformer and value function
     """
     
-    def __init__(self, hidden_layers, dim, softmax, n_heads = 4):
+    def __init__(self, hidden_layers, dim, softmax, n_heads = 4, num_layers = 1):
         super(TransformerValueModel, self).__init__()
         self.embedding = ParallelEmbeddingLayer(dim, [])
-        self.mha = SelfAttentionLayer(dim, softmax, n_heads)
+        self.mha = []
+        for _ in range(num_layers-1):
+            self.mha.append(sal(dim, softmax, n_heads))
+        self.mha.append(SelfAttentionLayer(dim, softmax, n_heads))
         self.value_model = Value_Function(hidden_layers)
 
     def call(self, batch):
         X = self.embedding(batch)
-        X = self.mha(X)
+        for layer in self.mha:
+            X = layer(X)
         value = self.value_model(X)
         return tf.squeeze(value, axis = -1)
