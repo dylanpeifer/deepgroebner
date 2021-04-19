@@ -8,7 +8,7 @@ import numpy as np
 import tensorflow as tf
 from deepgroebner.networks import SelfAttentionLayer as sal
 
-class SelfAttentionLayer(tf.keras.layers.Layer):
+class ValueSelfAttentionLayer(tf.keras.layers.Layer):
 
     """A multi head self attention layer.
 
@@ -24,7 +24,7 @@ class SelfAttentionLayer(tf.keras.layers.Layer):
     """
 
     def __init__(self, dim, softmax = True, n_heads=1):
-        super(SelfAttentionLayer, self).__init__()
+        super(ValueSelfAttentionLayer, self).__init__()
         assert dim % n_heads == 0, "number of heads must divide dimension"
         self.dim = dim
         self.n_heads = n_heads
@@ -135,7 +135,7 @@ class TransformerValueModel(tf.keras.models.Model):
         self.mha = []
         for _ in range(num_layers-1):
             self.mha.append(sal(dim, softmax, n_heads))
-        self.mha.append(SelfAttentionLayer(dim, softmax, n_heads))
+        self.mha.append(ValueSelfAttentionLayer(dim, softmax, n_heads))
         self.value_model = Value_Function(hidden_layers)
 
     def call(self, batch):
