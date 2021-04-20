@@ -382,7 +382,7 @@ class Agent:
         self.score_loss_weight = score_weight
 
         self.value_model = value_network
-        self.value_loss = tf.keras.losses.MAE
+        self.value_loss = tf.keras.losses.MSE #WOAH
         self.value_optimizer = tf.keras.optimizers.Adam(lr=value_lr)
         self.value_updates = value_updates
 
