@@ -2,16 +2,17 @@
 
 Applications of reinforcement learning to selection strategies in Buchberger's algorithm.
 
-This is the main code repository for the paper
+This is the main code repository for Dylan Peifer's 2021 PhD thesis at Cornell University and the paper
 
 * [Dylan Peifer, Michael Stillman, and Daniel Halpern-Leistner. Learning selection strategies in Buchberger's
 algorithm. In *Proceedings of the 37th International Conference on Machine Learning (ICML
 2020).*](https://icml.cc/virtual/2020/poster/6742) [arXiv:2005.01917](https://arxiv.org/abs/2005.01917)
 
-with some precomputed statistics and training data available at
-[10.5281/zenodo.3676043](https://doi.org/10.5281/zenodo.3676043). For the exact version of the code used to generate
-results, refer to the commit hashes in the file `experiments.txt` in the training data, and also see the
-[releases](https://github.com/dylanpeifer/deepgroebner/releases). This repository is still in active development.
+with corresponding precomputed statistics and training data available at
+[10.5281/zenodo.3676043](https://doi.org/10.5281/zenodo.3676043) and
+[10.5281/zenodo.4724144](https://doi.org/10.5281/zenodo.4724144). Refer to these archives For the exact version of the
+code used to generate results, and see also the [releases](https://github.com/dylanpeifer/deepgroebner/releases). This
+repository is still in active development.
 
 ## Requirements and Installation
 
