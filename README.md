@@ -10,7 +10,7 @@ algorithm. In *Proceedings of the 37th International Conference on Machine Learn
 
 with corresponding precomputed statistics and training data available at
 [10.5281/zenodo.3676043](https://doi.org/10.5281/zenodo.3676043) and
-[10.5281/zenodo.4724144](https://doi.org/10.5281/zenodo.4724144). Refer to these archives For the exact version of the
+[10.5281/zenodo.4724144](https://doi.org/10.5281/zenodo.4724144). Refer to these archives for the exact version of the
 code used to generate results, and see also the [releases](https://github.com/dylanpeifer/deepgroebner/releases). This
 repository is still in active development.
 
