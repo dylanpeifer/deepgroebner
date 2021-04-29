@@ -422,14 +422,14 @@ class PointerDecidingLayer(tf.keras.layers.Layer):
                 size: (batch, seq_len, input_dim)
             initial_states: hidden and cell states from the encoder block
        '''
-        batch_size = tf.shape(encoder_output)[0]
+        batch_size = int(tf.shape(encoder_output)[0])
         start_token = self.initialize_start_token(batch_size)
         lstm_decoder_output,*state = self.decoder_layer(start_token, initial_state=initial_states) #(batch, 1, input_dim)
         if self.dot_prod_attention:
             attention_scores = tf.squeeze(tf.linalg.matmul(lstm_decoder_output, encoder_output, transpose_b = True), axis = 1) + tf.cast(~mask, tf.float32) * -1e9
             return self.softmax(attention_scores)
         else:
-            pad_dim = tf.shape(encoder_output)[0]
+            pad_dim = int(tf.shape(encoder_output)[0])
             lstm_decoder_projection = self.decode_weight(lstm_decoder_output) # (batch_size, 1, embed_dim)
             encoder_project = self.encoder_weight(encoder_output) # (batch_size, padd_dim, embed_dim)
             similarity_score = self.v(self.tanh(encoder_project + tf.tile(lstm_decoder_projection, [1, pad_dim, 1])))
