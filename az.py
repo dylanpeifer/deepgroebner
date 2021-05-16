@@ -104,7 +104,7 @@ def az_ucb(c=np.sqrt(2)):
     """Return an upper confidence bound tree policy for AlphaZero tree search."""
     def policy(node):
         def value(child):
-            prob = np.exp(node.logpi[child.action])
+            prob = tf.math.exp(node.logpi[child.action])
             return child.value[child.env.turn] + c * prob * np.sqrt(node.visits)/(1 + child.visits)
         return max(node.children, key=value)
     return policy
