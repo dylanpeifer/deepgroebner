@@ -15,7 +15,7 @@ from deepgroebner.pg import PGAgent
 from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, AttentionPMLP, TransformerPMLP
 from deepgroebner.wrapped import CLeadMonomialsEnv
 
-from environments import AlphabeticalEnv
+from deepgroebner.environments import AlphabeticalEnv
 
 
 def make_parser():
