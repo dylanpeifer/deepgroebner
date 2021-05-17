@@ -4,8 +4,8 @@ import datetime
 import numpy as np
 import csv
 from deepgroebner.pg import PPOAgent, PGAgent, discount_rewards
-from deepgroebner.networks import ParallelMultilayerPerceptron, TransformerPMLP, Score, TransformerPMLP_Score_MHA
-from deepgroebner.new_networks import TransformerPMLP_Score_Q, TransformerPMLP_DVal, TransformerPMLP_MHA_Q_Scorer
+from deepgroebner.networks import ParallelMultilayerPerceptron
+from deepgroebner.dual_networks import DualTransformerPMLP
 from deepgroebner.wrapped import CLeadMonomialsEnv
 from deepgroebner.environments import VectorEnv, AlphabeticalEnv
 from deepgroebner.transformer_value_network import TransformerValueModel
@@ -80,8 +80,8 @@ def save_data(predict, actual, filename):
 # exit()
 
 env = AlphabeticalEnv()
-model = ParallelMultilayerPerceptron([128])
-value_model = TransformerValueModel([128, 64, 32], 128, softmax = False)
+model = DualTransformerPMLP(128, 128, num_layers=4)
+value_model = TransformerValueModel([],128,False)
 
 # batch = np.zeros((1, 10, 1000), dtype=np.int32)
 # model(batch)
@@ -93,6 +93,6 @@ value_model = TransformerValueModel([128, 64, 32], 128, softmax = False)
 # model.load_weights(policy_path)
 # value_model.load_weights(value_path)
 
-agent = PPOAgent(model, policy_updates=10, value_network=value_model, pv_function=False)
+agent = PPOAgent(model, value_network=value_model, policy_updates=10, pv_function=True)
 #logdir = 'data/runs/pmlp_sig_val_function_v4.5'
-agent.train(env, epochs = 500, episodes = 100, verbose=2, save_freq=25, logdir = 'data/runs/pmlp_sig_val_function_v6', parallel=False, max_episode_length=500)
+agent.train(env, epochs = 500, episodes = 10, verbose=2, save_freq=25, parallel=False, max_episode_length=20)
