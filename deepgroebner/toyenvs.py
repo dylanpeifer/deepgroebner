@@ -95,58 +95,6 @@ class DumbTicTacToeEnv():
         return copy
 
 
-def simple_test():
-    """
-    Tests basic functionality the environment - stepping,
-    checking status, resetting.
-    """
-    env = DumbTicTacToeEnv(4)
-
-#     # check first diagonal
-#     env.step((3, 3))
-#     assert not env.check_status()
-#     env.step((2, 2))
-#     env.step((2, 1))
-#     env.step((1, 1))
-#     env.step((0, 0))
-#     assert env.check_status()
-#     env.reset()
-
-#     # check row
-#     env.step((0, 1))
-#     env.step((0, 2))
-#     env.step((0, 3))
-#     assert not env.check_status()
-#     env.step((0, 0))
-#     assert env.check_status()
-#     env.reset()
-
-#     # check col
-#     env.step((1, 1))
-#     env.step((2, 1))
-#     env.step((0, 1))
-#     assert not env.check_status()
-#     env.step((3, 1))
-#     assert env.check_status()
-#     env.reset()
-
-#     # check second diagonal
-#     env.step((0, 3))
-#     env.step((1, 2))
-#     assert not env.check_status()
-#     env.step((2, 1))
-#     env.step((3, 0))
-#     assert env.check_status()
-
-
-def run_episode_test(env):
-    _ = env.reset()
-    pass
-
-
-simple_test()
-
-
 class VectorSortEnv():
     def __init__(self, dim, k=50, norm=2):
         self.state = []
@@ -204,6 +152,71 @@ class VectorSortEnv():
         copy.done = self.done
         copy.actions = self.actions.copy()
         copy.correct_sequence = sorted(
-            copy.vecs, key=lambda x: np.linalg.norm(x, 2))
+            copy.vecs, key=lambda x: np.linalg.norm(x, self.norm))
         copy.saved_actions = self.saved_actions.copy()
         return copy
+
+class AlphabeticalEnv():
+    def __init__(self, number_of_words = 10, dim = 12):
+        self.dim = dim
+        self.sample_size = number_of_words
+        self.correct_sequence = []
+        self.index = 0
+        self.state = None
+        self.words = []
+
+    def set_correct_sequence(self, sample):
+        sample = list(enumerate(sample))
+        sample = sorted(sample, key = lambda x : x[1])
+        self.correct_sequence = [w[0] for w in sample]
+
+    def get_correct_sequence(self):
+        return self.correct_sequence
+    
+    def update_correct_sequence(self, action):
+        for index, correct_action in enumerate(self.correct_sequence):
+            if correct_action > action:
+                self.correct_sequence[index] = correct_action - 1
+
+    def reset(self):
+        mat = np.zeros((self.sample_size, self.dim)) # (sample_size, vector dimension)
+        sample = np.random.choice([i for i in range(self.dim)], size = self.sample_size, replace = False) # sample of 10 words
+        for index, w in list(enumerate(sample)):
+            mat[index, w] = 1
+        self.words = sample
+        self.set_correct_sequence(sample)
+        self.index = 0
+        self.state = mat
+        return mat
+
+    def step(self, action):
+        """
+        Remove word from matrix if it is the correct minimum, else do nothing
+
+        Returns
+        -------
+        new matrix
+        reward
+        done
+        info
+        """
+        reward = -10
+        done = False
+        if action == self.correct_sequence[self.index]:
+            self.state = np.delete(self.state, action, 0)
+            self.update_correct_sequence(action)
+            self.index += 1
+            if self.index == self.sample_size:
+                done = True
+            reward = -1
+        return self.state, reward, done, {}
+
+    def seed(self, seed = None):
+        pass
+    
+    def copy(self):
+        copy = AlphabeticalEnv(self.sample_size, self.dim)
+        copy.correct_sequence = self.correct_sequence.copy() # this is correct right?
+        copy.index = self.index
+        copy.state = self.state
+        copy.words = self.words
