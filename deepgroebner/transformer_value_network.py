@@ -29,12 +29,9 @@ class ValueSelfAttentionLayer(tf.keras.layers.Layer):
         self.dim = dim
         self.n_heads = n_heads
         self.depth = dim // n_heads
-        #self.Wq = tf.keras.layers.Dense(dim)
         self.Wk = tf.keras.layers.Dense(dim)
         self.Wv = tf.keras.layers.Dense(dim)
         self.dense = tf.keras.layers.Dense(dim)
-        
-        # Initialization of value q
         self.Value_Q = self.set_q(dim)
         
         if softmax:
@@ -103,40 +100,28 @@ class ValueSelfAttentionLayer(tf.keras.layers.Layer):
         attention_logits = QK / tf.math.sqrt(d)
         if mask is not None:
             attention_logits += tf.cast(~mask, tf.float32) * -1e9
-
-        # Question!
         attention_weights = self.attention_function(attention_logits) # Add 1 suspicious
         output = tf.matmul(attention_weights, V)
         return output, attention_weights
 
-class Value_Function(tf.keras.layers.Layer):
-    """
-    Value Function to predict expected discounted rewards based on output of multi-headed-attention layer
-    """
-
-    def __init__(self, hidden_layers:list):
-        super(Value_Function, self).__init__()
-        self.value_function = tf.keras.Sequential()
-        for layer in hidden_layers:
-            self.value_function.add(tf.keras.layers.Dense(layer, activation='relu'))
-        self.value_function.add(tf.keras.layers.Dense(1))
-
-    def call(self, batch):
-        return self.value_function(batch)
 
 class TransformerValueModel(tf.keras.models.Model):
     """
     Combination of the self attention layer of a transformer and value function
     """
     
-    def __init__(self, hidden_layers, dim, softmax, n_heads = 4, num_layers = 1):
+    def __init__(self, hidden_layers:list, dim, softmax, n_heads = 4, num_layers = 1):
         super(TransformerValueModel, self).__init__()
         self.embedding = ParallelEmbeddingLayer(dim, [])
         self.mha = []
         for _ in range(num_layers-1):
             self.mha.append(sal(dim, softmax, n_heads))
         self.mha.append(ValueSelfAttentionLayer(dim, softmax, n_heads))
-        self.value_model = Value_Function(hidden_layers)
+
+        self.value_function = tf.keras.Sequential()
+        for layer in hidden_layers:
+            self.value_function.add(tf.keras.layers.Dense(layer, activation='relu'))
+        self.value_function.add(tf.keras.layers.Dense(1))
 
     def call(self, batch):
         X = self.embedding(batch)
