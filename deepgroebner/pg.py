@@ -764,7 +764,7 @@ class Agent:
 
             # Value loss
             value_loss = tf.reduce_mean(self.score_loss(value_est, values))
-            loss = tf.reduce_mean(.75*policy_loss + .25*value_loss)
+            loss = tf.reduce_mean((1-self.score_loss_weight)*policy_loss + (self.score_loss_weight)*value_loss)
 
         varis = self.policy_model.trainable_variables
         grads = tape.gradient(loss, varis)
