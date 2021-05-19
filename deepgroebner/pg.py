@@ -6,11 +6,7 @@ agent.
 """
 
 import numpy as np
-import multiprocessing as mp
 import tensorflow as tf
-
-
-PACKET_SIZE = 10 # this must divide the number of episodes, and ideally should divide (episodes)/(number of cores)
 
 
 def discount_rewards(rewards, gam):
@@ -163,7 +159,7 @@ class TrajectoryBuffer:
         self.start = 0
         self.end = 0
 
-    def get(self, batch_size=64, normalize_advantages=True, sort=False, drop_remainder=True):
+    def get(self, batch_size=64, normalize_advantages=True, sort=False, drop_remainder=False):
         """Return a tf.Dataset of training data from this TrajectoryBuffer.
 
         Parameters
@@ -248,21 +244,6 @@ class TrajectoryBuffer:
         return len(self.states)
 
 
-def _merge_buffers(bufferlist):
-    output = bufferlist[0]
-    assert output.start == output.end, "Must apply self.finish() before merging buffers"
-    for b in bufferlist[1:]:
-        assert b.start == b.end, "Must apply self.finish() before merging buffers"
-        output.states += b.states
-        output.actions += b.actions
-        output.rewards += b.rewards
-        output.logprobs += b.logprobs
-        output.values += b.values
-    output.end = len(output.states)
-    output.start = output.end
-    return output
-
-
 def print_status_bar(i, epochs, history, verbose=1):
     """Print a formatted status line."""
     metrics = "".join([" - {}: {:.4f}".format(m, history[m][i])
@@ -286,7 +267,7 @@ class Agent:
         The learning rate for the policy model.
     policy_updates : int, optional
         The number of policy updates per epoch of training.
-    value_network : network, optional
+    value_network : network, None, or string, optional
         The network for the value model.
     value_lr : float, optional
         The learning rate for the value model.
@@ -300,13 +281,16 @@ class Agent:
         Whether to normalize advantages.
     kld_limit : float, optional
         The limit on KL divergence for early stopping policy updates.
+    ent_bonus : float, optional
+        Bonus factor for sampled policy entropy.
+
     """
 
     def __init__(self,
                  policy_network, policy_lr=1e-4, policy_updates=1,
                  value_network=None, value_lr=1e-3, value_updates=25,
                  gam=0.99, lam=0.97, normalize_advantages=True, eps=0.2,
-                 kld_limit=0.01):
+                 kld_limit=0.01, ent_bonus=0.0):
         self.policy_model = policy_network
         self.policy_loss = NotImplementedError
         self.policy_optimizer = tf.keras.optimizers.Adam(lr=policy_lr)
@@ -322,7 +306,9 @@ class Agent:
         self.buffer = TrajectoryBuffer(gam=gam, lam=lam)
         self.normalize_advantages = normalize_advantages
         self.kld_limit = kld_limit
+        self.ent_bonus = ent_bonus
 
+    @tf.function(experimental_relax_shapes=True)
     def act(self, state, return_logprob=False):
         """Return an action for the given state using the policy model.
 
@@ -334,15 +320,27 @@ class Agent:
             Whether to return the log probability of choosing the chosen action.
 
         """
-        logpi = self.policy_model(state[np.newaxis])
+        logpi = self.policy_model(state[tf.newaxis])
         action = tf.random.categorical(logpi, 1)[0, 0]
         if return_logprob:
-            return action.numpy(), logpi[:, action][0].numpy()
+            return action, logpi[:, action][0]
         else:
-            return action.numpy()
+            return action
+
+    @tf.function(experimental_relax_shapes=True)
+    def value(self, state):
+        """Return the predicted value for the given state using the value model.
+
+        Parameters
+        ----------
+        state : np.array
+            The state of the environment.
+
+        """
+        return self.value_model(state[tf.newaxis])[0][0]
 
     def train(self, env, episodes=10, epochs=1, max_episode_length=None, verbose=0, save_freq=1,
-              logdir=None, parallel=True, batch_size=64):
+              logdir=None, batch_size=64, sort_states=False):
         """Train the agent on env.
 
         Parameters
@@ -361,10 +359,10 @@ class Agent:
             How often to save the model weights, measured in epochs.
         logdir : str, optional
             The directory to store Tensorboard logs and model weights.
-        parallel : bool, optional
-            Whether to run parallel rollouts.
         batch_size : int or None, optional
             The batch sizes for training (None indicates one large batch).
+        sort_states : bool, optional
+            Whether to sort the states to minimize padding.
 
         Returns
         -------
@@ -388,11 +386,8 @@ class Agent:
 
         for i in range(epochs):
             self.buffer.clear()
-            return_history = self.run_episodes(
-                env, episodes=episodes, max_episode_length=max_episode_length,
-                store=True, parallel=parallel
-            )
-            dataset = self.buffer.get(normalize_advantages=self.normalize_advantages, batch_size=batch_size)
+            return_history = self.run_episodes(env, episodes=episodes, max_episode_length=max_episode_length, store=True)
+            dataset = self.buffer.get(normalize_advantages=self.normalize_advantages, batch_size=batch_size, sort=sort_states)
             policy_history = self._fit_policy_model(dataset, epochs=self.policy_updates)
             value_history = self._fit_value_model(dataset, epochs=self.value_updates)
 
@@ -434,7 +429,6 @@ class Agent:
 
         return history
 
-
     def run_episode(self, env, max_episode_length=None, buffer=None):
         """Run an episode and return total reward and episode length.
 
@@ -464,14 +458,11 @@ class Agent:
             action, logprob = self.act(state, return_logprob=True)
             if self.value_model is None:
                 value = 0
-            elif hasattr(self.value_model, 'agent'):  # this is an AgentBaseline
-                if hasattr(self.value_model.agent, 'strategy'):  # with a BuchbergerAgent
-                    value = self.value_model.predict(env.env)
-                else:  # with a PGAgent/PPOAgent
-                    value = self.value_model.predict(env)
+            elif isinstance(self.value_model, str):
+                value = env.value(strategy=self.value_model, gamma=self.gam)
             else:
-                value = self.value_model(state[np.newaxis])[0][0]
-            next_state, reward, done, _ = env.step(action)
+                value = self.value(state)
+            next_state, reward, done, _ = env.step(action.numpy())
             if buffer is not None:
                 buffer.store(state, action, reward, logprob, value)
             episode_length += 1
@@ -483,15 +474,7 @@ class Agent:
             buffer.finish()
         return total_reward, episode_length
 
-    def _parallel_run_episode(self, env, max_episode_length, random_seed, output, packet_size):
-        np.random.seed(random_seed)
-        buff = TrajectoryBuffer(gam=self.gam, lam=self.lam)
-        results = []
-        for i in range(packet_size):
-            results.append(self.run_episode(env, max_episode_length=max_episode_length, buffer=buff))
-        output.put((results,buff))
-
-    def run_episodes(self, env, episodes=100, max_episode_length=None, store=False, parallel=True):
+    def run_episodes(self, env, episodes=100, max_episode_length=None, store=False):
         """Run several episodes, store interaction in buffer, and return history.
 
         Parameters
@@ -504,7 +487,6 @@ class Agent:
             The maximum number of steps before the episode is terminated.
         store : bool, optional
             Whether or not to store the rollout in self.buffer.
-        parallel : bool, optional
 
         Returns
         -------
@@ -514,28 +496,10 @@ class Agent:
         """
         history = {'returns': np.zeros(episodes),
                    'lengths': np.zeros(episodes)}
-        if parallel:
-            output = mp.Queue()
-            assert episodes % PACKET_SIZE == 0, "PACKET_SIZE must divide the number of episodes"
-            num_processes = int(episodes / PACKET_SIZE)
-            processes = [mp.Process(target=self._parallel_run_episode,
-                                    args=(env, max_episode_length, seed, output, PACKET_SIZE))
-                         for seed in np.random.randint(0, 4294967295, num_processes)]
-            for p in processes:
-                p.start()
-            results = [output.get() for p in processes]
-            for p in processes:
-                p.join()
-            self.buffer=_merge_buffers([b for (_, b) in results])
-            returns = [x for (t,_) in results for x in t]
-            for i in range(episodes):
-                (history['returns'][i], history['lengths'][i]) = returns[i]
-        else:
-            for i in range(episodes):
-                R, L = self.run_episode(env, max_episode_length=max_episode_length, buffer=self.buffer)
-                history['returns'][i] = R
-                history['lengths'][i] = L
-
+        for i in range(episodes):
+            R, L = self.run_episode(env, max_episode_length=max_episode_length, buffer=self.buffer)
+            history['returns'][i] = R
+            history['lengths'][i] = L
         return history
 
     def _fit_policy_model(self, dataset, epochs=1):
@@ -556,15 +520,15 @@ class Agent:
                 break
         return {k: np.array(v) for k, v in history.items()}
 
-    @tf.function
+    @tf.function(experimental_relax_shapes=True)
     def _fit_policy_model_step(self, states, actions, logprobs, advantages):
         """Fit policy model on one batch of data."""
         with tf.GradientTape() as tape:
-            logpis = self.policy_model(states)
-            new_logprobs = tf.reduce_sum(tf.one_hot(actions, logpis.shape[1]) * logpis, axis=1)
-            loss = tf.reduce_mean(self.policy_loss(new_logprobs, logprobs, advantages))
-            kld = tf.reduce_mean(logprobs - new_logprobs)
+            logpis = self.policy_model(states, training=True)
+            new_logprobs = tf.reduce_sum(tf.one_hot(actions, tf.shape(logpis)[1]) * logpis, axis=1)
             ent = -tf.reduce_mean(new_logprobs)
+            loss = tf.reduce_mean(self.policy_loss(new_logprobs, logprobs, advantages)) - self.ent_bonus * ent
+            kld = tf.reduce_mean(logprobs - new_logprobs)
         varis = self.policy_model.trainable_variables
         grads = tape.gradient(loss, varis)
         self.policy_optimizer.apply_gradients(zip(grads, varis))
@@ -580,7 +544,7 @@ class Agent:
 
     def _fit_value_model(self, dataset, epochs=1):
         """Fit value model using data from dataset."""
-        if self.value_model is None or hasattr(self.value_model, 'agent'):
+        if self.value_model is None or isinstance(self.value_model, str):
             epochs = 0
         history = {'loss': []}
         for epoch in range(epochs):
@@ -592,11 +556,11 @@ class Agent:
             history['loss'].append(loss / batches)
         return {k: np.array(v) for k, v in history.items()}
 
-    @tf.function
+    @tf.function(experimental_relax_shapes=True)
     def _fit_value_model_step(self, states, values):
         """Fit value model on one batch of data."""
         with tf.GradientTape() as tape:
-            pred_values = self.value_model(states)
+            pred_values = tf.squeeze(self.value_model(states, training=True))
             loss = tf.reduce_mean(self.value_loss(pred_values, values))
         varis = self.value_model.trainable_variables
         grads = tape.gradient(loss, varis)
@@ -605,12 +569,12 @@ class Agent:
 
     def load_value_weights(self, filename):
         """Load weights from filename into the value model."""
-        if self.value_model is not None:
+        if self.value_model is not None and self.value_model != 'env':
             self.value_model.load_weights(filename)
 
     def save_value_weights(self, filename):
         """Save the current weights in the value model to filename."""
-        if self.value_model is not None:
+        if self.value_model is not None and not isinstance(self.value_model, str):
             self.value_model.save_weights(filename)
 
 
@@ -651,36 +615,64 @@ class PGAgent(Agent):
         self.policy_loss = pg_surrogate_loss
 
 
-def ppo_surrogate_loss(eps=0.2):
+def ppo_surrogate_loss(method='clip', eps=0.2, c=0.01):
     """Return loss function with gradient for proximal policy optimization.
 
     Parameters
     ----------
+    method : {'clip', 'penalty'}
+        The specific loss for PPO.
     eps : float
-        The clip ratio for PPO.
+        The clip ratio if using 'clip'.
+    c : float
+        The fixed KLD weight if using 'penalty'.
 
     """
-    @tf.function(experimental_relax_shapes=True)
-    def loss(new_logps, old_logps, advantages):
-        """Return loss with gradient for proximal policy optimization.
+    if method == 'clip':
+        @tf.function(experimental_relax_shapes=True)
+        def loss(new_logps, old_logps, advantages):
+            """Return loss with gradient for clipped PPO.
 
-        Parameters
-        ----------
-        new_logps : Tensor (batch_dim,)
-            The output of the current model for the chosen action.
-        old_logps : Tensor (batch_dim,)
-            The previous logged probability for the chosen action.
-        advantages : Tensor (batch_dim,)
-            The computed advantages.
+            Parameters
+            ----------
+            new_logps : Tensor (batch_dim,)
+                The output of the current model for the chosen action.
+            old_logps : Tensor (batch_dim,)
+                The previous logged probability for the chosen action.
+            advantages : Tensor (batch_dim,)
+                The computed advantages.
 
-        Returns
-        -------
-        loss : Tensor (batch_dim,)
-            The loss for each interaction.
-        """
-        min_adv = tf.where(advantages > 0, (1 + eps) * advantages, (1 - eps) * advantages)
-        return -tf.minimum(tf.exp(new_logps - old_logps) * advantages, min_adv)
-    return loss
+            Returns
+            -------
+            loss : Tensor (batch_dim,)
+                The loss for each interaction.
+            """
+            min_adv = tf.where(advantages > 0, (1 + eps) * advantages, (1 - eps) * advantages)
+            return -tf.minimum(tf.exp(new_logps - old_logps) * advantages, min_adv)
+        return loss
+    elif method == 'penalty':
+        @tf.function(experimental_relax_shapes=True)
+        def loss(new_logps, old_logps, advantages):
+            """Return loss with gradient for penalty PPO.
+
+            Parameters
+            ----------
+            new_logps : Tensor (batch_dim,)
+                The output of the current model for the chosen action.
+            old_logps : Tensor (batch_dim,)
+                The previous logged probability for the chosen action.
+            advantages : Tensor (batch_dim,)
+                The computed advantages.
+
+            Returns
+            -------
+            loss : Tensor (batch_dim,)
+                The loss for each interaction.
+            """
+            return -(tf.exp(new_logps - old_logps) * advantages - c * (old_logps - new_logps))
+        return loss
+    else:
+        raise ValueError('unknown PPO method')
 
 
 class PPOAgent(Agent):
@@ -690,11 +682,15 @@ class PPOAgent(Agent):
     ----------
     policy_network : network
         The network for the policy model.
-    eps : float, optional
-        The clip ratio for PPO.
+    method : {'clip', 'penalty'}
+        The specific loss for PPO.
+    eps : float
+        The clip ratio if using 'clip'.
+    c : float
+        The fixed KLD weight if using 'penalty'.
 
     """
 
-    def __init__(self, policy_network, eps=0.2, **kwargs):
+    def __init__(self, policy_network, method='clip', eps=0.2, c=0.01, **kwargs):
         super().__init__(policy_network, **kwargs)
-        self.policy_loss = ppo_surrogate_loss(eps)
+        self.policy_loss = ppo_surrogate_loss(method=method, eps=eps, c=c)

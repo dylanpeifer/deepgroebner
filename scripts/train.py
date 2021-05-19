@@ -3,16 +3,16 @@
 
 import argparse
 import datetime
+import gym
+import json
 import numpy as np
 import os
-import json
+import tensorflow as tf
 
-import gym
-
-from deepgroebner.buchberger import BuchbergerEnv, LeadMonomialsWrapper, BuchbergerAgent
-from deepgroebner.ideals import RandomBinomialIdealGenerator, RandomIdealGenerator
+from deepgroebner.buchberger import LeadMonomialsEnv, BuchbergerAgent
 from deepgroebner.pg import PGAgent, PPOAgent
-from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, AttentionPMLP, TransformerPMLP, PairsLeftBaseline, AgentBaseline
+from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, AttentionPMLP, TransformerPMLP, PairsLeftBaseline, AgentBaseline, RecurrentValueModel, PoolingValueModel, PointerNetwork
+from deepgroebner.wrapped import CLeadMonomialsEnv
 
 
 def make_parser():
@@ -26,6 +26,10 @@ def make_parser():
                               'CartPole-v0', 'CartPole-v1', 'LunarLander-v2'],
                      default='RandomBinomialIdeal',
                      help='training environment')
+    env.add_argument('--env_seed',
+                     type=lambda x: int(x) if x.lower() != 'none' else None,
+                     default=None,
+                     help='seed for the environment')
 
     ideal = parser.add_argument_group('ideals', 'ideal distribution and environment options')
     ideal.add_argument('--distribution',
@@ -44,11 +48,15 @@ def make_parser():
                        type=int,
                        default=2,
                        help='number of lead monomials visible')
+    ideal.add_argument('--use_cython',
+                       type=lambda x: str(x).lower() == 'true',
+                       default=True,
+                       help='whether to use the Cython environment')
 
     alg = parser.add_argument_group('algorithm', 'algorithm parameters')
     alg.add_argument('--algorithm',
-                     choices=['ppo', 'pg'],
-                     default='ppo',
+                     choices=['ppo-clip', 'ppo-penalty', 'pg'],
+                     default='ppo-clip',
                      help='training algorithm')
     alg.add_argument('--gam',
                      type=float,
@@ -61,11 +69,23 @@ def make_parser():
     alg.add_argument('--eps',
                      type=float,
                      default=0.2,
-                     help='clip ratio for PPO')
+                     help='clip ratio for clipped PPO')
+    alg.add_argument('--c',
+                     type=float,
+                     default=0.01,
+                     help='KLD weight for penalty PPO')
+    alg.add_argument('--ent_bonus',
+                     type=float,
+                     default=0.0,
+                     help='bonus factor for sampled policy entropy')
+    alg.add_argument('--agent_seed',
+                     type=lambda x: int(x) if x.lower() != 'none' else None,
+                     default=None,
+                     help='seed for the agent')
 
     policy = parser.add_argument_group('policy model')
     policy.add_argument('--policy_model',
-                        choices=['mlp', 'pmlp', 'apmlp', 'tpmlp'],
+                        choices=['mlp', 'pmlp', 'apmlp', 'tpmlp', 'pointer'],
                         default='pmlp',
                         help='policy network type')
     policy.add_argument('--policy_kwargs',
@@ -91,7 +111,7 @@ def make_parser():
 
     value = parser.add_argument_group('value model')
     value.add_argument('--value_model',
-                       choices=['none', 'mlp', 'pairsleft', 'degree'],
+                       choices=['none', 'mlp', 'pairsleft', 'degree', 'sample', 'rnn', 'pool'],
                        default='none',
                        help='value network type')
     value.add_argument('--value_kwargs',
@@ -104,7 +124,7 @@ def make_parser():
                        help='the value model learning rate')
     value.add_argument('--value_updates',
                        type=int,
-                       default=1,
+                       default=40,
                        help='value model updates per epoch')
     value.add_argument('--value_weights',
                        type=str,
@@ -128,13 +148,13 @@ def make_parser():
                        type=lambda x: int(x) if x.lower() != 'none' else None,
                        default=64,
                        help='size of batches in training')
-    train.add_argument('--parallel',
+    train.add_argument('--sort_states',
                        type=lambda x: str(x).lower() == 'true',
-                       default=True,
-                       help='whether to parallelize rollouts')
+                       default=False,
+                       help='whether to sort the states before batching')
     train.add_argument('--use_gpu',
                        type=lambda x: str(x).lower() == 'true',
-                       default=True,
+                       default=False,
                        help='whether to use a GPU if available')
     train.add_argument('--verbose',
                        type=int,
@@ -152,7 +172,7 @@ def make_parser():
                        help='whether to append current time to run name')
     save.add_argument('--logdir',
                        type=str,
-                       default='data/runs',
+                       default='data/train',
                        help='base directory for training runs')
     save.add_argument('--save_freq',
                        type=int,
@@ -166,22 +186,11 @@ def make_env(args):
     """Return the training environment for this run."""
     if args.environment in ['CartPole-v0', 'CartPole-v1', 'LunarLander-v2']:
         env = gym.make(args.environment)
+    elif args.use_cython:
+        env = CLeadMonomialsEnv(args.distribution, elimination=args.elimination, rewards=args.rewards, k=args.k)
     else:
-        dist_args = args.distribution.split('-')
-        n = int(dist_args[0])
-        d = int(dist_args[1])
-        s = int(dist_args[2])
-        constants = 'consts' in dist_args
-        homogeneous = 'homog' in dist_args
-        pure = 'pure' in dist_args
-        if args.environment == 'RandomBinomialIdeal':
-            ideal_gen = RandomBinomialIdealGenerator(n, d, s, degrees=dist_args[3],
-                                                     constants=constants, homogeneous=homogeneous, pure=pure)
-        else:
-            ideal_gen = RandomIdealGenerator(n, d, s, float(dist_args[3]), degrees=dist_args[4],
-                                             constants=constants)
-        env = BuchbergerEnv(ideal_gen, elimination=args.elimination, rewards=args.rewards)
-        env = LeadMonomialsWrapper(env, k=args.k)
+        env = LeadMonomialsEnv(args.distribution, elimination=args.elimination, rewards=args.rewards, k=args.k)
+    env.seed(args.env_seed)
     return env
 
 
@@ -201,8 +210,10 @@ def make_policy_network(args):
             policy_network = ParallelMultilayerPerceptron(**args.policy_kwargs)
         elif args.policy_model == 'apmlp':
             policy_network = AttentionPMLP(**args.policy_kwargs)
-        else:
+        elif args.policy_model == 'tpmlp':
             policy_network = TransformerPMLP(**args.policy_kwargs)
+        else:
+            policy_network = PointerNetwork(**args.policy_kwargs)
         batch = np.zeros((1, 10, 2 * args.k * int(args.distribution.split('-')[0])), dtype=np.int32)
     policy_network(batch)  # build network
     if args.policy_weights != "":
@@ -225,11 +236,14 @@ def make_value_network(args):
         value_network = MultilayerPerceptron(1, final_activation='linear', **args.value_kwargs)
         batch = np.zeros((1, 4), dtype=np.float32)
         value_network(batch)  # build network
+    elif args.value_model == 'pairsleft':
+        value_network = PairsLeftBaseline(gam=args.gam)
+    elif args.value_model == 'rnn':
+        value_network = RecurrentValueModel(**args.value_kwargs)
+    elif args.value_model == 'pool':
+        value_network = PoolingValueModel(**args.value_kwargs)
     else:
-        if args.value_model == 'pairsleft':
-            value_network = PairsLeftBaseline(gam=args.gam)
-        else:
-            value_network = AgentBaseline(BuchbergerAgent('degree'), gam=args.gam)
+        value_network = args.value_model
     if args.value_weights != "":
         value_network.load_weights(args.value_weights)
     return value_network
@@ -239,10 +253,20 @@ def make_agent(args):
     """Return the agent for this run."""
     policy_network = make_policy_network(args)
     value_network = make_value_network(args)
-    agent_fn = PGAgent if args.algorithm == 'pg' else PPOAgent
-    agent = agent_fn(policy_network=policy_network, policy_lr=args.policy_lr, policy_updates=args.policy_updates,
-                     value_network=value_network, value_lr=args.value_lr, value_updates=args.value_updates,
-                     gam=args.gam, lam=args.lam, kld_limit=args.policy_kld_limit)
+    if args.algorithm == 'pg':
+        agent = PGAgent(policy_network=policy_network,policy_lr=args.policy_lr, policy_updates=args.policy_updates,
+                        value_network=value_network, value_lr=args.value_lr, value_updates=args.value_updates,
+                        gam=args.gam, lam=args.lam, kld_limit=args.policy_kld_limit, ent_bonus=args.ent_bonus)
+    elif args.algorithm == 'ppo-clip':
+        agent = PPOAgent(policy_network=policy_network, method='clip', eps=args.eps,
+                         policy_lr=args.policy_lr, policy_updates=args.policy_updates,
+                         value_network=value_network, value_lr=args.value_lr, value_updates=args.value_updates,
+                         gam=args.gam, lam=args.lam, kld_limit=args.policy_kld_limit, ent_bonus=args.ent_bonus)
+    elif args.algorithm == 'ppo-penalty':
+        agent = PPOAgent(policy_network=policy_network, method='penalty', c=args.c,
+                         policy_lr=args.policy_lr, policy_updates=args.policy_updates,
+                         value_network=value_network, value_lr=args.value_lr, value_updates=args.value_updates,
+                         gam=args.gam, lam=args.lam, kld_limit=args.policy_kld_limit, ent_bonus=args.ent_bonus)
     return agent
 
 
@@ -266,13 +290,14 @@ def make_logdir(args):
 
 if __name__ == '__main__':
     args = make_parser().parse_args()
-    if not args.use_gpu or args.parallel:
+    if not args.use_gpu:
         os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+    if args.agent_seed is not None:
+        tf.random.set_seed(args.agent_seed)
     env = make_env(args)
     agent = make_agent(args)
     logdir = make_logdir(args)
     print("Saving run in", logdir)
     agent.train(env, episodes=args.episodes, epochs=args.epochs,
                 save_freq=args.save_freq, logdir=logdir, verbose=args.verbose,
-                max_episode_length=args.max_episode_length, parallel=args.parallel,
-                batch_size=args.batch_size)
+                max_episode_length=args.max_episode_length, batch_size=args.batch_size)

@@ -198,8 +198,8 @@ interreduce(List) := List => (F) -> (
 argmax = method()
 argmax(List) := ZZ => (x) -> (
     -- x = a list
-    -- returns the index of the max element of x (or the first index if there are multiple)
-    if #x === 0 then null else first fold((i,j) -> if i#1 >= j#1 then i else j, pairs x)
+    -- returns the index of the max element of x (or the last index if there are multiple)
+    if #x === 0 then null else first fold((i,j) -> if i#1 > j#1 then i else j, pairs x)
     )
 argmax(List, Function) := ZZ => (x, f) -> (
     argmax(apply(x, f))
@@ -270,7 +270,7 @@ lcmCriterion(SPair, List) := Boolean => (p, F) -> (
     -- p = an SPair
     -- F = the corresponding list of polynomials
     -- returns true if the pair satisfies the lcm criterion
-    
+
     (i, j) := indices p;
     lcm p == leadMonomial F#i * leadMonomial F#j
     )
@@ -290,11 +290,17 @@ selectPair(List) := SPair => opts -> (P) -> (
     if opts.Strategy === "First" then (
 	p = P#0;
 	)
-    else if opts.Strategy === "Random" then (
-	p = P#(random(#P));
-	)
     else if opts.Strategy === "Degree" then (
 	p = P#(argmin(P, degree));
+	)
+    else if opts.Strategy === "Normal" then (
+	p = P#(argmin(P, lcm));
+	)
+    else if opts.Strategy === "Sugar" then (
+	p = P#(argmin(P, p -> {sugar p, lcm p}));
+	)
+    else if opts.Strategy === "Random" then (
+	p = P#(random(#P));
 	)
     else if opts.Strategy === "TrueDegree" then (
 	p = P#(argmin(P, trueDegree));
@@ -308,14 +314,11 @@ selectPair(List) := SPair => opts -> (P) -> (
     else if opts.Strategy === "MonomialTrueDegreeDegree" then (
 	p = P#(argmin(P, p -> {isMonomial p, trueDegree p, degree p}));
 	)
-    else if opts.Strategy === "Normal" then (
-	p = P#(argmin(P, lcm));
-	)
-    else if opts.Strategy === "Sugar" then (
-	p = P#(argmin(P, p -> {sugar p, lcm p}));
-	)
     else if opts.Strategy === "Last" then (
 	p = P#(#P-1);
+	)
+    else if opts.Strategy === "Codegree" then (
+	p = P#(argmax(P, degree));
 	)
     else if opts.Strategy === "Strange" then (
 	p = P#(argmax(P, lcm));
@@ -384,8 +387,7 @@ buchberger = method(Options => {
 	SortReducers => true,
 	Homogenize => false,
 	Minimalize => true,
-	Interreduce => true,
-	Lineages => false
+	Interreduce => true
 	})
 buchberger(Ideal) := Sequence => opts -> I -> (
     -- I = an ideal in a polynomial ring
@@ -393,8 +395,9 @@ buchberger(Ideal) := Sequence => opts -> I -> (
 
     F := first entries gens I;
     if opts.SortInput then F = sort F;
-    if opts.SelectionStrategy === "Sugar" then F = apply(F, sugarPolynomial);
-    if opts.Lineages then L := toList(0..#F-1);
+    if opts.SelectionStrategy === "Sugar" or opts.SelectionStrategy === "Spice" then (
+	F = apply(F, sugarPolynomial);
+	);
 
     P := {};
     G := {};
@@ -425,15 +428,15 @@ buchberger(Ideal) := Sequence => opts -> I -> (
 	    nonzeroReductions = nonzeroReductions + 1;
 	    reducers = G;
 	    if opts.SortReducers then reducers = sort reducers;
-	    if opts.Lineages then L = append(L, indices p);
 	    )
 	else (
 	    zeroReductions = zeroReductions + 1;
 	    );
 	);
 
-    if opts.SelectionStrategy === "Sugar" then G = apply(G, polynomial);
-    if opts.Lineages then L = apply(#L, i -> (L#i, G#i));
+    if opts.SelectionStrategy === "Sugar" or opts.SelectionStrategy === "Spice" then (
+	G = apply(G, polynomial);
+	);
     if opts.Minimalize then G = minimalize(G);
     if opts.Interreduce then G = interreduce(G);
 
@@ -441,7 +444,7 @@ buchberger(Ideal) := Sequence => opts -> I -> (
 	               "nonzeroReductions" => nonzeroReductions,
 		       "polynomialAdditions" => polynomialAdditions,
 		       "monomialAdditions" => monomialAdditions};
-    if opts.Lineages then (G, stats, L) else (G, stats)
+    (G, stats)
     )
 
 beginDocumentation()

@@ -1,5 +1,6 @@
 *.pyc
 *.so
+*.egg-info/
 build/
 data/
 deepgroebner/wrapped.cpp

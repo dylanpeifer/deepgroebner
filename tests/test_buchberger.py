@@ -110,96 +110,103 @@ def test_select_5(s, p):
 @pytest.mark.parametrize("f", [x**2 + x*y + 2, a*b + a])
 @pytest.mark.parametrize("s", ['none', 'lcm', 'gebauermoeller'])
 def test_update_0(f, s):
-    assert update([], set(), f, strategy=s) == ([f], set())
+    assert update([], [], f, strategy=s) == ([f], [])
 
 
 @pytest.mark.parametrize("s, P_", [
-    ('none', set([(0, 1)])), ('lcm', set()), ('gebauermoeller', set()),
+    ('none', [(0, 1)]), ('lcm', []), ('gebauermoeller', []),
 ])
 def test_update_1(s, P_):
     G = [x*y**2 + 2*x*z - x]
     f = z**5 + 2*x**2*y*z + x*z
-    assert update(G, set(), f, strategy=s) == (G + [f] , P_)
+    G_ = G + [f]
+    assert update(G, [], f, strategy=s) == (G_ , P_)
 
 
 @pytest.mark.parametrize("s, P_", [
-    ('none', set([(0, 1), (0, 2), (1, 2)])),
-    ('lcm', set([(0, 1), (0, 2), (1, 2)])),
-    ('gebauermoeller', set([(0, 2), (1, 2)])),
+    ('none', [(0, 1), (0, 2), (1, 2)]),
+    ('lcm', [(0, 1), (0, 2), (1, 2)]),
+    ('gebauermoeller', [(0, 2), (1, 2)]),
 ])
 def test_update_2(s, P_):
     G = [a*b**2 + 2*c, a*c**2 - b**2 - c]
     f = a + b**2*c + 4*c**2 + 1
-    assert update(G, set([(0, 1)]), f, strategy=s) == (G + [f], P_)
+    G_ = G + [f]
+    assert update(G, [(0, 1)], f, strategy=s) == (G_, P_)
 
 
 @pytest.mark.parametrize("s, P_", [
-    ('none', set([(0, 1), (0, 2), (1, 2)])),
-    ('lcm', set([(0, 1), (1, 2)])),
-    ('gebauermoeller', set([(0, 1), (1, 2)])),
+    ('none', [(0, 1), (0, 2), (1, 2)]),
+    ('lcm', [(0, 1), (1, 2)]),
+    ('gebauermoeller', [(0, 1), (1, 2)]),
 ])
 def test_update_3(s, P_):
     G = [a*b**2 + 2*c, a*c**2 - b**2 - c]
     f = 4*c**2 + 1
-    assert update(G, set([(0, 1)]), f, strategy=s) == (G + [f], P_)
+    G_ = G + [f]
+    assert update(G, [(0, 1)], f, strategy=s) == (G_, P_)
 
 
 @pytest.mark.parametrize("s, P_", [
-    ('none', set([(0, 1), (0, 2), (1, 2)])),
-    ('lcm', set([(0, 1), (0, 2), (1, 2)])),
-    ('gebauermoeller', set([(0, 1), (0, 2)])),
+    ('none', [(0, 1), (0, 2), (1, 2)]),
+    ('lcm', [(0, 1), (0, 2), (1, 2)]),
+    ('gebauermoeller', [(0, 1), (0, 2)]),
 ])
 def test_update_4(s, P_):
     G = [a*b**2 + 2*c, a*c**2 - b**2 - c]
     f = 4*b**2*c + b*c**2
-    assert update(G, set([(0, 1)]), f, strategy=s) == (G + [f], P_)
+    G_ = G + [f]
+    assert update(G, [(0, 1)], f, strategy=s) == (G_, P_)
 
 
 @pytest.mark.parametrize("s, P_", [
-    ('none', set([(0, 2), (0, 3), (1, 3), (2, 3)])),
-    ('lcm', set([(0, 2), (0, 3), (1, 3)])),
-    ('gebauermoeller', set([(0, 2)])),
+    ('none', [(0, 2), (0, 3), (1, 3), (2, 3)]),
+    ('lcm', [(0, 2), (0, 3), (1, 3)]),
+    ('gebauermoeller', [(0, 2)]),
 ])
 def test_update_5(s, P_):
     G = [x*y**2 + 2*z, x*z**2 - y**2 - z, x + 3]
     f = y**2*z**3 - y**2 + 4*z**4 + z**2
-    assert update(G, set([(0, 2)]), f, strategy=s) == (G + [f], P_)
+    G_ = G + [f]
+    assert update(G, [(0, 2)], f, strategy=s) == (G_, P_)
 
 
 @pytest.mark.parametrize("s, P_", [
-    ('none', set([(0, 4), (1, 4), (2, 4), (3, 4)])),
-    ('lcm', set([(0, 4), (1, 4), (3, 4)])),
-    ('gebauermoeller', set([(3, 4)])),
+    ('none', [(0, 4), (1, 4), (2, 4), (3, 4)]),
+    ('lcm', [(0, 4), (1, 4), (3, 4)]),
+    ('gebauermoeller', [(3, 4)]),
 ])
 def test_update_5(s, P_):
     G = [a*b**2 + 2*c, a*c**2 - b**2 - c, -a + b**2*c + 4*c**2, b**2*c**3 - b**2 + 4]
     f = b**4*c + 4*b**2*c**2 + b**2 + 2*c
-    assert update(G, set(), f, strategy=s) == (G + [f], P_)
+    G_ = G + [f]
+    assert update(G, [], f, strategy=s) == (G_, P_)
 
 
 @pytest.mark.parametrize("s, P_", [
-    ('none', set((i, 5) for i in range(5))),
-    ('lcm', set([(0, 5), (3, 5), (4, 5)])),
-    ('gebauermoeller', set([(4, 5)])),
+    ('none', [(i, 5) for i in range(5)]),
+    ('lcm', [(0, 5), (3, 5), (4, 5)]),
+    ('gebauermoeller', [(4, 5)]),
 ])
 def test_update_6(s, P_):
     G = [a*b**2 + 2*c, a*c**2 - b**2, -a + b**2*c, b**2*c**3 - b**2, b**4*c + 4*b**2]
     f = -b**4 - b**2*c - 2*c**3 - c**2/2
-    assert update(G, set(), f, strategy=s) == (G + [f], P_)
+    G_ = G + [f]
+    assert update(G, [], f, strategy=s) == (G_, P_)
 
 
 def test_update_7():
     G = [a*b**2 + 2*c, a*c**2 - b**2, -a + b**2*c, b**2*c**3 - b**2, b**4*c + 4*b**2, b**4 - b**2]
     f = b**2*c**2 + b**2 - c**4 - c**3
-    G_, P_ = update(G, set(), f, strategy='gebauermoeller')
-    assert P_ == set([(3, 6), (4, 6)]) or P_ == set([(3, 6), (5, 6)])
+    G_, P_ = update(G, [], f, strategy='gebauermoeller')
+    assert P_ == [(3, 6), (4, 6)] or P_ == [(3, 6), (5, 6)]
 
 
 def test_update_8():
     G = [a*b**2, a*c**2, -a, b**2*c**3, b**4*c, b**4, b**2*c**2]
     f = b**2*c + 14*b**2 - 8*c**5 - 58*c**4 + c**2 + c
-    G_, P_ = update(G, set(), f, strategy='gebauermoeller')
-    assert P_ == set([(4, 7), (6, 7)]) or P_ == set([(5, 7), (6, 7)])
+    G_, P_ = update(G, [], f, strategy='gebauermoeller')
+    assert P_ == [(4, 7), (6, 7)] or P_ == [(5, 7), (6, 7)]
 
 
 @pytest.mark.parametrize("G, Gmin", [
@@ -230,11 +237,10 @@ def test_interreduce(G, Gred):
     ([b - a**2, c - a**3], [b**3 - c**2, a*c - b**2, a*b - c, a**2 - b]),
     ([u - t**2, v - t**3], [t*v - u**2, t*u - v, t**2 - u, u**3 - v**2]),
     ([x + y + z, x*y + y*z + x*z, x*y*z - 1], [x + y + z, y**2 + y*z + z**2, z**3 - 1]),
-]) 
-@pytest.mark.parametrize("s", ['first', 'degree', 'normal', 'random'])
+])
 @pytest.mark.parametrize("e", ['none', 'lcm', 'gebauermoeller'])
-def test_buchberger(F, G, s, e):
-    assert buchberger(F, selection=s, elimination=e) == G
+def test_buchberger(F, G, e):
+    assert buchberger(F, elimination=e)[0] == G
 
 
 @pytest.mark.parametrize("sort_reducers, r", [
@@ -302,28 +308,28 @@ def test_episode_2(s, reward):
     assert run_episode(agent, env) == reward
 
 
-@pytest.mark.parametrize("g, k, v", [
-    (R1.one, 1, [0, 0, 0]),
-    (R2.zero, 2, [0, 0, 0, 0, 0, 0, 0, 0]),
-    (x*y, 1, [1, 1, 0]),
-    (x*y, 3, [1, 1, 0, 0, 0, 0, 0, 0, 0]),
-    (x*y**2*z + x**3 + z + 1, 1, [1, 2, 1]),
-    (x*y**2*z + x**3 + z + 1, 2, [1, 2, 1, 3, 0, 0]),
-    (x*y**2*z + x**3 + z + 1, 4, [1, 2, 1, 3, 0, 0, 0, 0, 1, 0, 0, 0]),
-    (b*d**5 + a**3, 1, [3, 0, 0, 0]),
-    (b*d**5 + a**3, 3, [3, 0, 0, 0, 0, 1, 0, 5, 0, 0, 0, 0]),
-    (u**3*v + t**2, 1, [0, 3, 1]),
-    (u**3*v + t**2, 2, [0, 3, 1, 2, 0, 0]),
+@pytest.mark.parametrize("f, ring, k, v", [
+    (R1.one, R1, 1, [0, 0, 0]),
+    (R2.zero, R2, 2, [0, 0, 0, 0, 0, 0, 0, 0]),
+    (x*y, R1, 1, [1, 1, 0]),
+    (x*y, R1, 3, [1, 1, 0, 0, 0, 0, 0, 0, 0]),
+    (x*y**2*z + x**3 + z + 1, R1, 1, [1, 2, 1]),
+    (x*y**2*z + x**3 + z + 1, R1, 2, [1, 2, 1, 3, 0, 0]),
+    (x*y**2*z + x**3 + z + 1, R1, 4, [1, 2, 1, 3, 0, 0, 0, 0, 1, 0, 0, 0]),
+    (b*d**5 + a**3, R2, 1, [3, 0, 0, 0]),
+    (b*d**5 + a**3, R2, 3, [3, 0, 0, 0, 0, 1, 0, 5, 0, 0, 0, 0]),
+    (u**3*v + t**2, R3, 1, [0, 3, 1]),
+    (u**3*v + t**2, R3, 2, [0, 3, 1, 2, 0, 0]),
 ])
-def test_lead_monomials_vector(g, k, v):
-    assert np.array_equal(lead_monomials_vector(g, k=k), np.array(v))
+def test_lead_monomials_vector(f, ring, k, v):
+    assert np.array_equal(lead_monomials_vector(f, ring, k=k), np.array(v))
 
 
-def test_LeadMonomialsWrapper_0():
+def test_LeadMonomialsEnv_0():
     R, x, y, z = sp.ring('x,y,z', sp.FF(101), 'grevlex')
     F = [y - x**2, z - x**3]
     ideal_gen = FixedIdealGenerator(F)
-    env = LeadMonomialsWrapper(BuchbergerEnv(ideal_gen, elimination='none'))
+    env = LeadMonomialsEnv(ideal_gen, elimination='none')
     state = env.reset()
     assert np.array_equal(state, np.array([[2, 0, 0, 3, 0, 0]]))
     state, _, done, _ = env.step(0)
@@ -339,11 +345,11 @@ def test_LeadMonomialsWrapper_0():
     assert done
 
 
-def test_LeadMonomialsWrapper_1():
+def test_LeadMonomialsEnv_1():
     R, x, y, z = sp.ring('x,y,z', sp.FF(101), 'grevlex')
     F = [y - x**2, z - x**3]
     ideal_gen = FixedIdealGenerator(F)
-    env = LeadMonomialsWrapper(BuchbergerEnv(ideal_gen))
+    env = LeadMonomialsEnv(ideal_gen)
     state = env.reset()
     assert np.array_equal(state, np.array([[2, 0, 0, 3, 0, 0]]))
     state, _, done, _ = env.step(0)

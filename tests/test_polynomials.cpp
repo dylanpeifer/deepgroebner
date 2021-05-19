@@ -154,36 +154,36 @@ TEST(Polynomial, constructor) {
 }
 
 TEST(Polynomial, add) {
-  Polynomial p1 = {{1, {1,2,1,0,0,0,0,0}},
-		   {3, {1,0,1,0,0,0,0,0}},
-		   {7, {0,0,0,0,0,0,0,0}}};
-  Polynomial p2 = {{9, {7,0,0,0,0,0,0,0}},
-		   {-3, {1,0,1,0,0,0,0,0}},
-		   {1, {1,0,0,0,0,0,0,0}}};
-  Polynomial p3 = {{9, {7,0,0,0,0,0,0,0}},
-		   {1, {1,2,1,0,0,0,0,0}},
-		   {1, {1,0,0,0,0,0,0,0}},
-		   {7, {0,0,0,0,0,0,0,0}}};
+  Polynomial p1 = {{ 1, {1,2,1}},
+		   { 3, {1,0,1}},
+		   { 7, {0,0,0}}};
+  Polynomial p2 = {{ 9, {7,0,0}},
+		   {-3, {1,0,1}},
+		   { 1, {1,0,0}}};
+  Polynomial p3 = {{ 9, {7,0,0}},
+		   { 1, {1,2,1}},
+		   { 1, {1,0,0}},
+		   { 7, {0,0,0}}};
   EXPECT_EQ(p1 + p2, p3);
 }
 
 TEST(Polynomial, subtract) {
-  Polynomial p1 = {{1, {1,2,1,0,0,0,0,0}},
-		   {3, {1,0,1,0,0,0,0,0}},
-		   {7, {0,0,0,0,0,0,0,0}}};
-  Polynomial p2 = {{9, {7,0,0,0,0,0,0,0}},
-		   {-3, {1,0,1,0,0,0,0,0}},
-		   {1, {1,0,0,0,0,0,0,0}}};
-  Polynomial p3 = {{9, {7,0,0,0,0,0,0,0}},
-		   {1, {1,2,1,0,0,0,0,0}},
-		   {1, {1,0,0,0,0,0,0,0}},
-		   {7, {0,0,0,0,0,0,0,0}}};
+  Polynomial p1 = {{ 1, {1,2,1}},
+		   { 3, {1,0,1}},
+		   { 7, {0,0,0}}};
+  Polynomial p2 = {{ 9, {7,0,0}},
+		   {-3, {1,0,1}},
+		   { 1, {1,0,0}}};
+  Polynomial p3 = {{ 9, {7,0,0}},
+		   { 1, {1,2,1}},
+		   { 1, {1,0,0}},
+		   { 7, {0,0,0}}};
   EXPECT_EQ(p3 - p2, p1);
   EXPECT_EQ(p3 - p1, p2);
   EXPECT_EQ(p1 - p1, Polynomial{});
 }
 
-TEST(Polynomial, multiply) {
+TEST(Polynomial, multiply_term) {
   Monomial m = {1,1,2,2,5,6,1,1};
   Term t1 = {9, {0,0,0,0,2,2,0,0}};
   Term t2 = {2, {0,0,0,0,0,0,0,0}};
@@ -201,3 +201,47 @@ TEST(Polynomial, multiply) {
   EXPECT_EQ(t2 * p1, p1 + p1);
   EXPECT_EQ(t2 * p2, p2 + p2);
 }
+
+TEST(Polynomial, multiply_polynomial) {
+  Polynomial p1 = {{1, {1,2,0}},
+		   {1, {0,1,1}},
+		   {1, {0,0,0}}};
+  Polynomial p2 = {{1, {1,1,1}},
+		   {1, {1,0,0}}};
+  Polynomial p3 = {{1, {2,3,1}},
+		   {1, {1,2,2}},
+		   {1, {2,2,0}},
+		   {2, {1,1,1}},
+		   {1, {1,0,0}}};
+  EXPECT_EQ(p1 * p2, p3);
+}
+
+TEST(parse_polynomial, example1) {
+  Polynomial p1 = parse_polynomial("a^2*b+c*d");
+  Polynomial p2 = {{1, {2,1,0,0}},
+		   {1, {0,0,1,1}}};
+  EXPECT_EQ(p1, p2);
+}
+
+TEST(parse_polynomial, example2) {
+  Polynomial p1 = parse_polynomial("413*a^2*b^5*c+32*d^2-5");
+  Polynomial p2 = {{413, {2,5,1,0}},
+		   { 32, {0,0,0,2}},
+		   { -5, {0,0,0,0}}};
+  EXPECT_EQ(p1, p2);
+}
+
+TEST(parse_polynomial, example3) {
+  Polynomial p1 = parse_polynomial("3");
+  Polynomial p2 = {{3, {}}};
+  EXPECT_EQ(p1, p2);
+}
+
+TEST(parse_polynomial, example4) {
+  Polynomial p1 = parse_polynomial("12*a^2-b*c+13*d");
+  Polynomial p2 = {{12, {2,0,0,0}},
+		   {-1, {0,1,1,0}},
+		   {13, {0,0,0,1}}};
+  EXPECT_EQ(p1, p2);
+}
+

@@ -1,11 +1,18 @@
-from libcpp.utility cimport pair
+from libcpp.string cimport string
+from libcpp.vector cimport vector
 
 cdef extern from "buchberger.cpp":
     pass
 
 cdef extern from "buchberger.h":
-    cdef cppclass BuchbergerEnv:
-        BuchbergerEnv() except +
-        BuchbergerEnv(int) except +
-        int reset()
-        int step(int, int)
+    cdef cppclass LeadMonomialsEnv:
+        LeadMonomialsEnv() except +
+        LeadMonomialsEnv(string, bint, bint, int) except +
+        LeadMonomialsEnv(const LeadMonomialsEnv&)
+        void reset()
+        double step(int)
+        void seed(int)
+        double value(string, double)
+
+        vector[int] state
+        int cols
