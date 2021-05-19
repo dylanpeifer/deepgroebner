@@ -206,8 +206,8 @@ class AZAgent:
         """
         if root is None:
             root = AZTreeNode(None, None, 0.0, env.copy(),
-                              self.policy(env.state),
-                              self.value(env.state))
+                              self.policy(env.state).numpy(),
+                              self.value(env.state).numpy())
         limit = time.time() + self.timeout
         counter = 0
         while time.time() < limit:
@@ -244,8 +244,8 @@ class AZAgent:
     def run_episode(self, env, buffer=None):
         env.reset()
         root = AZTreeNode(None, None, 0.0, env.copy(),
-                          self.policy(env.state),
-                          self.value(env.state))
+                          self.policy(env.state).numpy(),
+                          self.value(env.state).numpy())
         total_reward = 0.0
         length = 0
         while not env.done:
@@ -291,14 +291,25 @@ class AZAgent:
         leaf node.
         """
         while node.visits != 0 and len(node.children) > 0:
-            node = self.tree_policy(node)
+            c=np.sqrt(2)
+            max_val = None
+            next_node = None
+            for child in node.children:
+                prob = np.exp(node.logpi[child.action])
+                val = child.value[child.env.turn] + c * prob * np.sqrt(node.visits)/(1 + child.visits)
+                if max_val is None or val >= max_val:
+                    max_val = val
+                    next_node = child
+            node = next_node            
+            #node = self.tree_policy(node)
+        
         if not node.env.done:
             for action in node.env.actions:
                 env = node.env.copy()
                 _, reward, _, _ = env.step(action)
                 node.children.append(AZTreeNode(node, action, reward, env,
-                                                self.policy(env.state),
-                                                self.value(env.state)))
+                                                self.policy(env.state).numpy(),
+                                                self.value(env.state).numpy()))
         return node
 
     def backup(self, node, value):
