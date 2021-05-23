@@ -6,14 +6,17 @@ set(INSTALL_GTEST OFF)
 add_subdirectory(googletest)
 
 
-add_executable(cyclic benchmarks/cyclic.cpp deepgroebner/ideals.cpp
+add_executable(cyclic scripts/cyclic.cpp deepgroebner/ideals.cpp
   deepgroebner/polynomials.cpp deepgroebner/buchberger.cpp)
 target_include_directories(cyclic PUBLIC deepgroebner)
 
-add_executable(random_episodes benchmarks/random_episodes.cpp deepgroebner/ideals.cpp
+add_executable(random_episodes scripts/random_episodes.cpp deepgroebner/ideals.cpp
   deepgroebner/polynomials.cpp deepgroebner/buchberger.cpp)
 target_include_directories(random_episodes PUBLIC deepgroebner)
 
+add_executable(make_strat scripts/make_strat.cpp deepgroebner/ideals.cpp
+  deepgroebner/polynomials.cpp deepgroebner/buchberger.cpp)
+target_include_directories(make_strat PUBLIC deepgroebner)
 
 add_executable(test_polynomials tests/test_polynomials.cpp
   deepgroebner/polynomials.cpp)

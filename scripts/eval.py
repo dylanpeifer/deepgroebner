@@ -3,16 +3,16 @@
 
 import argparse
 import datetime
+import gym
+import json
 import numpy as np
 import os
 import shutil
-import json
-
-import gym
+import tensorflow as tf
 
 from deepgroebner.buchberger import LeadMonomialsEnv
 from deepgroebner.pg import PGAgent
-from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, AttentionPMLP, TransformerPMLP
+from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, AttentionPMLP, TransformerPMLP, PointerNetwork
 from deepgroebner.wrapped import CLeadMonomialsEnv
 
 from deepgroebner.environments import AlphabeticalEnv
@@ -56,9 +56,15 @@ def make_parser():
                        default=True,
                        help='whether to use the Cython environment')
 
+    alg = parser.add_argument_group('algorithm', 'algorithm parameters')
+    alg.add_argument('--agent_seed',
+                     type=lambda x: int(x) if x.lower() != 'none' else None,
+                     default=None,
+                     help='seed for the agent')
+
     policy = parser.add_argument_group('policy model')
     policy.add_argument('--policy_model',
-                        choices=['mlp', 'pmlp', 'apmlp', 'tpmlp'],
+                        choices=['mlp', 'pmlp', 'apmlp', 'tpmlp', 'pointer'],
                         default='pmlp',
                         help='policy network type')
     policy.add_argument('--policy_kwargs',
@@ -81,7 +87,7 @@ def make_parser():
                      help='max number of interactions per episode')
     run.add_argument('--use_gpu',
                      type=lambda x: str(x).lower() == 'true',
-                     default=True,
+                     default=False,
                      help='whether to use a GPU if available')
 
     save = parser.add_argument_group('saving')
@@ -131,8 +137,10 @@ def make_policy_network(args):
             policy_network = ParallelMultilayerPerceptron(**args.policy_kwargs)
         elif args.policy_model == 'apmlp':
             policy_network = AttentionPMLP(**args.policy_kwargs)
-        else:
+        elif args.policy_model == 'tpmlp':
             policy_network = TransformerPMLP(**args.policy_kwargs)
+        else:
+            policy_network = PointerNetwork(**args.policy_kwargs)
         batch = np.zeros((1, 10, 2 * args.k * int(args.distribution.split('-')[0])), dtype=np.int32)
     policy_network(batch)  # build network
     if args.policy_weights != "":
@@ -169,6 +177,8 @@ if __name__ == '__main__':
     args = make_parser().parse_args()
     if not args.use_gpu:
         os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+    if args.agent_seed is not None:
+        tf.random.set_seed(args.agent_seed)
     env = make_env(args)
     agent = make_agent(args)
     logdir = make_logdir(args)

@@ -3,19 +3,16 @@
 
 import argparse
 import datetime
+import gym
+import json
 import numpy as np
 import os
-import json
-
-import gym
+import tensorflow as tf
 
 from deepgroebner.buchberger import LeadMonomialsEnv, BuchbergerAgent
 from deepgroebner.pg import PGAgent, PPOAgent
-from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, AttentionPMLP, TransformerPMLP, PairsLeftBaseline, AgentBaseline, TransformerPMLP_Score_MHA, PointerNetwork
-from deepgroebner.new_networks import TransformerPMLP_Score_Q, TransformerPMLP_DVal, TransformerPMLP_MHA_Q_Scorer
-from deepgroebner.transformer_value_network import TransformerValueModel
+from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, AttentionPMLP, TransformerPMLP, PairsLeftBaseline, AgentBaseline, PointerNetwork, RecurrentValueModel, PoolingValueModel
 from deepgroebner.wrapped import CLeadMonomialsEnv
-
 from deepgroebner.environments import VectorEnv, AlphabeticalEnv
 
 def make_parser():
@@ -62,8 +59,8 @@ def make_parser():
 
     alg = parser.add_argument_group('algorithm', 'algorithm parameters')
     alg.add_argument('--algorithm',
-                     choices=['ppo', 'pg'],
-                     default='ppo',
+                     choices=['ppo-clip', 'ppo-penalty', 'pg'],
+                     default='ppo-clip',
                      help='training algorithm')
     alg.add_argument('--gam',
                      type=float,
@@ -76,11 +73,23 @@ def make_parser():
     alg.add_argument('--eps',
                      type=float,
                      default=0.2,
-                     help='clip ratio for PPO')
+                     help='clip ratio for clipped PPO')
+    alg.add_argument('--c',
+                     type=float,
+                     default=0.01,
+                     help='KLD weight for penalty PPO')
+    alg.add_argument('--ent_bonus',
+                     type=float,
+                     default=0.0,
+                     help='bonus factor for sampled policy entropy')
+    alg.add_argument('--agent_seed',
+                     type=lambda x: int(x) if x.lower() != 'none' else None,
+                     default=None,
+                     help='seed for the agent')
 
     policy = parser.add_argument_group('policy model')
     policy.add_argument('--policy_model',
-                        choices=['mlp', 'pmlp', 'apmlp', 'tpmlp', 'pnet'],
+                        choices=['mlp', 'pmlp', 'apmlp', 'tpmlp', 'pointer'],
                         default='pmlp',
                         help='policy network type')
     policy.add_argument('--policy_kwargs',
@@ -114,7 +123,7 @@ def make_parser():
 
     value = parser.add_argument_group('value model')
     value.add_argument('--value_model',
-                       choices=['none', 'mlp', 'pairsleft', 'degree', 'tvm'],
+                       choices=['none', 'mlp', 'pairsleft', 'degree', 'sample', 'tvm', 'rnn', 'pool'],
                        default='none',
                        help='value network type')
     value.add_argument('--value_kwargs',
@@ -127,7 +136,7 @@ def make_parser():
                        help='the value model learning rate')
     value.add_argument('--value_updates',
                        type=int,
-                       default=1,
+                       default=40,
                        help='value model updates per epoch')
     value.add_argument('--value_weights',
                        type=str,
@@ -151,13 +160,13 @@ def make_parser():
                        type=lambda x: int(x) if x.lower() != 'none' else None,
                        default=64,
                        help='size of batches in training')
-    train.add_argument('--parallel',
+    train.add_argument('--sort_states',
                        type=lambda x: str(x).lower() == 'true',
-                       default=True,
-                       help='whether to parallelize rollouts')
+                       default=False,
+                       help='whether to sort the states before batching')
     train.add_argument('--use_gpu',
                        type=lambda x: str(x).lower() == 'true',
-                       default=True,
+                       default=False,
                        help='whether to use a GPU if available')
     train.add_argument('--verbose',
                        type=int,
@@ -175,7 +184,7 @@ def make_parser():
                        help='whether to append current time to run name')
     save.add_argument('--logdir',
                        type=str,
-                       default='data/runs',
+                       default='data/train',
                        help='base directory for training runs')
     save.add_argument('--save_freq',
                        type=int,
@@ -219,16 +228,8 @@ def make_policy_network(args):
             policy_network = AttentionPMLP(**args.policy_kwargs)
         elif args.policy_model == 'tpmlp':
             policy_network = TransformerPMLP(**args.policy_kwargs)
-        elif args.policy_model == 'tpmlp_q_scorer':
-            policy_network = TransformerPMLP_Score_Q(**args.policy_kwargs)
-        elif args.policy_model == 'tpmlp_MHA_scorer':
-            policy_network = TransformerPMLP_Score_MHA(**args.policy_kwargs)
-        elif args.policy_model == 'dval':
-            policy_network = TransformerPMLP_DVal(**args.policy_kwargs)
-        elif args.policy_model == 'pnet':
+        elif args.policy_model == 'pointer':
             policy_network = PointerNetwork(**args.policy_kwargs)
-        else:
-            pass
         batch = np.zeros((1, 10, 2 * args.k * int(args.distribution.split('-')[0])), dtype=np.int32)
     if args.environment == 'VectorEnv':
         batch = np.zeros((1, 10, 64), dtype=np.int32)
@@ -255,15 +256,18 @@ def make_value_network(args):
         value_network = MultilayerPerceptron(1, final_activation='linear', **args.value_kwargs)
         batch = np.zeros((1, 4), dtype=np.float32)
         value_network(batch)  # build network
+    elif args.value_model == 'pairsleft':
+        value_network = PairsLeftBaseline(gam=args.gam)
+    elif args.value_model == 'rnn':
+        value_network = RecurrentValueModel(**args.value_kwargs)
+    elif args.value_model == 'pool':
+        value_network = PoolingValueModel(**args.value_kwargs)
+    elif args.value_model == 'tvm':
+        value_network = TransformerValueModel(**args.value_kwargs)
+        batch = np.zeros((1, 10, 2 * args.k * int(args.distribution.split('-')[0])), dtype=np.int32)
+        value_network(batch)
     else:
-        if args.value_model == 'pairsleft':
-            value_network = PairsLeftBaseline(gam=args.gam)
-        elif args.value_model == 'tvm':
-            value_network = TransformerValueModel(**args.value_kwargs)
-            batch = np.zeros((1, 10, 2 * args.k * int(args.distribution.split('-')[0])), dtype=np.int32)
-            value_network(batch)
-        else:
-            value_network = 'env'
+        value_network = 'env'
     if args.value_weights != "":
         value_network.load_weights(args.value_weights)
     return value_network
@@ -273,10 +277,20 @@ def make_agent(args):
     """Return the agent for this run."""
     policy_network = make_policy_network(args)
     value_network = make_value_network(args)
-    agent_fn = PGAgent if args.algorithm == 'pg' else PPOAgent
-    agent = agent_fn(policy_network=policy_network, policy_lr=args.policy_lr, policy_updates=args.policy_updates,
-                     value_network=value_network, value_lr=args.value_lr, value_updates=args.value_updates,
-                     gam=args.gam, lam=args.lam, kld_limit=args.policy_kld_limit, pv_function=args.score)
+    if args.algorithm == 'pg':
+        agent = PGAgent(policy_network=policy_network,policy_lr=args.policy_lr, policy_updates=args.policy_updates,
+                        value_network=value_network, value_lr=args.value_lr, value_updates=args.value_updates,
+                        gam=args.gam, lam=args.lam, kld_limit=args.policy_kld_limit, ent_bonus=args.ent_bonus)
+    elif args.algorithm == 'ppo-clip':
+        agent = PPOAgent(policy_network=policy_network, method='clip', eps=args.eps,
+                         policy_lr=args.policy_lr, policy_updates=args.policy_updates,
+                         value_network=value_network, value_lr=args.value_lr, value_updates=args.value_updates,
+                         gam=args.gam, lam=args.lam, kld_limit=args.policy_kld_limit, ent_bonus=args.ent_bonus)
+    elif args.algorithm == 'ppo-penalty':
+        agent = PPOAgent(policy_network=policy_network, method='penalty', c=args.c,
+                         policy_lr=args.policy_lr, policy_updates=args.policy_updates,
+                         value_network=value_network, value_lr=args.value_lr, value_updates=args.value_updates,
+                         gam=args.gam, lam=args.lam, kld_limit=args.policy_kld_limit, ent_bonus=args.ent_bonus)
     return agent
 
 
@@ -300,13 +314,14 @@ def make_logdir(args):
 
 if __name__ == '__main__':
     args = make_parser().parse_args()
-    if not args.use_gpu or args.parallel:
+    if not args.use_gpu:
         os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+    if args.agent_seed is not None:
+        tf.random.set_seed(args.agent_seed)
     env = make_env(args)
     agent = make_agent(args)
     logdir = make_logdir(args)
     print("Saving run in", logdir)
     agent.train(env, episodes=args.episodes, epochs=args.epochs,
                 save_freq=args.save_freq, logdir=logdir, verbose=args.verbose,
-                max_episode_length=args.max_episode_length, parallel=args.parallel,
-                batch_size=args.batch_size)
+                max_episode_length=args.max_episode_length, batch_size=args.batch_size)

@@ -11,7 +11,10 @@ newPackage(
 
 export {"commutingMatrices", "cyclic", "eco", "katsura", "noon", "reimer",
         "chemkin", "haas", "jason210", "kotsireas", "lichtblau", "twistedCubic", "virasoro",
-        "randomBinomialIdeal", "degreeDistribution", "Pure", "randomPolynomialIdeal"}
+        "randomBinomialIdeal", "degreeDistribution", "Pure", "randomPolynomialIdeal",
+	"randomToricIdeal"}
+
+needsPackage "FourTiTwo"
 
 -------------------------------------------------------------------------------
 --- ideal families
@@ -364,6 +367,142 @@ randomPolynomialIdeal(PolynomialRing, List, ZZ, RR) := Ideal => opts -> (R, D, s
 
     ideal for i to s-1 list
               randomPolynomial(D, lambda, R)
+    )
+
+-------------------------------------------------------------------------------
+--- random toric ideals
+
+--- generated as ker A from a integer matrix A, which is a matrix of a random monomial map. 
+--- several models are included:
+---    - (ZZ,ZZ,ZZ) := (n,D,M) -> fixed number of (Laurent) monomials (so columns of matrix A),
+---                               all with given L-1 norm, selected uniformly at random
+---    - (ZZ,ZZ,ZZ,ZZ) := (n,L,U,M) -> fixed number of monomials with given positive degree & given genative degree,
+---                                    selected uniformly at random (this allows for,e.g., putting neg. degree 0,
+---                                    so only pos. exponents appear)
+---    - (ZZ,ZZ,RR) := (n,D,p) -> E-R model (given parameter p), all with given L-1 norm
+---    - (ZZ,ZZ,ZZ,RR) := (n,L,U,p) -> E-R model (given parameter p), with given positive degree & given negative degree
+---    - (ZZ,ZZ,List) := (n,D,pOrM) and (ZZ,ZZ,ZZ,List) := (n,L,U,pOrM) -> graded model (not sure if complete yet?)
+-------------------------------------------------------------------------------
+allLaurentMonomials = method(TypicalValue=>List);
+allLaurentMonomials(ZZ,ZZ) := (n,D) -> (
+    -- input n 
+    -- input D
+    a := symbol a;
+    x := symbol x;
+    R:=ZZ/101[x_1..x_n,a_1..a_n];
+    I:=ideal apply(toList(1..n),i-> a_i*x_i-1);
+    F:=R/I;
+    L:=QQ[x_1..x_n, MonomialOrder=>Lex,Inverses=>true];
+    phi := map( L , F ,     matrix{join(toList(x_1..x_n), apply(toList(1..n),i->x_i^(-1)) ) } ); 
+    B  :=  flatten flatten apply(toList(1..D),d->entries basis(d,F));
+    apply(B,b->phi b)
+)
+allLaurentMonomials(ZZ,ZZ,ZZ) := (n,L,U) -> (
+    -- input n
+    -- input L<0
+    -- input U>0
+    a := symbol a;
+    x := symbol x;
+    R:=ZZ/101[x_1..x_n,a_1..a_n, Degrees=>join(toList(n:{1,0}), toList(n:{0,-1}))];
+    I:=ideal apply(toList(1..n), i->a_i*x_i-1);
+    F:=R/I;
+    K:=QQ[x_1..x_n, MonomialOrder=>Lex,Inverses=>true];
+    phi:= map(K,F, matrix{join(toList(x_1..x_n), apply(toList(1..n),i->x_i^(-1)))});
+    B:= delete(sub(1,F), flatten flatten flatten apply(toList(0..U), i->apply(toList(L..0),j->entries basis({i,j},F))));
+    apply(B, b->phi b)
+)
+
+randomLaurentMonomialSet = method();
+randomLaurentMonomialSet(ZZ,ZZ,ZZ) := (n,D,M) -> (
+    -- fixed M model with L1 norm monomial generationg model
+    allMonomials := allLaurentMonomials(n,D);
+    take(random(allMonomials),M)
+)
+randomLaurentMonomialSet(ZZ,ZZ,RR) := (n,D,p) -> (
+    -- ER model with L1 norm monomial generating model
+    allMonomials := allLaurentMonomials(n,D);
+    select(allMonomials, m->random(0.0,1.0)<=p)
+)
+randomLaurentMonomialSet(ZZ,ZZ,ZZ,ZZ) := (n,L,U,M) -> (
+    -- fixed M model with positive degree sum/negative degree sum monomial generating model
+    allMonomials := allLaurentMonomials(n,L,U);
+    take(random(allMonomials),M)
+)
+randomLaurentMonomialSet(ZZ,ZZ,ZZ,RR) := (n,L,U,p) -> (
+    -- ER model with positive degree sum/negative degree sum monomial generating model
+    allMonomials := allLaurentMonomials(n,L,U);
+    select(allMonomials, m->random(0.0,1.0)<=p)
+)
+randomLaurentMonomialSet(ZZ,ZZ,List) := (n,D,pOrM) -> (
+    -- start of graded model
+    allMonomials := sort values partition(m-> first degree m, allLaurentMonomials(n,D));
+    if all(pOrM,q->instance(q,ZZ)) then (
+        flatten apply(toList(1..(2*D+1)), d->take(random(allMonomials_(d-1)), pOrM_(d-1)))
+    )
+    else if all(pOrM,q->instance(q,RR)) then (
+        flatten apply(toList(1..(2*D+1)), d->select(allMonomials_(d-1),m->random(0.0,1.0)<=pOrM_(d-1)))
+    )
+)
+randomLaurentMonomialSet(ZZ,ZZ,ZZ,List) := (n,L,U,pOrM) -> (
+    -- start of graded model
+    allMonomials := sort values partition(m-> first degree m, allLaurentMonomials(n,L,U));
+    if all(pOrM,q->instance(q,ZZ)) then (
+        flatten apply(toList(1..(U-L+1)), d->take(random(allMonomials_(d-1)), pOrM_(d-1)))
+    )
+    else if all(pOrM,q->instance(q,RR)) then (
+        flatten apply(toList(1..(U-L+1)), d->select(allMonomials_(d-1),m->random(0.0,1.0)<=pOrM_(d-1)))
+    )
+)
+
+randomToricIdeal = method(Options => {
+	CoefficientRing => ZZ/32003,
+	MonomialOrder => GRevLex,
+	Constants => false, -- figure out what to do with this below? use/kill? 
+	Degrees => "Uniform"
+	})
+randomToricIdeal(ZZ,ZZ,ZZ) := Ideal => opts -> (n,D,M) -> (
+    -- n = a number of target variables = number of rows of A
+    -- D = max degree of monomials 
+    -- M = number of monomials desired  --- this will be the number of columns of A. 
+    -- M = desired number of monomials = numer of source  variables = numcols A
+    -- fixed M model with L1 norm monomial generationg model
+    A := transpose matrix flatten apply(randomLaurentMonomialSet(n,D,M), m->exponents m);
+    R := (opts.CoefficientRing)[vars(0..M-1), MonomialOrder => opts.MonomialOrder];
+    toricMarkov (A,R) 
+    )
+randomToricIdeal(ZZ,ZZ,RR) := Ideal => opts -> (n,D,p) -> (
+    -- n = a number of variables...for mons. TO DO
+    -- D = max degree of monomials
+    -- p = prob of selecting each monomial  (the E-R-type model)
+    -- return a toric ideal
+    -- ER model with L1 norm monomial generating model
+    A := transpose matrix flatten apply(randomLaurentMonomialSet(n,D,p), m->exponents m);
+    n = numcols A;
+    R := (opts.CoefficientRing)[vars(0..n-1), MonomialOrder => opts.MonomialOrder];
+    toricMarkov (A,R) 
+    )
+randomToricIdeal(ZZ,ZZ,ZZ,ZZ) := Ideal => opts -> (n,L,U,M) -> (
+    -- n = a number of target variables = number of rows of A
+    -- L = max neg degree of monomials
+    -- U = max pos degree of monomials
+    -- M = desired number of monomials = numer of source  variables = numcols A
+    -- return a toric ideal in M variables 
+    -- fixed M model with positive degree sum/negative degree sum monomial generating model
+    A := transpose matrix flatten apply(randomLaurentMonomialSet(n,L,U,M), m->exponents m);
+    R := (opts.CoefficientRing)[vars(0..M-1), MonomialOrder => opts.MonomialOrder];
+    toricMarkov (A,R) 
+    )
+randomToricIdeal(ZZ,ZZ,ZZ,RR) := Ideal => opts -> (n,L,U,p) -> (
+    -- n = a number of variables...for mons. TO DO
+    -- L = max neg degree of monomials
+    -- U = max pos degree of monomials
+    -- p = probability of selecting each monomial (the E-R-type model)
+    -- return a toric ideal
+    -- ER model with positive degree sum/negative degree sum monomial generating model
+    A := transpose matrix flatten apply(randomLaurentMonomialSet(n,L,U,p), m->exponents m);
+    n = numcols A;
+    R := (opts.CoefficientRing)[vars(0..n-1), MonomialOrder => opts.MonomialOrder];
+    toricMarkov (A,R) 
     )
 
 beginDocumentation()

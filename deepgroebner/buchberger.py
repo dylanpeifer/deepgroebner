@@ -3,6 +3,7 @@
 import bisect
 import numpy as np
 import sympy as sp
+import IPython
 
 from .ideals import IdealGenerator, parse_ideal_dist
 

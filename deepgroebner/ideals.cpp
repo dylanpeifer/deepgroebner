@@ -100,14 +100,6 @@ std::discrete_distribution<int> degree_distribution(int n, int d, DistributionTy
 }
 
 
-template<class Iter>
-Iter choice(Iter begin, Iter end, std::default_random_engine& rng) {
-  std::uniform_int_distribution<> dist(0, std::distance(begin, end) - 1);
-  std::advance(begin, dist(rng));
-  return begin;
-}
-
-
 std::unique_ptr<IdealGenerator> parse_ideal_dist(const std::string& ideal_dist) {
 
   // split ideal_dist on '-'

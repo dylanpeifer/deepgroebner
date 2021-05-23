@@ -3,8 +3,11 @@
  */
 
 #include <algorithm>
+#include <functional>
 #include <map>
 #include <memory>
+#include <optional>
+#include <random>
 #include <vector>
 
 #include "buchberger.h"
@@ -120,27 +123,31 @@ std::vector<Polynomial> interreduce(const std::vector<Polynomial>& G) {
 
 
 std::pair<std::vector<Polynomial>, BuchbergerStats> buchberger(const std::vector<Polynomial>& F,
+							       SelectionType selection,
 							       EliminationType elimination,
 							       RewardType rewards,
 							       bool sort_input,
 							       bool sort_reducers,
-							       double gamma) {
+							       double gamma,
+							       std::optional<int> seed) {
   std::vector<Polynomial> G;
   std::vector<SPair> P;
   for (const Polynomial& f : F) {
     update(G, P, f, elimination);
   }
 
-  return buchberger(G, P, elimination, rewards, sort_reducers, gamma);
+  return buchberger(G, P, selection, elimination, rewards, sort_reducers, gamma, seed);
 }
 
 
 std::pair<std::vector<Polynomial>, BuchbergerStats> buchberger(const std::vector<Polynomial>& F,
 							       const std::vector<SPair>& S,
+							       SelectionType selection,
 							       EliminationType elimination,
 							       RewardType rewards,
 							       bool sort_reducers,
-							       double gamma) {
+							       double gamma,
+							       std::optional<int> seed) {
   std::vector<Polynomial> G = F;
   std::vector<Polynomial> G_ = F;
   std::vector<SPair> P = S;
@@ -150,34 +157,91 @@ std::pair<std::vector<Polynomial>, BuchbergerStats> buchberger(const std::vector
   if (sort_reducers)
     std::sort(G_.begin(), G_.end(), [](const Polynomial& f, const Polynomial& g) { return f.LM() < g.LM(); });
 
-  auto first = [](const SPair& p1, const SPair& p2) {
-		 return (p1.j < p2.j) || (p1.j == p2.j && p1.i < p2.i);
-	       };
-
-  auto degree = [&G](const SPair& p1, const SPair& p2) {
-		  Monomial m1 = lcm(G[p1.i].LM(), G[p1.j].LM());
-		  Monomial m2 = lcm(G[p2.i].LM(), G[p2.j].LM());
-		  return m1.deg() < m2.deg();
-		};
-
-  auto normal = [&G](const SPair& p1, const SPair& p2) {
-		  Monomial m1 = lcm(G[p1.i].LM(), G[p1.j].LM());
-		  Monomial m2 = lcm(G[p2.i].LM(), G[p2.j].LM());
-		  return m1 < m2;
-		};
-
-  auto sugar = [&G](const SPair& p1, const SPair& p2) {
-		  Monomial m1 = lcm(G[p1.i].LM(), G[p1.j].LM());
-		  Monomial m2 = lcm(G[p2.i].LM(), G[p2.j].LM());
-		  int s1 = std::max(G[p1.i].sugar() + (m1 / G[p1.i].LM()).deg(),
-				    G[p1.j].sugar() + (m1 / G[p1.j].LM()).deg());
-		  int s2 = std::max(G[p2.i].sugar() + (m2 / G[p2.i].LM()).deg(),
-				    G[p2.j].sugar() + (m2 / G[p2.j].LM()).deg());
-		  return (s1 < s2) || (s1 == s2 && m1 < m2);
-	       };
+  std::function<bool(const SPair&, const SPair&)> select;
+  bool random;
+  std::default_random_engine rng;
+  std::random_device rand;
+  switch (selection) {
+  case SelectionType::First:
+    select = [](const SPair& p1, const SPair& p2) {
+	       return std::tie(p1.j, p1.i) < std::tie(p2.j, p2.i);
+	     };
+    random = false;
+    break;
+  case SelectionType::Degree:
+    select = [&G](const SPair& p1, const SPair& p2) {
+	       int d1 = lcm(G[p1.i].LM(), G[p1.j].LM()).deg();
+	       int d2 = lcm(G[p2.i].LM(), G[p2.j].LM()).deg();
+	       return std::tie(d1, p1.j, p1.i) < std::tie(d2, p2.j, p2.i);
+	     };
+    random = false;
+    break;
+  case SelectionType::Normal:
+    select = [&G](const SPair& p1, const SPair& p2) {
+	       Monomial m1 = lcm(G[p1.i].LM(), G[p1.j].LM());
+	       Monomial m2 = lcm(G[p2.i].LM(), G[p2.j].LM());
+	       return std::tie(m1, p1.j, p1.i) < std::tie(m2, p2.j, p2.i);
+	     };
+    random = false;
+    break;
+  case SelectionType::Sugar:
+    select = [&G](const SPair& p1, const SPair& p2) {
+	       Monomial m1 = lcm(G[p1.i].LM(), G[p1.j].LM());
+	       Monomial m2 = lcm(G[p2.i].LM(), G[p2.j].LM());
+	       int s1 = std::max(G[p1.i].sugar() + (m1 / G[p1.i].LM()).deg(),
+				 G[p1.j].sugar() + (m1 / G[p1.j].LM()).deg());
+	       int s2 = std::max(G[p2.i].sugar() + (m2 / G[p2.i].LM()).deg(),
+				 G[p2.j].sugar() + (m2 / G[p2.j].LM()).deg());
+	       return std::tie(s1, m1, p1.j, p1.i) < std::tie(s2, m2, p2.j, p2.i);
+	     };
+    random = false;
+    break;
+  case SelectionType::Random:
+    if (seed) {
+      rng.seed(seed.value());
+    } else {
+      rng.seed(rand());
+    }
+    random = true;
+    break;
+  case SelectionType::Last:
+    select = [](const SPair& p1, const SPair& p2) {
+	       return std::tie(p1.j, p1.i) > std::tie(p2.j, p2.i);
+	     };
+    random = false;
+    break;
+  case SelectionType::Codegree:
+    select = [&G](const SPair& p1, const SPair& p2) {
+	       int d1 = lcm(G[p1.i].LM(), G[p1.j].LM()).deg();
+	       int d2 = lcm(G[p2.i].LM(), G[p2.j].LM()).deg();
+	       return std::tie(d1, p1.j, p1.i) > std::tie(d2, p2.j, p2.i);
+	     };
+    random = false;
+    break;
+  case SelectionType::Strange:
+    select = [&G](const SPair& p1, const SPair& p2) {
+	       Monomial m1 = lcm(G[p1.i].LM(), G[p1.j].LM());
+	       Monomial m2 = lcm(G[p2.i].LM(), G[p2.j].LM());
+	       return std::tie(m1, p1.j, p1.i) > std::tie(m2, p2.j, p2.i);
+	     };
+    random = false;
+    break;
+  case SelectionType::Spice:
+    select = [&G](const SPair& p1, const SPair& p2) {
+	       Monomial m1 = lcm(G[p1.i].LM(), G[p1.j].LM());
+	       Monomial m2 = lcm(G[p2.i].LM(), G[p2.j].LM());
+	       int s1 = std::max(G[p1.i].sugar() + (m1 / G[p1.i].LM()).deg(),
+				 G[p1.j].sugar() + (m1 / G[p1.j].LM()).deg());
+	       int s2 = std::max(G[p2.i].sugar() + (m2 / G[p2.i].LM()).deg(),
+				 G[p2.j].sugar() + (m2 / G[p2.j].LM()).deg());
+	       return std::tie(s1, m1, p1.j, p1.i) > std::tie(s2, m2, p2.j, p2.i);
+	     };
+    random = false;
+    break;
+  }
 
   while (!P.empty()) {
-    auto iter = std::min_element(P.begin(), P.end(), degree);
+    auto iter = random ? choice(P.begin(), P.end(), rng) : std::min_element(P.begin(), P.end(), select);
     SPair p = *iter;
     P.erase(iter);
     auto [r, s] = reduce(spoly(G[p.i], G[p.j]), G_);
@@ -212,6 +276,26 @@ BuchbergerEnv::BuchbergerEnv(std::string ideal_dist,
 }
 
 
+BuchbergerEnv::BuchbergerEnv(const BuchbergerEnv& other)
+    : ideal_gen(other.ideal_gen->copy()),
+      G(other.G), P(other.P), elimination(other.elimination), rewards(other.rewards),
+      sort_input(other.sort_input), sort_reducers(other.sort_reducers), G_(other.G_) {
+}
+
+
+BuchbergerEnv& BuchbergerEnv::operator=(const BuchbergerEnv& other) {
+    // the only non-default copy is ideal_gen
+    ideal_gen = other.ideal_gen->copy();
+    G = other.G;
+    P = other.P;
+    elimination = other.elimination;
+    rewards = other.rewards;
+    sort_input = other.sort_input;
+    sort_reducers = other.sort_reducers;
+    G_ = other.G_;
+    return *this;
+}
+
 void BuchbergerEnv::reset() {
   std::vector<Polynomial> F = ideal_gen->next();
   if (sort_input)
@@ -245,8 +329,24 @@ double BuchbergerEnv::step(SPair action) {
 }
 
 
-double BuchbergerEnv::value(double gamma) const {
-  auto [G_, stats] = buchberger(G, P, elimination, rewards, sort_reducers, gamma);
+double BuchbergerEnv::value(std::string strategy, double gamma) const {
+  if (strategy == "sample") {
+    auto [G_, stats] = buchberger(G, P, SelectionType::Degree, elimination, rewards, sort_reducers, gamma);
+    double best = stats.discounted_return;
+    for (int i = 0; i < 100; i++) {
+      std::tie(G_, stats) = buchberger(G, P, SelectionType::Random, elimination, rewards, sort_reducers, gamma);
+      best = std::max(best, stats.discounted_return);
+    }
+    return best;
+  }
+  std::map<std::string, SelectionType> select = {
+      {"first", SelectionType::First},
+      {"degree", SelectionType::Degree},
+      {"normal", SelectionType::Normal},
+      {"sugar", SelectionType::Sugar},
+      {"random", SelectionType::Random}
+  };
+  auto [G_, stats] = buchberger(G, P, select[strategy], elimination, rewards, sort_reducers, gamma);
   return stats.discounted_return;
 }
 

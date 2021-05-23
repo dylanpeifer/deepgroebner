@@ -66,7 +66,11 @@ std::discrete_distribution<int> degree_distribution(int n,
  * Return an iterator to an element picked uniformly at random.
  */
 template<class Iter>
-Iter choice(Iter begin, Iter end, std::default_random_engine& rng);
+Iter choice(Iter begin, Iter end, std::default_random_engine& rng) {
+  std::uniform_int_distribution<> dist(0, std::distance(begin, end) - 1);
+  std::advance(begin, dist(rng));
+  return begin;
+}
 
 
 /**
@@ -84,6 +88,8 @@ class IdealGenerator {
 public:
 
   virtual std::vector<Polynomial> next() = 0;
+
+  virtual ~IdealGenerator() {};
 
   virtual void seed(int seed) {}
 

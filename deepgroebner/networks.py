@@ -49,7 +49,7 @@ class MultilayerPerceptron(tf.keras.Model):
 class ParallelEmbeddingLayer(tf.keras.layers.Layer):
     """A layer for computing a nonlinear embedding of non-negative integer feature vectors.
 
-    This layer is used with the LeadMonomialsWrapper to embed the exponent vectors of pairs
+    This layer is used with the LeadMonomialsEnv to embed the exponent vectors of pairs
     into feature vectors. Each vector is embedded independently by a single learned multilayer
     perceptron. A mask is generated and attached to the output based on padding by -1.
 
@@ -98,7 +98,7 @@ class ParallelEmbeddingLayer(tf.keras.layers.Layer):
 class RecurrentEmbeddingLayer(tf.keras.layers.Layer):
     """A layer for computing a nonlinear embedding of non-negative integer feature vectors.
 
-    This layer is used with the LeadMonomialsWrapper to embed the exponent vectors of pairs
+    This layer is used with the LeadMonomialsEnv to embed the exponent vectors of pairs
     into feature vectors. An RNN is used so vector embeddings can depend on other vectors.
     A mask is generated and attached to the output based on padding by -1.
 
@@ -142,6 +142,65 @@ class RecurrentEmbeddingLayer(tf.keras.layers.Layer):
             X, *state = layer(X, mask=mask)
         output, *state = self.final_layer(X, mask=mask, initial_state=initial_state)
         return (output, *state)
+
+    def compute_mask(self, batch, mask=None):
+        return tf.math.not_equal(batch[:, :, -1], -1)
+
+
+class MonomialEncodingLayer(tf.keras.layers.Layer):
+    """A layer for computing a vocab-like embedding of monomials.
+
+    This layer is used with the LeadMonomialsEnv to map pairs to feature vectors.
+    It does this by learning an embedding on monomials and concatenating the embeddings
+    for the the monomials shown for each pair. Not all monomials are embeddable - any
+    monomial with a variable raised to a power greater than `max_power` is mapped to the
+    same fixed overflow value. This means that this layer has generally worse
+    performance than the ParallelEmbeddingLayer.
+
+    Parameters
+    ----------
+    dim : int
+        Dimension of the embedded monomial vectors (output dim will be 2 * dim * k).
+    n : int 
+        Number of variables in the polynomials.
+    k : int
+        Number of lead terms shown in each polynomial.
+    max_power : int
+        Maximum power of a variable in an embeddable monomial.
+
+    """
+
+    def __init__(self, dim, n=3, k=1, max_power=10):
+        super(MonomialEncodingLayer, self).__init__()
+        self.dim = dim
+        self.n = n
+        self.k = k
+        self.max_power = max_power
+        self.embed = tf.keras.layers.Embedding((max_power + 1) ** n + 1, dim, input_length=2*k)
+
+    def call(self, batch):
+        """Return the embedding for this batch.
+
+        Parameters
+        ----------
+        batch : `Tensor` of type `tf.int32` and shape (batch_dim, padded_dim, 2 * n * k)
+            Input batch, with padded rows indicated by -1 and all other values non-negative.
+
+        Returns
+        -------
+        output : `Tensor` of type `tf.float32` and shape (batch_dim, padded_dim, 2 * dim * k)
+            Embedding of the input batch with attached mask indicating valid rows.
+
+        """
+        batch += tf.cast(tf.math.equal(batch, -1), tf.int32)
+        batch_size = tf.shape(batch)[0]
+        monomials = tf.reshape(batch, (batch_size, -1, self.n))
+        powers = tf.math.cumprod(tf.fill((self.n, 1), self.max_power + 1), exclusive=True)
+        values = tf.squeeze(tf.matmul(monomials, powers))
+        valid = tf.cast(tf.reduce_max(monomials, axis=-1) <= self.max_power, tf.int32)
+        encoded = values * valid + (1 - valid) * (self.max_power + 1) ** self.n
+        encoded = tf.reshape(encoded, (batch_size, -1, 2 * self.k))
+        return tf.reshape(self.embed(encoded), (batch_size, -1, 2 * self.k * self.dim))
 
     def compute_mask(self, batch, mask=None):
         return tf.math.not_equal(batch[:, :, -1], -1)
@@ -259,7 +318,7 @@ class ValueSelfAttentionLayer(tf.keras.layers.Layer):
 
     """
 
-    def __init__(self, dim, softmax = True, n_heads=1):
+    def __init__(self, dim, n_heads=1):
         super(ValueSelfAttentionLayer, self).__init__()
         assert dim % n_heads == 0, "number of heads must divide dimension"
         self.dim = dim
@@ -269,11 +328,8 @@ class ValueSelfAttentionLayer(tf.keras.layers.Layer):
         self.Wv = tf.keras.layers.Dense(dim)
         self.dense = tf.keras.layers.Dense(dim)
         self.Value_Q = self.set_q(dim)
-        
-        if softmax:
-            self.attention_function = tf.nn.softmax
-        else:
-            self.attention_function = tf.nn.sigmoid
+
+        self.attention_function = tf.nn.sigmoid
         self.supports_masking = False # Suspicious that it is true
 
     def set_q(self, dim):
@@ -299,7 +355,7 @@ class ValueSelfAttentionLayer(tf.keras.layers.Layer):
         K = split_heads(self.Wk(batch), batch_size)
         V = split_heads(self.Wv(batch), batch_size)
         mask = mask[:, tf.newaxis, tf.newaxis, :]
-        X, attn_weights = scaled_dot_product_attention(Q, K, V, mask=mask) 
+        X, attn_weights = scaled_dot_product_attention(Q, K, V, self.attention_function, mask=mask) 
         X = tf.transpose(X, perm=[0, 2, 1, 3])
         output = tf.reshape(X, (batch_size, -1, self.dim)) # (batch_dim, 1, dim)
         return output
@@ -348,10 +404,10 @@ class TransformerLayer(tf.keras.layers.Layer):
         """
         X1 = self.attention(batch, mask=mask)
         X1 = self.dropout1(X1, training=training)
-        X1 = self.layer_norm1(batch + X1)
+        X1 = self.layer_norm1(batch + X1, training=training)
         X2 = self.dense2(self.dense1(X1))
         X2 = self.dropout2(X2, training=training)
-        output = self.layer_norm2(X1 + X2)
+        output = self.layer_norm2(X1 + X2, training=training)
         return output
 
 
@@ -527,6 +583,8 @@ class AttentionPMLP(tf.keras.Model):
     ----------
     dim : int
         Positive integer dimension of the attention layer.
+    n_heads : int, optional
+        Positive integer number of heads in attention layer (must divide `dim`).
     activation : {'relu', 'selu', 'elu', 'tanh', 'sigmoid'}, optional
         Activation for the embedding.
     final_activation : {'log_softmax', 'softmax'}, optional
@@ -534,10 +592,10 @@ class AttentionPMLP(tf.keras.Model):
 
     """
 
-    def __init__(self, dim, activation='relu', final_activation='log_softmax'):
+    def __init__(self, dim, n_heads=1, activation='relu', final_activation='log_softmax'):
         super(AttentionPMLP, self).__init__()
         self.embedding = ParallelEmbeddingLayer(dim, [], final_activation=activation)
-        self.trans = SelfAttentionLayer(dim, n_heads=4)
+        self.trans = SelfAttentionLayer(dim, n_heads=n_heads)
         self.deciding = ParallelDecidingLayer([], final_activation=final_activation)
 
     def call(self, batch):
@@ -561,6 +619,8 @@ class TransformerPMLP(tf.keras.Model):
         Positive integer dimension of the transformer attention layer.
     hidden_dim : int
         Positive integer dimension of the transformer hidden feedforward layer.
+    n_heads : int, optional
+        Positive integer number of heads in attention layer (must divide `dim`).
     activation : {'relu', 'selu', 'elu', 'tanh', 'sigmoid'}, optional
         Activation for the embedding.
     final_activation : {'log_softmax', 'softmax'}, optional
@@ -576,7 +636,7 @@ class TransformerPMLP(tf.keras.Model):
             self.attn.append(TransformerLayer(dim, hidden_dim, softmax=softmax, n_heads=n_heads))
         self.deciding = ParallelDecidingLayer([], final_activation=final_activation)
 
-    def call(self, batch):
+    def call(self, batch, training=False):
         X = self.embedding(batch)
         for layer in self.attn:
             X = layer(X)
@@ -1033,12 +1093,61 @@ class AgentBaseline:
     def load_weights(self, filename):
         pass
 
+
 def split_heads(self, batch, batch_size):
     """Return batch reshaped for multihead attention."""
     X = tf.reshape(batch, (batch_size, -1, self.n_heads, self.depth))
     return tf.transpose(X, perm=[0, 2, 1, 3])
 
-def scaled_dot_product_attention(self, Q, K, V, mask=None):
+
+class RecurrentValueModel(tf.keras.Model):
+
+    def __init__(self, units):
+        super(RecurrentValueModel, self).__init__()
+        self.embedding = ParallelEmbeddingLayer(units, [])
+        self.rnn = tf.keras.layers.LSTM(units)
+        self.dense = tf.keras.layers.Dense(1, activation='linear')
+
+    def call(self, batch):
+        return self.dense(self.rnn(self.embedding(batch)))
+
+
+class GlobalSumPooling1D(tf.keras.layers.Layer):
+
+    def __init__(self):
+        super(GlobalSumPooling1D, self).__init__()
+
+    def call(self, batch, mask=None):
+        if mask is not None:
+            batch = batch * tf.cast(tf.expand_dims(mask, -1), tf.float32)
+        return tf.reduce_sum(batch, axis=-2)
+
+
+class PoolingValueModel(tf.keras.Model):
+
+    def __init__(self, hidden_layers1, hidden_layers2, method='max'):
+        super(PoolingValueModel, self).__init__()
+        self.embedding = ParallelEmbeddingLayer(hidden_layers1[-1], hidden_layers1[:-1])
+        if method == 'max':
+            self.pooling = tf.keras.layers.GlobalMaxPooling1D()
+        elif method == 'mean':
+            self.pooling = tf.keras.layers.GlobalAveragePooling1D()
+        elif method == 'sum':
+            self.pooling = GlobalSumPooling1D()
+        else:
+            raise ValueError('invalid method')
+        self.hidden_layers = [tf.keras.layers.Dense(u, activation='relu') for u in hidden_layers2]
+        self.final_layer = tf.keras.layers.Dense(1, activation='linear')
+
+    def call(self, batch):
+        X = self.pooling(self.embedding(batch))
+        for layer in self.hidden_layers:
+            X = layer(X)
+        return self.final_layer(X)
+
+
+@tf.function
+def scaled_dot_product_attention(Q, K, V, attention_function=tf.nn.softmax, mask=None):
     """Return calculated vectors and attention weights.
 
     Parameters
@@ -1065,6 +1174,30 @@ def scaled_dot_product_attention(self, Q, K, V, mask=None):
     attention_logits = QK / tf.math.sqrt(d)
     if mask is not None:
         attention_logits += tf.cast(~mask, tf.float32) * -1e9
-    attention_weights = self.attention_function(attention_logits) # Add 1 suspicious
+    attention_weights = attention_function(attention_logits) # Add 1 suspicious
     output = tf.matmul(attention_weights, V)
     return output, attention_weights
+
+
+class AttentionPoolingLayer(tf.keras.layers.Layer):
+    
+    def __init__(self, dim):
+        super(AttentionPoolingLayer, self).__init__()
+        self.dim = dim
+        self.Wk = tf.keras.layers.Dense(dim)
+        self.Wv = tf.keras.layers.Dense(dim)
+        self.dense = tf.keras.layers.Dense(1)
+    
+    def build(self, batch_input_shape):
+        self.Q = self.add_weight(name='query',
+                                 shape=[1, self.dim],
+                                 initializer='glorot_normal')
+        super(AttentionPoolingLayer, self).build(batch_input_shape)
+
+    def call(self, batch, mask=None):
+        K = self.Wk(batch)
+        V = self.Wv(batch)
+        if mask is not None:
+            mask = mask[:, tf.newaxis, tf.newaxis, :]
+        X, attn_weights = scaled_dot_product_attention(self.Q, K, V, mask=mask)
+        return tf.squeeze(self.dense(X), axis=-1)

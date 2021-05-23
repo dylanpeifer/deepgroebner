@@ -3,6 +3,7 @@
 
 #include <array>
 #include <iostream>
+#include <string>
 #include <vector>
 
 
@@ -91,5 +92,30 @@ public:
 private:
   int sug;
 };
+
+
+/**
+ * Return the polynomial from the given string.
+ *
+ * Polynomials have the form
+ *
+ *  polynomial = term polynomial
+ *        term = integer * monomial
+ *             | integer
+ *             | monomial
+ *             | + term
+ *             | - term
+ *    monomial = variable ^ integer * monomial
+ *             | variable ^ integer
+ *             | variable * monomial
+ *             | variable
+ *
+ * where variables are ["a", "b", ..., "h"], integers are sequences of
+ * ["0", "1", ..., "9"], and no spaces are allowed.
+ *
+ * This function does not do any error checking, so be careful!
+ */
+Polynomial parse_polynomial(const std::string& poly_string);
+
 
 #endif
