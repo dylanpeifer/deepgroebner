@@ -15,6 +15,8 @@ from deepgroebner.pg import PGAgent
 from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, AttentionPMLP, TransformerPMLP, PointerNetwork
 from deepgroebner.wrapped import CLeadMonomialsEnv
 
+from deepgroebner.environments import AlphabeticalEnv
+
 
 def make_parser():
     """Return the command line argument parser for this script."""
@@ -24,7 +26,7 @@ def make_parser():
     env = parser.add_argument_group('environment', 'environment type')
     env.add_argument('--environment',
                      choices=['RandomBinomialIdeal', 'RandomIdeal',
-                              'CartPole-v0', 'CartPole-v1', 'LunarLander-v2'],
+                              'CartPole-v0', 'CartPole-v1', 'LunarLander-v2', 'AlphabeticalEnv'],
                      default='RandomBinomialIdeal',
                      help='evaluation environment')
     env.add_argument('--env_seed',
@@ -109,6 +111,8 @@ def make_env(args):
     """Return the evaluation environment for this run."""
     if args.environment in ['CartPole-v0', 'CartPole-v1', 'LunarLander-v2']:
         env = gym.make(args.environment)
+    elif args.environment == 'AlphabeticalEnv':
+        env = AlphabeticalEnv()
     elif args.use_cython:
         env = CLeadMonomialsEnv(args.distribution, elimination=args.elimination, rewards=args.rewards, k=args.k)
     else:

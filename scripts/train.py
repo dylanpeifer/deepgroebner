@@ -11,9 +11,9 @@ import tensorflow as tf
 
 from deepgroebner.buchberger import LeadMonomialsEnv, BuchbergerAgent
 from deepgroebner.pg import PGAgent, PPOAgent
-from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, AttentionPMLP, TransformerPMLP, PairsLeftBaseline, AgentBaseline, RecurrentValueModel, PoolingValueModel, PointerNetwork
+from deepgroebner.networks import MultilayerPerceptron, ParallelMultilayerPerceptron, AttentionPMLP, TransformerPMLP, PairsLeftBaseline, AgentBaseline, PointerNetwork, RecurrentValueModel, PoolingValueModel
 from deepgroebner.wrapped import CLeadMonomialsEnv
-
+from deepgroebner.environments import VectorEnv, AlphabeticalEnv
 
 def make_parser():
     """Return the command line argument parser for this script."""
@@ -23,13 +23,17 @@ def make_parser():
     env = parser.add_argument_group('environment', 'environment type')
     env.add_argument('--environment',
                      choices=['RandomBinomialIdeal', 'RandomIdeal',
-                              'CartPole-v0', 'CartPole-v1', 'LunarLander-v2'],
+                              'CartPole-v0', 'CartPole-v1', 'LunarLander-v2', 'VectorEnv', 'AlphabeticalEnv'],
                      default='RandomBinomialIdeal',
                      help='training environment')
     env.add_argument('--env_seed',
                      type=lambda x: int(x) if x.lower() != 'none' else None,
                      default=None,
                      help='seed for the environment')
+    env.add_argument('--alpha_dataset_size',
+                    type=int,
+                    default=1000,
+                    help='If using the AlphabetEnvironment then set dataset size')
 
     ideal = parser.add_argument_group('ideals', 'ideal distribution and environment options')
     ideal.add_argument('--distribution',
@@ -108,10 +112,18 @@ def make_parser():
                         type=str,
                         default="",
                         help='filename for initial policy weights')
+    policy.add_argument('--score',
+                        type = lambda x: str(x).lower() == 'true',
+                        default = True,
+                        help = 'have multi objective training')
+    policy.add_argument('--score_weight',
+                        type = float,
+                        default=1e-3,
+                        help='weight gradients of l2 loss')
 
     value = parser.add_argument_group('value model')
     value.add_argument('--value_model',
-                       choices=['none', 'mlp', 'pairsleft', 'degree', 'sample', 'rnn', 'pool'],
+                       choices=['none', 'mlp', 'pairsleft', 'degree', 'sample', 'tvm', 'rnn', 'pool'],
                        default='none',
                        help='value network type')
     value.add_argument('--value_kwargs',
@@ -184,7 +196,11 @@ def make_parser():
 
 def make_env(args):
     """Return the training environment for this run."""
-    if args.environment in ['CartPole-v0', 'CartPole-v1', 'LunarLander-v2']:
+    if args.environment == 'VectorEnv':
+        env = VectorEnv()
+    elif args.environment == 'AlphabeticalEnv':
+        env = AlphabeticalEnv()
+    elif args.environment in ['CartPole-v0', 'CartPole-v1', 'LunarLander-v2']:
         env = gym.make(args.environment)
     elif args.use_cython:
         env = CLeadMonomialsEnv(args.distribution, elimination=args.elimination, rewards=args.rewards, k=args.k)
@@ -212,9 +228,13 @@ def make_policy_network(args):
             policy_network = AttentionPMLP(**args.policy_kwargs)
         elif args.policy_model == 'tpmlp':
             policy_network = TransformerPMLP(**args.policy_kwargs)
-        else:
+        elif args.policy_model == 'pointer':
             policy_network = PointerNetwork(**args.policy_kwargs)
         batch = np.zeros((1, 10, 2 * args.k * int(args.distribution.split('-')[0])), dtype=np.int32)
+    if args.environment == 'VectorEnv':
+        batch = np.zeros((1, 10, 64), dtype=np.int32)
+    elif args.environment == 'AlphabeticalEnv':
+        batch = np.zeros((1, 10, args.alpha_dataset_size), dtype=np.int32)
     policy_network(batch)  # build network
     if args.policy_weights != "":
         policy_network.load_weights(args.policy_weights)
@@ -242,8 +262,12 @@ def make_value_network(args):
         value_network = RecurrentValueModel(**args.value_kwargs)
     elif args.value_model == 'pool':
         value_network = PoolingValueModel(**args.value_kwargs)
+    elif args.value_model == 'tvm':
+        value_network = TransformerValueModel(**args.value_kwargs)
+        batch = np.zeros((1, 10, 2 * args.k * int(args.distribution.split('-')[0])), dtype=np.int32)
+        value_network(batch)
     else:
-        value_network = args.value_model
+        value_network = 'env'
     if args.value_weights != "":
         value_network.load_weights(args.value_weights)
     return value_network
