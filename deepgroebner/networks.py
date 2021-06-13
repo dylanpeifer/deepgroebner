@@ -292,9 +292,9 @@ class SelfAttentionLayer(tf.keras.layers.Layer):
 
         """
         batch_size = tf.shape(batch)[0]
-        Q = split_heads(self.Wq(batch), batch_size)
-        K = split_heads(self.Wk(batch), batch_size)
-        V = split_heads(self.Wv(batch), batch_size)
+        Q = split_heads(self.Wq(batch), batch_size, self.n_heads, self.depth)
+        K = split_heads(self.Wk(batch), batch_size,self.n_heads, self.depth)
+        V = split_heads(self.Wv(batch), batch_size,self.n_heads, self.depth)
         mask = mask[:, tf.newaxis, tf.newaxis, :]
         X, attn_weights = scaled_dot_product_attention(Q, K, V, mask=mask)
         X = tf.transpose(X, perm=[0, 2, 1, 3])
@@ -351,9 +351,9 @@ class ValueSelfAttentionLayer(tf.keras.layers.Layer):
 
         """
         batch_size = tf.shape(batch)[0]
-        Q = split_heads(tf.tile(self.Value_Q, [batch_size, 1, 1]), batch_size)
-        K = split_heads(self.Wk(batch), batch_size)
-        V = split_heads(self.Wv(batch), batch_size)
+        Q = split_heads(tf.tile(self.Value_Q, [batch_size, 1, 1]), batch_size,self.n_heads, self.depth)
+        K = split_heads(self.Wk(batch), batch_size,self.n_heads, self.depth)
+        V = split_heads(self.Wv(batch), batch_size,self.n_heads, self.depth)
         mask = mask[:, tf.newaxis, tf.newaxis, :]
         X, attn_weights = scaled_dot_product_attention(Q, K, V, self.attention_function, mask=mask) 
         X = tf.transpose(X, perm=[0, 2, 1, 3])
@@ -697,10 +697,10 @@ class DualSelfAttentionLayer(tf.keras.layers.Layer):
 
         """
         batch_size = tf.shape(batch)[0]
-        VQ = split_heads(tf.tile(self.Vq, [batch_size, 1, 1]), batch_size)
-        WQ = split_heads(self.Wq(batch), batch_size)
-        K = split_heads(self.Wk(batch), batch_size)
-        V = split_heads(self.Wv(batch), batch_size)
+        VQ = split_heads(tf.tile(self.Vq, [batch_size, 1, 1]), batch_size,self.n_heads, self.depth)
+        WQ = split_heads(self.Wq(batch), batch_size,self.n_heads, self.depth)
+        K = split_heads(self.Wk(batch), batch_size,self.n_heads, self.depth)
+        V = split_heads(self.Wv(batch), batch_size,self.n_heads, self.depth)
 
         # Question: Does the mask propogate through both calls
         mask = mask[:, tf.newaxis, tf.newaxis, :]
@@ -981,7 +981,7 @@ class TransformerValueModel(tf.keras.models.Model):
         self.mha = []
         for _ in range(num_layers-1):
             self.mha.append(SelfAttentionLayer(dim, softmax, n_heads))
-        self.mha.append(ValueSelfAttentionLayer(dim, softmax, n_heads))
+        self.mha.append(ValueSelfAttentionLayer(dim, n_heads))
 
         self.value_function = tf.keras.Sequential()
         for layer in hidden_layers:
@@ -992,7 +992,7 @@ class TransformerValueModel(tf.keras.models.Model):
         X = self.embedding(batch)
         for layer in self.mha:
             X = layer(X)
-        value = self.value_model(X)
+        value = self.value_function(X)
         return tf.squeeze(value, axis = -1)
 
 class GlobalSumPooling1D(tf.keras.layers.Layer):
@@ -1094,9 +1094,9 @@ class AgentBaseline:
         pass
 
 
-def split_heads(self, batch, batch_size):
+def split_heads(batch, batch_size, n_heads, depth):
     """Return batch reshaped for multihead attention."""
-    X = tf.reshape(batch, (batch_size, -1, self.n_heads, self.depth))
+    X = tf.reshape(batch, (batch_size, -1, n_heads, depth))
     return tf.transpose(X, perm=[0, 2, 1, 3])
 
 
